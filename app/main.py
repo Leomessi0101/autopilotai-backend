@@ -36,7 +36,11 @@ Base.metadata.create_all(bind=engine)
 origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "https://autopilotai.dev",
+    "https://www.autopilotai.dev",
+    "https://autopilotai-frontend.vercel.app",
 ]
+
 
 app.add_middleware(
     CORSMiddleware,

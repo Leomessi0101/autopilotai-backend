@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.database.session import SessionLocal
 from app.database.models import SavedContent
 from app.utils.auth import get_current_user
+from app.utils.usage import get_user_limit, reset_if_new_month
 from openai import OpenAI
 import os
 
@@ -34,6 +35,17 @@ def generate_email(
     user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    # 🔐 Reset usage if new month
+    reset_if_new_month(user)
+
+    # 🔐 Enforce plan limits
+    limit = get_user_limit(user.subscription_plan)
+    if limit is not None and user.used_generations >= limit:
+        raise HTTPException(
+            status_code=403,
+            detail="Monthly generation limit reached. Please upgrade your plan."
+        )
+
     subject = (data.subject or "").strip()
     details = (data.details or data.prompt or data.text or "").strip()
 
@@ -61,7 +73,10 @@ def generate_email(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": system},
-                {"role": "user", "content": f"Write an email.\n\nSubject idea: {subject}\n\nContext/details:\n{details}"}
+                {
+                    "role": "user",
+                    "content": f"Write an email.\n\nSubject idea: {subject}\n\nContext/details:\n{details}"
+                }
             ]
         )
 
@@ -69,13 +84,17 @@ def generate_email(
         if not output:
             raise HTTPException(500, "OpenAI returned empty output")
 
-        # Save to My Work
+        # 💾 Save to My Work
         db.add(SavedContent(
             user_id=user.id,
             content_type="email",
             prompt=subject,
             result=output,
         ))
+
+        # 🔢 Increment usage
+        user.used_generations += 1
+
         db.commit()
 
         return {"output": output}
