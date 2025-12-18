@@ -58,6 +58,9 @@ def create_checkout_session(
     plan: str,
     request: Request,
 ):
+    print("🔥 STRIPE CHECKOUT ROUTE HIT")
+
+
     plan = plan.lower()
 
     if plan not in PRICE_IDS or not PRICE_IDS[plan]:
