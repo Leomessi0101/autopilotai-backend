@@ -5,12 +5,15 @@ from app.database.models import User
 import bcrypt
 from jose import jwt
 from pydantic import BaseModel
+import os
 
-SECRET = "supersecretkey"
+# -----------------------------
+# JWT CONFIG (SINGLE SOURCE OF TRUTH)
+# -----------------------------
+SECRET = os.getenv("JWT_SECRET", "supersecretkey")
 ALGORITHM = "HS256"
 
 router = APIRouter()
-
 
 # -----------------------------
 # Request Models
@@ -24,7 +27,6 @@ class LoginRequest(BaseModel):
     email: str
     password: str
 
-
 # -----------------------------
 # DB Dependency
 # -----------------------------
@@ -35,13 +37,11 @@ def get_db():
     finally:
         db.close()
 
-
 # -----------------------------
 # JWT Creation
 # -----------------------------
 def create_access_token(user_id: int):
     return jwt.encode({"user_id": user_id}, SECRET, algorithm=ALGORITHM)
-
 
 # -----------------------------
 # REGISTER
@@ -69,7 +69,6 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
 
     return {"message": "Account created", "user_id": new_user.id}
 
-
 # -----------------------------
 # LOGIN
 # -----------------------------
@@ -92,9 +91,8 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
         "used_generations": user.used_generations
     }
 
-
 # -----------------------------
-# /me  (Used by Dashboard)
+# /me
 # -----------------------------
 @router.get("/me")
 def me(Authorization: str = Header(None), db: Session = Depends(get_db)):
@@ -120,6 +118,8 @@ def me(Authorization: str = Header(None), db: Session = Depends(get_db)):
         "subscription": user.subscription_plan,
         "used_generations": user.used_generations,
         "monthly_limit": user.monthly_limit,
-        "remaining_generations": None if user.monthly_limit is None else max(0, user.monthly_limit - user.used_generations),
+        "remaining_generations": None
+        if user.monthly_limit is None
+        else max(0, user.monthly_limit - user.used_generations),
         "last_reset": user.last_reset
     }
