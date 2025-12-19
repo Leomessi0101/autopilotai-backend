@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Depends
 import stripe
 import os
 from sqlalchemy.orm import Session
@@ -93,6 +93,7 @@ def create_checkout_session(
     except Exception as e:
         print("STRIPE ERROR:", str(e))
         raise HTTPException(500, "Stripe checkout failed")
+
 
 
 # -------------------- STRIPE WEBHOOK --------------------
