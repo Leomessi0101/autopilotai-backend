@@ -4,48 +4,42 @@ from app.database.session import SessionLocal
 from app.database.models import User
 import bcrypt
 from jose import jwt
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 import os
 from datetime import datetime, timedelta
-import uuid
 import resend
 
-# -----------------------------
-# JWT CONFIG
-# -----------------------------
 SECRET = os.getenv("JWT_SECRET", "supersecretkey")
 ALGORITHM = "HS256"
 
-# -----------------------------
-# RESEND CONFIG
-# -----------------------------
-RESEND_API_KEY = os.getenv("RESEND_API_KEY")
-resend.api_key = RESEND_API_KEY
-
-FRONTEND_URL = os.getenv("FRONTEND_URL", "https://www.autopilotai.dev")
-
 router = APIRouter()
 
-# -----------------------------
-# Request Models
-# -----------------------------
+# ======================================================
+# REQUEST MODELS
+# ======================================================
 class RegisterRequest(BaseModel):
     name: str
-    email: str
+    email: EmailStr
     password: str
 
+
 class LoginRequest(BaseModel):
-    email: str
+    email: EmailStr
     password: str
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
 
 class ResetPasswordRequest(BaseModel):
     token: str
-    password: str
+    new_password: str
 
 
-# -----------------------------
-# DB Dependency
-# -----------------------------
+# ======================================================
+# DB
+# ======================================================
 def get_db():
     db = SessionLocal()
     try:
@@ -54,21 +48,22 @@ def get_db():
         db.close()
 
 
-# -----------------------------
+# ======================================================
 # JWT
-# -----------------------------
+# ======================================================
 def create_access_token(user_id: int):
     return jwt.encode({"user_id": user_id}, SECRET, algorithm=ALGORITHM)
 
 
-# -----------------------------
+# ======================================================
 # REGISTER
-# -----------------------------
+# ======================================================
 @router.post("/register")
 def register(data: RegisterRequest, db: Session = Depends(get_db)):
+
     existing = db.query(User).filter(User.email == data.email).first()
     if existing:
-        raise HTTPException(status_code=400, detail="Email already registered")
+        raise HTTPException(400, "Email already registered")
 
     hashed_pw = bcrypt.hashpw(data.password.encode(), bcrypt.gensalt()).decode()
 
@@ -85,18 +80,22 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_user)
 
-    return {"message": "Account created", "user_id": new_user.id}
+    return {"message": "Account created"}
 
 
-# -----------------------------
+# ======================================================
 # LOGIN
-# -----------------------------
+# ======================================================
 @router.post("/login")
 def login(data: LoginRequest, db: Session = Depends(get_db)):
+
     user = db.query(User).filter(User.email == data.email).first()
 
-    if not user or not bcrypt.checkpw(data.password.encode(), user.password.encode()):
-        raise HTTPException(status_code=400, detail="Invalid credentials")
+    if not user:
+        raise HTTPException(400, "Invalid credentials")
+
+    if not bcrypt.checkpw(data.password.encode(), user.password.encode()):
+        raise HTTPException(400, "Invalid credentials")
 
     token = create_access_token(user.id)
 
@@ -108,13 +107,14 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
     }
 
 
-# -----------------------------
-# /me
-# -----------------------------
+# ======================================================
+# ME
+# ======================================================
 @router.get("/me")
 def me(Authorization: str = Header(None), db: Session = Depends(get_db)):
-    if Authorization is None:
-        raise HTTPException(status_code=401, detail="Missing Authorization header")
+
+    if not Authorization:
+        raise HTTPException(401, "Missing Authorization header")
 
     token = Authorization.replace("Bearer ", "")
 
@@ -122,12 +122,11 @@ def me(Authorization: str = Header(None), db: Session = Depends(get_db)):
         payload = jwt.decode(token, SECRET, algorithms=[ALGORITHM])
         user_id = payload["user_id"]
     except:
-        raise HTTPException(status_code=401, detail="Invalid token")
+        raise HTTPException(401, "Invalid token")
 
     user = db.query(User).filter(User.id == user_id).first()
-
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(404, "User not found")
 
     return {
         "name": user.name,
@@ -135,78 +134,77 @@ def me(Authorization: str = Header(None), db: Session = Depends(get_db)):
         "subscription": user.subscription_plan,
         "used_generations": user.used_generations,
         "monthly_limit": user.monthly_limit,
-        "remaining_generations": None
-        if user.monthly_limit is None
-        else max(0, user.monthly_limit - user.used_generations),
-        "last_reset": user.last_reset
     }
 
 
-# -----------------------------
+# ======================================================
 # FORGOT PASSWORD
-# -----------------------------
+# ======================================================
 @router.post("/forgot-password")
-def forgot_password(data: LoginRequest, db: Session = Depends(get_db)):
+def forgot_password(data: ForgotPasswordRequest, db: Session = Depends(get_db)):
+
     user = db.query(User).filter(User.email == data.email).first()
 
-    # Do NOT reveal if user doesn't exist (security best practice)
+    # Security: Always respond ok
     if not user:
-        return {"message": "If that email exists, a reset link was sent."}
+        return {"message": "If email exists, reset link sent."}
 
-    token = str(uuid.uuid4())
-    user.reset_token = token
+    token_payload = {
+        "user_id": user.id,
+        "exp": datetime.utcnow() + timedelta(minutes=30)
+    }
+
+    reset_token = jwt.encode(token_payload, SECRET, algorithm=ALGORITHM)
+
+    user.reset_token = reset_token
     user.reset_token_expires = datetime.utcnow() + timedelta(minutes=30)
-
     db.commit()
 
-    reset_link = f"{FRONTEND_URL}/reset-password?token={token}"
+    resend.api_key = os.getenv("RESEND_API_KEY")
 
-    try:
-        resend.Emails.send({
-            "from": "AutopilotAI <support@autopilotai.dev>",
-            "to": user.email,
-            "subject": "Reset your AutopilotAI password",
-            "html": f"""
-                <h2>Reset your password</h2>
-                <p>Click the button below to create a new password.</p>
-                <a href="{reset_link}"
-                   style="padding:12px 18px;
-                          background:#000;
-                          color:#fff;
-                          text-decoration:none;
-                          border-radius:8px;">
-                   Reset Password
-                </a>
-                <p>Or copy this link:<br>{reset_link}</p>
-                <p>This link expires in 30 minutes.</p>
-            """
-        })
-    except Exception as e:
-        print("EMAIL ERROR:", e)
-        raise HTTPException(500, "Failed to send email")
+    reset_url = f"https://www.autopilotai.dev/reset-password?token={reset_token}"
+
+    resend.Emails.send({
+        "from": os.getenv("EMAIL_FROM", "support@autopilotai.dev"),
+        "to": user.email,
+        "subject": "Reset your AutopilotAI Password",
+        "html": f"""
+        <h2>Password Reset</h2>
+        <p>Click below to reset your password:</p>
+        <a href="{reset_url}">{reset_url}</a>
+        """
+    })
 
     return {"message": "Reset email sent"}
 
 
-# -----------------------------
+# ======================================================
 # RESET PASSWORD
-# -----------------------------
+# ======================================================
 @router.post("/reset-password")
 def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.reset_token == data.token).first()
 
+    try:
+        payload = jwt.decode(data.token, SECRET, algorithms=[ALGORITHM])
+        user_id = payload["user_id"]
+    except:
+        raise HTTPException(400, "Invalid or expired reset token")
+
+    user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(400, "Invalid token")
+        raise HTTPException(404, "User not found")
 
-    if not user.reset_token_expires or user.reset_token_expires < datetime.utcnow():
+    if user.reset_token != data.token:
+        raise HTTPException(400, "Token mismatch")
+
+    if user.reset_token_expires < datetime.utcnow():
         raise HTTPException(400, "Token expired")
 
-    hashed_pw = bcrypt.hashpw(data.password.encode(), bcrypt.gensalt()).decode()
-
+    hashed_pw = bcrypt.hashpw(data.new_password.encode(), bcrypt.gensalt()).decode()
     user.password = hashed_pw
     user.reset_token = None
     user.reset_token_expires = None
 
     db.commit()
 
-    return {"message": "Password reset successful"}
+    return {"message": "Password updated successfully"}
