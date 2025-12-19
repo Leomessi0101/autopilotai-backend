@@ -1,17 +1,15 @@
-from fastapi import APIRouter, HTTPException, Depends, Header, Request
+from fastapi import APIRouter, HTTPException, Depends, Header
 from sqlalchemy.orm import Session
 from app.database.session import SessionLocal
 from app.database.models import User
 import bcrypt
-from jose import jwt, JWTError
+from jose import jwt
 from pydantic import BaseModel
 import os
 from datetime import datetime, timedelta
-import requests
-
 
 # -----------------------------
-# JWT CONFIG
+# JWT CONFIG (SINGLE SOURCE OF TRUTH)
 # -----------------------------
 SECRET = os.getenv("JWT_SECRET", "supersecretkey")
 ALGORITHM = "HS256"
@@ -19,211 +17,199 @@ ALGORITHM = "HS256"
 router = APIRouter()
 
 # -----------------------------
-# RESET TOKEN CONFIG
-# -----------------------------
-RESET_SECRET = os.getenv("RESET_TOKEN_SECRET", "resetsecret")
-RESET_EXP_MINUTES = 30
-
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
-
-# -----------------------------
 # Request Models
 # -----------------------------
 class RegisterRequest(BaseModel):
-    name: str
-    email: str
-    password: str
+  name: str
+  email: str
+  password: str
+
 
 class LoginRequest(BaseModel):
-    email: str
-    password: str
+  email: str
+  password: str
 
 
-# =============================
-# DATABASE SESSION
-# =============================
+class PasswordResetRequest(BaseModel):
+  email: str
+
+
+class PasswordResetConfirm(BaseModel):
+  token: str
+  new_password: str
+
+
+# -----------------------------
+# DB Dependency
+# -----------------------------
 def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+  db = SessionLocal()
+  try:
+    yield db
+  finally:
+    db.close()
 
 
-# =============================
-# JWT CREATION
-# =============================
+# -----------------------------
+# JWT Creation
+# -----------------------------
 def create_access_token(user_id: int):
-    return jwt.encode({"user_id": user_id}, SECRET, algorithm=ALGORITHM)
+  return jwt.encode({"user_id": user_id}, SECRET, algorithm=ALGORITHM)
 
 
-# =============================
+def create_reset_token(user_id: int):
+  """Short-lived reset token (1 hour)"""
+  payload = {
+    "user_id": user_id,
+    "type": "reset",
+    "exp": datetime.utcnow() + timedelta(hours=1),
+  }
+  return jwt.encode(payload, SECRET, algorithm=ALGORITHM)
+
+
+# -----------------------------
 # REGISTER
-# =============================
+# -----------------------------
 @router.post("/register")
 def register(data: RegisterRequest, db: Session = Depends(get_db)):
-    existing = db.query(User).filter(User.email == data.email).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Email already registered")
+  existing = db.query(User).filter(User.email == data.email).first()
+  if existing:
+    raise HTTPException(status_code=400, detail="Email already registered")
 
-    hashed_pw = bcrypt.hashpw(data.password.encode(), bcrypt.gensalt()).decode()
+  hashed_pw = bcrypt.hashpw(data.password.encode(), bcrypt.gensalt()).decode()
 
-    new_user = User(
-        name=data.name,
-        email=data.email,
-        password=hashed_pw,
-        subscription_plan="Free",
-        monthly_limit=10,
-        used_generations=0
-    )
+  new_user = User(
+    name=data.name,
+    email=data.email,
+    password=hashed_pw,
+    subscription_plan="Free",
+    monthly_limit=10,
+    used_generations=0,
+  )
 
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
+  db.add(new_user)
+  db.commit()
+  db.refresh(new_user)
 
-    return {"message": "Account created", "user_id": new_user.id}
+  return {"message": "Account created", "user_id": new_user.id}
 
 
-# =============================
+# -----------------------------
 # LOGIN
-# =============================
+# -----------------------------
 @router.post("/login")
 def login(data: LoginRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == data.email).first()
+  user = db.query(User).filter(User.email == data.email).first()
 
-    if not user:
-        raise HTTPException(status_code=400, detail="Invalid credentials")
+  if not user:
+    raise HTTPException(status_code=400, detail="Invalid credentials")
 
-    if not bcrypt.checkpw(data.password.encode(), user.password.encode()):
-        raise HTTPException(status_code=400, detail="Invalid credentials")
+  if not bcrypt.checkpw(data.password.encode(), user.password.encode()):
+    raise HTTPException(status_code=400, detail="Invalid credentials")
 
-    token = create_access_token(user.id)
+  token = create_access_token(user.id)
 
-    return {
-        "token": token,
-        "subscription_plan": user.subscription_plan,
-        "monthly_limit": user.monthly_limit,
-        "used_generations": user.used_generations
-    }
+  return {
+    "token": token,
+    "subscription_plan": user.subscription_plan,
+    "monthly_limit": user.monthly_limit,
+    "used_generations": user.used_generations,
+  }
 
 
-# =============================
+# -----------------------------
 # /me
-# =============================
+# -----------------------------
 @router.get("/me")
 def me(Authorization: str = Header(None), db: Session = Depends(get_db)):
-    if Authorization is None:
-        raise HTTPException(status_code=401, detail="Missing Authorization header")
+  if Authorization is None:
+    raise HTTPException(status_code=401, detail="Missing Authorization header")
 
-    token = Authorization.replace("Bearer ", "")
+  token = Authorization.replace("Bearer ", "")
 
-    try:
-        payload = jwt.decode(token, SECRET, algorithms=[ALGORITHM])
-        user_id = payload["user_id"]
-    except:
-        raise HTTPException(status_code=401, detail="Invalid token")
+  try:
+    payload = jwt.decode(token, SECRET, algorithms=[ALGORITHM])
+    user_id = payload["user_id"]
+  except Exception:
+    raise HTTPException(status_code=401, detail="Invalid token")
 
-    user = db.query(User).filter(User.id == user_id).first()
+  user = db.query(User).filter(User.id == user_id).first()
 
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+  if not user:
+    raise HTTPException(status_code=404, detail="User not found")
 
-    return {
-        "name": user.name,
-        "email": user.email,
-        "subscription": user.subscription_plan,
-        "used_generations": user.used_generations,
-        "monthly_limit": user.monthly_limit,
-        "remaining_generations": None
-        if user.monthly_limit is None
-        else max(0, user.monthly_limit - user.used_generations),
-        "last_reset": user.last_reset
-    }
-
-
-
-# =================================================================
-# ================== PASSWORD RESET SYSTEM =========================
-# =================================================================
+  return {
+    "name": user.name,
+    "email": user.email,
+    "subscription": user.subscription_plan,
+    "used_generations": user.used_generations,
+    "monthly_limit": user.monthly_limit,
+    "remaining_generations": None
+    if user.monthly_limit is None
+    else max(0, user.monthly_limit - user.used_generations),
+    "last_reset": user.last_reset,
+  }
 
 
 # -----------------------------
-# REQUEST RESET
+# REQUEST PASSWORD RESET
 # -----------------------------
 @router.post("/request-password-reset")
-def request_password_reset(email: str, db: Session = Depends(get_db)):
+def request_password_reset(data: PasswordResetRequest, db: Session = Depends(get_db)):
+  """
+  1) User submits email
+  2) If user exists -> create reset token
+  3) For now: return token in response + log it (later: send via email)
+  """
+  user = db.query(User).filter(User.email == data.email).first()
 
-    user = db.query(User).filter(User.email == email).first()
+  # Always return success-style message (don't leak which emails exist)
+  if not user:
+    return {
+      "message": "If an account with this email exists, a reset link has been prepared."
+    }
 
-    # Always respond success (security best practice)
-    if not user:
-        return {"message": "If an account exists, a reset link has been sent."}
+  reset_token = create_reset_token(user.id)
 
-    token = jwt.encode(
-        {
-            "user_id": user.id,
-            "exp": datetime.utcnow() + timedelta(minutes=RESET_EXP_MINUTES),
-        },
-        RESET_SECRET,
-        algorithm="HS256"
-    )
+  # For now we just LOG it so you can see it in Render logs
+  print("🔑 PASSWORD RESET TOKEN FOR USER", user.id, ":", reset_token)
 
-    reset_link = f"{FRONTEND_URL}/reset-password?token={token}"
-
-    # ----- SEND EMAIL VIA RESEND -----
-    try:
-        headers = {
-            "Authorization": f"Bearer {os.getenv('RESEND_API_KEY')}",
-            "Content-Type": "application/json"
-        }
-
-        data = {
-            "from": "AutopilotAI <no-reply@autopilotai.dev>",
-            "to": [email],
-            "subject": "Reset your AutopilotAI password",
-            "html": f"""
-            <h2>Password Reset</h2>
-            <p>Click below to reset your password.</p>
-            <a href="{reset_link}"
-            style="padding:12px 20px;background:black;color:white;border-radius:8px;text-decoration:none;">
-                Reset Password
-            </a>
-            <p>This link expires in 30 minutes.</p>
-            """
-        }
-
-        requests.post("https://api.resend.com/emails", headers=headers, json=data)
-
-    except Exception as e:
-        print("RESEND ERROR:", e)
-
-    return {"message": "If an account exists, a reset link has been sent."}
+  # And also return it in response so you can test easily
+  return {
+    "message": "If an account with this email exists, a reset link has been prepared.",
+    "reset_token": reset_token,
+  }
 
 
 # -----------------------------
-# SUBMIT NEW PASSWORD
+# RESET PASSWORD
 # -----------------------------
-class ResetPasswordModel(BaseModel):
-    token: str
-    new_password: str
-
-
 @router.post("/reset-password")
-def reset_password(data: ResetPasswordModel, db: Session = Depends(get_db)):
-    try:
-        payload = jwt.decode(data.token, RESET_SECRET, algorithms=["HS256"])
-        user_id = payload.get("user_id")
-    except JWTError:
-        raise HTTPException(status_code=400, detail="Invalid or expired reset link")
+def reset_password(data: PasswordResetConfirm, db: Session = Depends(get_db)):
+  """
+  1) Frontend sends token + new_password
+  2) We decode token, verify it's a reset token and not expired
+  3) Update user password
+  """
+  try:
+    payload = jwt.decode(data.token, SECRET, algorithms=[ALGORITHM])
+  except Exception:
+    raise HTTPException(status_code=400, detail="Invalid or expired token")
 
-    user = db.query(User).filter(User.id == user_id).first()
+  if payload.get("type") != "reset":
+    raise HTTPException(status_code=400, detail="Invalid reset token")
 
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+  user_id = payload.get("user_id")
+  if not user_id:
+    raise HTTPException(status_code=400, detail="Invalid reset token payload")
 
-    hashed_pw = bcrypt.hashpw(data.new_password.encode(), bcrypt.gensalt()).decode()
-    user.password = hashed_pw
+  user = db.query(User).filter(User.id == user_id).first()
+  if not user:
+    raise HTTPException(status_code=404, detail="User not found")
 
-    db.commit()
+  # Update password
+  hashed_pw = bcrypt.hashpw(data.new_password.encode(), bcrypt.gensalt()).decode()
+  user.password = hashed_pw
+  db.commit()
 
-    return {"message": "Password reset successful"}
+  return {"message": "Password has been reset successfully."}
