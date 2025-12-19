@@ -9,3 +9,4 @@ stripe
 openai
 requests
 resend
+email-validator
