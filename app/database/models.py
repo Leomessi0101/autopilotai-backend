@@ -1,7 +1,3 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime
-from sqlalchemy.orm import relationship
-from app.database.base import Base
-from datetime import datetime
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Text, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -25,13 +21,17 @@ class User(Base):
 
     last_reset = Column(DateTime, default=datetime.utcnow)
 
+    # 🔐 PASSWORD RESET FIELDS
+    reset_token = Column(String, nullable=True)
+    reset_token_expires = Column(DateTime, nullable=True)
+
     # Relationships
     profile = relationship("Profile", back_populates="user", uselist=False)
     saved_content = relationship("SavedContent", back_populates="user")
 
 
 # --------------------------
-# PROFILE MODEL (NEW)
+# PROFILE MODEL
 # --------------------------
 class Profile(Base):
     __tablename__ = "profiles"
@@ -68,27 +68,31 @@ class SavedContent(Base):
     user = relationship("User", back_populates="saved_content")
 
 
+# --------------------------
+# DASHBOARD SETTINGS
+# --------------------------
 class DashboardSettings(Base):
     __tablename__ = "dashboard_settings"
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
 
-    # user-chosen widgets data (stored as JSON strings)
-    stocks_json = Column(Text, default="[]")          # e.g. ["AAPL","TSLA"]
+    stocks_json = Column(Text, default="[]")
     cryptos_json = Column(Text, default='["BTC","ETH","SOL"]')
     currency_pairs_json = Column(Text, default='["USD:THB","EUR:THB","NOK:THB","BTC:USD"]')
-    city = Column(String, nullable=True)             # optional user override
+    city = Column(String, nullable=True)
 
-    # layout preferences (stored as JSON strings)
-    widgets_order_json = Column(Text, default="[]")      # e.g. ["stocks","crypto","news",...]
-    widgets_collapsed_json = Column(Text, default="{}")  # e.g. {"news":true,"tasks":false}
+    widgets_order_json = Column(Text, default="[]")
+    widgets_collapsed_json = Column(Text, default="{}")
 
     updated_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", backref="dashboard_settings")
 
 
+# --------------------------
+# TASKS
+# --------------------------
 class Task(Base):
     __tablename__ = "tasks"
 
