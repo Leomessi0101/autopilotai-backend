@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Request, Depends
+from fastapi import APIRouter, HTTPException, Request
 import stripe
 import os
 from sqlalchemy.orm import Session
@@ -26,7 +26,7 @@ SECRET_KEY = os.getenv("JWT_SECRET", "supersecretkey")
 ALGORITHM = "HS256"
 
 
-# -------------------- MANUAL AUTH (BULLETPROOF) --------------------
+# -------------------- MANUAL AUTH --------------------
 def get_current_user_from_request(request: Request) -> User:
     auth_header = request.headers.get("authorization")
 
@@ -37,7 +37,6 @@ def get_current_user_from_request(request: Request) -> User:
 
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-
         user_id = payload.get("user_id")
         if not user_id:
             raise HTTPException(status_code=401, detail="Invalid token payload")
@@ -66,26 +65,17 @@ def create_checkout_session(
     if plan not in PRICE_IDS or not PRICE_IDS[plan]:
         raise HTTPException(400, "Invalid or missing price ID for plan")
 
-    # 🔐 MANUAL AUTH
     user = get_current_user_from_request(request)
 
     try:
         session = stripe.checkout.Session.create(
             mode="subscription",
             payment_method_types=["card"],
-            line_items=[
-                {
-                    "price": PRICE_IDS[plan],
-                    "quantity": 1,
-                }
-            ],
+            line_items=[{"price": PRICE_IDS[plan], "quantity": 1}],
             success_url=f"{FRONTEND_URL}/dashboard?checkout=success",
             cancel_url=f"{FRONTEND_URL}/pricing?checkout=cancelled",
             customer_email=user.email,
-            metadata={
-                "user_id": str(user.id),
-                "plan": plan,
-            },
+            metadata={"user_id": str(user.id), "plan": plan},
         )
 
         return {"checkout_url": session.url}
@@ -93,7 +83,6 @@ def create_checkout_session(
     except Exception as e:
         print("STRIPE ERROR:", str(e))
         raise HTTPException(500, "Stripe checkout failed")
-
 
 
 # -------------------- STRIPE WEBHOOK --------------------
@@ -104,9 +93,7 @@ async def stripe_webhook(request: Request):
 
     try:
         event = stripe.Webhook.construct_event(
-            payload,
-            sig_header,
-            WEBHOOK_SECRET,
+            payload, sig_header, WEBHOOK_SECRET
         )
     except Exception as e:
         print("Webhook signature error:", e)
@@ -124,7 +111,6 @@ async def stripe_webhook(request: Request):
         if user:
             user.subscription_plan = plan
 
-            # -------------------- PLAN LIMITS --------------------
             if plan == "basic":
                 user.monthly_limit = 100
             elif plan == "growth":
@@ -144,13 +130,16 @@ async def stripe_webhook(request: Request):
     return {"status": "ok"}
 
 
+# -------------------- CUSTOMER BILLING PORTAL --------------------
 @router.post("/customer-portal")
-def create_customer_portal(user=Depends(get_current_user)):
+def create_customer_portal(request: Request):
+
+    user = get_current_user_from_request(request)
+
     if not user.email:
         raise HTTPException(400, "No email on account")
 
     try:
-        # 1️⃣ Find or create Stripe customer
         customers = stripe.Customer.list(email=user.email).data
 
         if customers:
@@ -159,10 +148,9 @@ def create_customer_portal(user=Depends(get_current_user)):
             customer = stripe.Customer.create(email=user.email)
             customer_id = customer.id
 
-        # 2️⃣ Create portal session
         session = stripe.billing_portal.Session.create(
             customer=customer_id,
-            return_url=os.getenv("FRONTEND_URL", "https://autopilotai.dev") + "/billing"
+            return_url=FRONTEND_URL + "/billing"
         )
 
         return {"url": session.url}
