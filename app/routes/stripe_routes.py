@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.database.session import SessionLocal
 from app.database.models import User
 from jose import jwt, JWTError
+from fastapi import Query
 
 router = APIRouter()
 
@@ -36,6 +37,7 @@ def get_current_user_from_request(request: Request) -> User:
 
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+
         user_id = payload.get("user_id")
         if not user_id:
             raise HTTPException(status_code=401, detail="Invalid token payload")
@@ -55,11 +57,9 @@ def get_current_user_from_request(request: Request) -> User:
 # -------------------- CREATE CHECKOUT SESSION --------------------
 @router.post("/create-checkout-session")
 def create_checkout_session(
-    plan: str,
-    request: Request,
+    plan: str = Query(...),
+    request: Request = None,
 ):
-    print("🔥 STRIPE CHECKOUT ROUTE HIT")
-
 
     plan = plan.lower()
 
@@ -141,3 +141,31 @@ async def stripe_webhook(request: Request):
         db.close()
 
     return {"status": "ok"}
+
+
+@router.post("/customer-portal")
+def create_customer_portal(user=Depends(get_current_user)):
+    if not user.email:
+        raise HTTPException(400, "No email on account")
+
+    try:
+        # 1️⃣ Find or create Stripe customer
+        customers = stripe.Customer.list(email=user.email).data
+
+        if customers:
+            customer_id = customers[0].id
+        else:
+            customer = stripe.Customer.create(email=user.email)
+            customer_id = customer.id
+
+        # 2️⃣ Create portal session
+        session = stripe.billing_portal.Session.create(
+            customer=customer_id,
+            return_url=os.getenv("FRONTEND_URL", "https://autopilotai.dev") + "/billing"
+        )
+
+        return {"url": session.url}
+
+    except Exception as e:
+        print("STRIPE PORTAL ERROR:", e)
+        raise HTTPException(500, "Could not open billing portal")
