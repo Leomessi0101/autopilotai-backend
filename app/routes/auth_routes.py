@@ -6,15 +6,23 @@ import bcrypt
 from jose import jwt
 from pydantic import BaseModel
 import os
-import requests
-import secrets
 from datetime import datetime, timedelta
+import uuid
+import resend
 
 # -----------------------------
-# JWT CONFIG (SINGLE SOURCE OF TRUTH)
+# JWT CONFIG
 # -----------------------------
 SECRET = os.getenv("JWT_SECRET", "supersecretkey")
 ALGORITHM = "HS256"
+
+# -----------------------------
+# RESEND CONFIG
+# -----------------------------
+RESEND_API_KEY = os.getenv("RESEND_API_KEY")
+resend.api_key = RESEND_API_KEY
+
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://www.autopilotai.dev")
 
 router = APIRouter()
 
@@ -26,9 +34,12 @@ class RegisterRequest(BaseModel):
     email: str
     password: str
 
-
 class LoginRequest(BaseModel):
     email: str
+    password: str
+
+class ResetPasswordRequest(BaseModel):
+    token: str
     password: str
 
 
@@ -44,7 +55,7 @@ def get_db():
 
 
 # -----------------------------
-# JWT Creation
+# JWT
 # -----------------------------
 def create_access_token(user_id: int):
     return jwt.encode({"user_id": user_id}, SECRET, algorithm=ALGORITHM)
@@ -67,7 +78,7 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
         password=hashed_pw,
         subscription_plan="Free",
         monthly_limit=10,
-        used_generations=0,
+        used_generations=0
     )
 
     db.add(new_user)
@@ -84,10 +95,7 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
 def login(data: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == data.email).first()
 
-    if not user:
-        raise HTTPException(status_code=400, detail="Invalid credentials")
-
-    if not bcrypt.checkpw(data.password.encode(), user.password.encode()):
+    if not user or not bcrypt.checkpw(data.password.encode(), user.password.encode()):
         raise HTTPException(status_code=400, detail="Invalid credentials")
 
     token = create_access_token(user.id)
@@ -96,7 +104,7 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
         "token": token,
         "subscription_plan": user.subscription_plan,
         "monthly_limit": user.monthly_limit,
-        "used_generations": user.used_generations,
+        "used_generations": user.used_generations
     }
 
 
@@ -113,7 +121,7 @@ def me(Authorization: str = Header(None), db: Session = Depends(get_db)):
     try:
         payload = jwt.decode(token, SECRET, algorithms=[ALGORITHM])
         user_id = payload["user_id"]
-    except Exception:
+    except:
         raise HTTPException(status_code=401, detail="Invalid token")
 
     user = db.query(User).filter(User.id == user_id).first()
@@ -130,7 +138,7 @@ def me(Authorization: str = Header(None), db: Session = Depends(get_db)):
         "remaining_generations": None
         if user.monthly_limit is None
         else max(0, user.monthly_limit - user.used_generations),
-        "last_reset": user.last_reset,
+        "last_reset": user.last_reset
     }
 
 
@@ -138,97 +146,67 @@ def me(Authorization: str = Header(None), db: Session = Depends(get_db)):
 # FORGOT PASSWORD
 # -----------------------------
 @router.post("/forgot-password")
-def forgot_password(data: dict, db: Session = Depends(get_db)):
-    email = data.get("email")
-    if not email:
-        raise HTTPException(status_code=400, detail="Email required")
+def forgot_password(data: LoginRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == data.email).first()
 
-    user = db.query(User).filter(User.email == email).first()
-
-    # Always return OK (don't reveal if user exists)
+    # Do NOT reveal if user doesn't exist (security best practice)
     if not user:
-        return {"message": "If an account exists, a reset link has been sent."}
+        return {"message": "If that email exists, a reset link was sent."}
 
-    # Generate secure token
-    token = secrets.token_urlsafe(48)
-
+    token = str(uuid.uuid4())
     user.reset_token = token
-    user.reset_token_expires = datetime.utcnow() + timedelta(hours=1)
+    user.reset_token_expires = datetime.utcnow() + timedelta(minutes=30)
+
     db.commit()
 
-    frontend_url = os.getenv("FRONTEND_URL", "https://www.autopilotai.dev")
-    reset_link = f"{frontend_url}/reset-password?token={token}"
+    reset_link = f"{FRONTEND_URL}/reset-password?token={token}"
 
-    # Send email via Resend
     try:
-        resend_api_key = os.getenv("RESEND_API_KEY")
-        email_from = os.getenv("EMAIL_FROM", "noreply@autopilotai.dev")
-
-        if resend_api_key:
-            headers = {
-                "Authorization": f"Bearer {resend_api_key}",
-                "Content-Type": "application/json",
-            }
-
-            payload = {
-                "from": email_from,
-                "to": email,
-                "subject": "Reset your AutopilotAI password",
-                "html": f"""
-                <h2>Reset Your Password</h2>
-                <p>We received a request to reset your AutopilotAI password.</p>
-                <p>Click the button below to choose a new password:</p>
-                <p>
-                  <a href="{reset_link}" style="
-                    background:black;
-                    padding:12px 18px;
-                    color:white;
-                    border-radius:8px;
-                    text-decoration:none;
-                    display:inline-block;
-                  ">
-                    Reset Password
-                  </a>
-                </p>
-                <p>If you did not request this, you can safely ignore this email.</p>
-                <p style="font-size:12px;color:#888;">This link expires in 1 hour.</p>
-                """,
-            }
-
-            requests.post("https://api.resend.com/emails", json=payload, headers=headers)
-        else:
-            print("⚠️ RESEND_API_KEY not set – cannot send reset email.")
-
+        resend.Emails.send({
+            "from": "AutopilotAI <support@autopilotai.dev>",
+            "to": user.email,
+            "subject": "Reset your AutopilotAI password",
+            "html": f"""
+                <h2>Reset your password</h2>
+                <p>Click the button below to create a new password.</p>
+                <a href="{reset_link}"
+                   style="padding:12px 18px;
+                          background:#000;
+                          color:#fff;
+                          text-decoration:none;
+                          border-radius:8px;">
+                   Reset Password
+                </a>
+                <p>Or copy this link:<br>{reset_link}</p>
+                <p>This link expires in 30 minutes.</p>
+            """
+        })
     except Exception as e:
         print("EMAIL ERROR:", e)
+        raise HTTPException(500, "Failed to send email")
 
-    return {"message": "If an account exists, a reset link has been sent."}
+    return {"message": "Reset email sent"}
 
 
 # -----------------------------
 # RESET PASSWORD
 # -----------------------------
 @router.post("/reset-password")
-def reset_password(data: dict, db: Session = Depends(get_db)):
-    token = data.get("token")
-    new_password = data.get("password")
-
-    if not token or not new_password:
-        raise HTTPException(status_code=400, detail="Missing token or password")
-
-    user = db.query(User).filter(User.reset_token == token).first()
+def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.reset_token == data.token).first()
 
     if not user:
-        raise HTTPException(status_code=400, detail="Invalid or expired token")
+        raise HTTPException(400, "Invalid token")
 
     if not user.reset_token_expires or user.reset_token_expires < datetime.utcnow():
-        raise HTTPException(status_code=400, detail="Token expired")
+        raise HTTPException(400, "Token expired")
 
-    hashed_pw = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
+    hashed_pw = bcrypt.hashpw(data.password.encode(), bcrypt.gensalt()).decode()
+
     user.password = hashed_pw
     user.reset_token = None
     user.reset_token_expires = None
 
     db.commit()
 
-    return {"message": "Password updated successfully"}
+    return {"message": "Password reset successful"}
