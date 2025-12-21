@@ -205,3 +205,40 @@ def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_db)):
     db.commit()
 
     return {"message": "Password updated successfully"}
+
+# ======================================================
+# USAGE STATUS (dashboard + profile dropdown)
+# ======================================================
+@router.get("/usage")
+def usage(Authorization: str = Header(None), db: Session = Depends(get_db)):
+
+    if not Authorization:
+        raise HTTPException(401, "Missing Authorization header")
+
+    token = Authorization.replace("Bearer ", "")
+
+    try:
+        payload = jwt.decode(token, SECRET, algorithms=[ALGORITHM])
+        user_id = payload["user_id"]
+    except:
+        raise HTTPException(401, "Invalid token")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+
+    # Normalize + get REAL limit
+    from app.utils.usage import get_user_limit
+    limit = get_user_limit(user.subscription_plan)
+
+    remaining = None
+    if limit is not None:
+        remaining = max(limit - (user.used_generations or 0), 0)
+
+    return {
+        "subscription": user.subscription_plan,
+        "used": user.used_generations,
+        "limit": limit,
+        "remaining": remaining,
+        "last_reset": user.last_reset
+    }
