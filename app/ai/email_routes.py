@@ -12,7 +12,6 @@ router = APIRouter()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
-# accepts subject/details OR prompt/text (backward compatible)
 class EmailRequest(BaseModel):
     subject: str | None = None
     details: str | None = None
@@ -34,13 +33,9 @@ def generate_email(
     user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # 🔄 Reset monthly usage if needed
     reset_if_new_month(user)
 
-    # 🔐 Normalize plan + enforce limits
-    plan = (user.subscription_plan or "free").lower()
-    limit = get_user_limit(plan)
-
+    limit = get_user_limit(user.subscription_plan)
     if limit is not None and user.used_generations >= limit:
         raise HTTPException(
             status_code=403,
@@ -58,29 +53,23 @@ def generate_email(
         "You NEVER give advice, tips, explanations, or strategy. "
         "You ONLY output the email itself.\n\n"
         "Rules:\n"
-        "- Start with a subject line: 'Subject: ...'\n"
-        "- Then the email body.\n"
-        "- Keep it clear, persuasive, and professional.\n"
-        "- Include a concrete CTA.\n"
-        "- No extra notes or commentary."
+        "- Start with 'Subject: ...'\n"
+        "- Then email body\n"
+        "- Professional + persuasive\n"
+        "- Include CTA\n"
+        "- No commentary"
     )
 
     if not subject:
-        subject = 'Quick question'
+        subject = "Quick question"
 
     try:
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": system},
-                {
-                    "role": "user",
-                    "content": (
-                        f"Write an email.\n\n"
-                        f"Subject idea: {subject}\n\n"
-                        f"Context/details:\n{details}"
-                    )
-                }
+                {"role": "user",
+                 "content": f"Write an email.\n\nSubject idea: {subject}\n\nContext:\n{details}"}
             ]
         )
 
@@ -88,18 +77,18 @@ def generate_email(
         if not output:
             raise HTTPException(500, "OpenAI returned empty output")
 
-        # 💾 Save to My Work
         db.add(SavedContent(
             user_id=user.id,
             content_type="email",
             prompt=subject,
-            result=output,
+            result=output
         ))
 
-        # 🔢 Increment usage
-        user.used_generations += 1
-
+        # 🔢 SAFE USAGE UPDATE
+        user.used_generations = (user.used_generations or 0) + 1
+        db.add(user)
         db.commit()
+        db.refresh(user)
 
         return {"output": output}
 

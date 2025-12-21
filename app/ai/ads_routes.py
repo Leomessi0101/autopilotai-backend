@@ -12,8 +12,6 @@ router = APIRouter()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
-# Backward-compatible payload:
-# accepts product/audience OR prompt/text
 class AdRequest(BaseModel):
     product: str | None = None
     audience: str | None = None
@@ -35,13 +33,9 @@ def generate_ads(
     user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # 🔄 Reset usage if new month
     reset_if_new_month(user)
 
-    # 🔐 Normalize plan + enforce limits
-    plan = (user.subscription_plan or "free").lower()
-    limit = get_user_limit(plan)
-
+    limit = get_user_limit(user.subscription_plan)
     if limit is not None and user.used_generations >= limit:
         raise HTTPException(
             status_code=403,
@@ -55,20 +49,14 @@ def generate_ads(
     if not prompt and (not product or not audience):
         raise HTTPException(422, "Provide prompt/text or product+audience")
 
-    # HARD-LOCK: output finished ads only (no advice)
     system = (
-        "You write HIGH-CONVERTING ad copy. "
-        "You NEVER give advice, tips, explanations, or strategies. "
-        "You ONLY output finished ad copy.\n\n"
-        "Output format MUST be:\n"
+        "You write HIGH-CONVERTING ads.\n"
+        "ONLY output ads.\n"
+        "NO tips.\n\n"
+        "Output format:\n\n"
         "AD 1:\nHeadline:\nPrimary text:\nCTA:\n\n"
         "AD 2:\nHeadline:\nPrimary text:\nCTA:\n\n"
-        "AD 3:\nHeadline:\nPrimary text:\nCTA:\n\n"
-        "Rules:\n"
-        "- Strong hook in headline\n"
-        "- Clear benefit + proof\n"
-        "- Clear CTA\n"
-        "- No commentary"
+        "AD 3:\nHeadline:\nPrimary text:\nCTA:"
     )
 
     if not prompt:
@@ -87,18 +75,18 @@ def generate_ads(
         if not output:
             raise HTTPException(500, "OpenAI returned empty output")
 
-        # 💾 Save to My Work
         db.add(SavedContent(
             user_id=user.id,
             content_type="ad",
             prompt=prompt if (product == "" and audience == "") else f"{product} → {audience}",
-            result=output,
+            result=output
         ))
 
-        # 🔢 Increment usage
-        user.used_generations += 1
-
+        # 🔢 SAFE USAGE UPDATE
+        user.used_generations = (user.used_generations or 0) + 1
+        db.add(user)
         db.commit()
+        db.refresh(user)
 
         return {"output": output}
 

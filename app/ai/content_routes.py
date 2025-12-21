@@ -69,13 +69,9 @@ def generate_content(
     user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # 🔄 Reset monthly usage if needed
     reset_if_new_month(user)
 
-    # 🔐 Normalize plan + enforce limits
-    plan = (user.subscription_plan or "free").lower()
-    limit = get_user_limit(plan)
-
+    limit = get_user_limit(user.subscription_plan)
     if limit is not None and user.used_generations >= limit:
         raise HTTPException(
             status_code=403,
@@ -103,19 +99,14 @@ def generate_content(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": system_prompt},
-                {
-                    "role": "user",
-                    "content": f"Create 5 posts to showcase: {prompt}"
-                }
+                {"role": "user", "content": f"Create 5 posts to showcase: {prompt}"}
             ]
         )
 
         output = response.choices[0].message.content.strip()
-
         if not output:
             raise HTTPException(500, "Empty AI response")
 
-        # 💾 Save work
         db.add(SavedContent(
             user_id=user.id,
             content_type="content",
@@ -123,10 +114,11 @@ def generate_content(
             result=output
         ))
 
-        # 🔢 Increment usage
-        user.used_generations += 1
-
+        # 🔢 SAFE USAGE UPDATE
+        user.used_generations = (user.used_generations or 0) + 1
+        db.add(user)
         db.commit()
+        db.refresh(user)
 
         return {"output": output}
 
