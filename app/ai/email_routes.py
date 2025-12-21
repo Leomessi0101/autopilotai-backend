@@ -12,8 +12,7 @@ router = APIRouter()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
-# Backward-compatible payload:
-# accepts subject/details OR prompt/text
+# accepts subject/details OR prompt/text (backward compatible)
 class EmailRequest(BaseModel):
     subject: str | None = None
     details: str | None = None
@@ -35,11 +34,13 @@ def generate_email(
     user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # 🔐 Reset usage if new month
+    # 🔄 Reset monthly usage if needed
     reset_if_new_month(user)
 
-    # 🔐 Enforce plan limits
-    limit = get_user_limit(user.subscription_plan)
+    # 🔐 Normalize plan + enforce limits
+    plan = (user.subscription_plan or "free").lower()
+    limit = get_user_limit(plan)
+
     if limit is not None and user.used_generations >= limit:
         raise HTTPException(
             status_code=403,
@@ -52,7 +53,6 @@ def generate_email(
     if not details:
         raise HTTPException(422, "Missing details/prompt/text")
 
-    # HARD-LOCK: output the final email only (no tips)
     system = (
         "You write FINAL, SEND-READY business emails. "
         "You NEVER give advice, tips, explanations, or strategy. "
@@ -66,7 +66,7 @@ def generate_email(
     )
 
     if not subject:
-        subject = "Quick question"
+        subject = 'Quick question'
 
     try:
         response = client.chat.completions.create(
@@ -75,7 +75,11 @@ def generate_email(
                 {"role": "system", "content": system},
                 {
                     "role": "user",
-                    "content": f"Write an email.\n\nSubject idea: {subject}\n\nContext/details:\n{details}"
+                    "content": (
+                        f"Write an email.\n\n"
+                        f"Subject idea: {subject}\n\n"
+                        f"Context/details:\n{details}"
+                    )
                 }
             ]
         )

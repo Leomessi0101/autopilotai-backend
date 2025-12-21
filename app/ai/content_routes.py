@@ -16,7 +16,7 @@ class ContentRequest(BaseModel):
     topic: str | None = None
     prompt: str | None = None
     text: str | None = None
-    platform: str | None = None  # NEW (optional)
+    platform: str | None = None
 
 
 def get_db():
@@ -54,7 +54,6 @@ def platform_instructions(platform: str) -> str:
             "- No emojis or slang\n"
         )
 
-    # default: Instagram
     return (
         "Format for Instagram.\n"
         "- Strong hook in first line\n"
@@ -70,11 +69,13 @@ def generate_content(
     user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # 🔐 Reset usage if new month
+    # 🔄 Reset monthly usage if needed
     reset_if_new_month(user)
 
-    # 🔐 Enforce plan limits
-    limit = get_user_limit(user.subscription_plan)
+    # 🔐 Normalize plan + enforce limits
+    plan = (user.subscription_plan or "free").lower()
+    limit = get_user_limit(plan)
+
     if limit is not None and user.used_generations >= limit:
         raise HTTPException(
             status_code=403,
@@ -114,7 +115,7 @@ def generate_content(
         if not output:
             raise HTTPException(500, "Empty AI response")
 
-        # 💾 Save content
+        # 💾 Save work
         db.add(SavedContent(
             user_id=user.id,
             content_type="content",

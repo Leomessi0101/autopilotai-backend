@@ -35,11 +35,13 @@ def generate_ads(
     user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # 🔐 Reset usage if new month
+    # 🔄 Reset usage if new month
     reset_if_new_month(user)
 
-    # 🔐 Enforce plan limits
-    limit = get_user_limit(user.subscription_plan)
+    # 🔐 Normalize plan + enforce limits
+    plan = (user.subscription_plan or "free").lower()
+    limit = get_user_limit(plan)
+
     if limit is not None and user.used_generations >= limit:
         raise HTTPException(
             status_code=403,
