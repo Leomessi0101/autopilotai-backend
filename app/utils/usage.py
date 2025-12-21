@@ -4,12 +4,21 @@ from app.database.session import SessionLocal
 PLAN_LIMITS = {
     "free": 10,
     "basic": 100,
-    "growth": None,
-    "pro": None
+    "growth": None,   # unlimited
+    "pro": None       # unlimited
 }
 
+
 def get_user_limit(subscription_plan: str):
-    return PLAN_LIMITS.get(subscription_plan, 10)
+    """
+    Normalize plan casing and return monthly limit.
+    None = unlimited
+    """
+    if not subscription_plan:
+        return 10
+
+    plan = subscription_plan.lower()
+    return PLAN_LIMITS.get(plan, 10)
 
 
 def reset_if_new_month(user):

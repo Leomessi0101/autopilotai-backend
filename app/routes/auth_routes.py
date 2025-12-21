@@ -9,14 +9,15 @@ import os
 from datetime import datetime, timedelta
 import resend
 
+from app.utils.usage import get_user_limit   # ✅ IMPORTANT
+
 SECRET = os.getenv("JWT_SECRET", "supersecretkey")
 ALGORITHM = "HS256"
 
 router = APIRouter()
 
-# ======================================================
-# REQUEST MODELS
-# ======================================================
+
+# ========================= MODELS =========================
 class RegisterRequest(BaseModel):
     name: str
     email: EmailStr
@@ -37,9 +38,7 @@ class ResetPasswordRequest(BaseModel):
     new_password: str
 
 
-# ======================================================
-# DB
-# ======================================================
+# ========================= DB =========================
 def get_db():
     db = SessionLocal()
     try:
@@ -48,16 +47,12 @@ def get_db():
         db.close()
 
 
-# ======================================================
-# JWT
-# ======================================================
+# ========================= JWT =========================
 def create_access_token(user_id: int):
     return jwt.encode({"user_id": user_id}, SECRET, algorithm=ALGORITHM)
 
 
-# ======================================================
-# REGISTER
-# ======================================================
+# ========================= REGISTER =========================
 @router.post("/register")
 def register(data: RegisterRequest, db: Session = Depends(get_db)):
 
@@ -71,7 +66,7 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
         name=data.name,
         email=data.email,
         password=hashed_pw,
-        subscription_plan="Free",
+        subscription_plan="free",     # ✅ lowercase ALWAYS
         monthly_limit=10,
         used_generations=0
     )
@@ -83,9 +78,7 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
     return {"message": "Account created"}
 
 
-# ======================================================
-# LOGIN
-# ======================================================
+# ========================= LOGIN =========================
 @router.post("/login")
 def login(data: LoginRequest, db: Session = Depends(get_db)):
 
@@ -99,17 +92,16 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
 
     token = create_access_token(user.id)
 
+    limit = get_user_limit(user.subscription_plan)
     return {
         "token": token,
         "subscription_plan": user.subscription_plan,
-        "monthly_limit": user.monthly_limit,
-        "used_generations": user.used_generations
+        "monthly_limit": limit,
+        "used_generations": user.used_generations,
     }
 
 
-# ======================================================
-# ME
-# ======================================================
+# ========================= ME =========================
 @router.get("/me")
 def me(Authorization: str = Header(None), db: Session = Depends(get_db)):
 
@@ -128,18 +120,25 @@ def me(Authorization: str = Header(None), db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(404, "User not found")
 
+    # ✅ ALWAYS compute real monthly limit
+    limit = get_user_limit(user.subscription_plan)
+
+    remaining = None
+    if limit is not None:
+        remaining = max(limit - (user.used_generations or 0), 0)
+
     return {
         "name": user.name,
         "email": user.email,
         "subscription": user.subscription_plan,
         "used_generations": user.used_generations,
-        "monthly_limit": user.monthly_limit,
+        "monthly_limit": limit,
+        "remaining_generations": remaining,
+        "last_reset": user.last_reset,
     }
 
 
-# ======================================================
-# FORGOT PASSWORD
-# ======================================================
+# ========================= FORGOT PASSWORD =========================
 @router.post("/forgot-password")
 def forgot_password(data: ForgotPasswordRequest, db: Session = Depends(get_db)):
 
@@ -178,9 +177,7 @@ def forgot_password(data: ForgotPasswordRequest, db: Session = Depends(get_db)):
     return {"message": "Reset email sent"}
 
 
-# ======================================================
-# RESET PASSWORD
-# ======================================================
+# ========================= RESET PASSWORD =========================
 @router.post("/reset-password")
 def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_db)):
 
