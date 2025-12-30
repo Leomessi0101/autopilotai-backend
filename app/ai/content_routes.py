@@ -17,6 +17,7 @@ class ContentRequest(BaseModel):
     prompt: str | None = None
     text: str | None = None
     platform: str | None = None
+    generate_image: bool = False   # <-- NEW TOGGLE
 
 
 def get_db():
@@ -95,6 +96,7 @@ def generate_content(
     )
 
     try:
+        # ---------- TEXT GENERATION ----------
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
@@ -107,6 +109,7 @@ def generate_content(
         if not output:
             raise HTTPException(500, "Empty AI response")
 
+        # Save text
         db.add(SavedContent(
             user_id=user.id,
             content_type="content",
@@ -114,13 +117,52 @@ def generate_content(
             result=output
         ))
 
-        # 🔢 SAFE USAGE UPDATE
         user.used_generations = (user.used_generations or 0) + 1
         db.add(user)
         db.commit()
         db.refresh(user)
 
-        return {"output": output}
+        # ---------- IMAGE LOGIC ----------
+
+        # If toggle OFF → return only text
+        if not data.generate_image:
+            return {
+                "output": output,
+                "image": None,
+                "error": None
+            }
+
+        # If FREE user → block image
+        if user.subscription_plan == "free":
+            return {
+                "output": output,
+                "image": None,
+                "error": "AI Image is only available for paid users. Upgrade to unlock images."
+            }
+
+        # Paid user + toggle ON → generate image
+        visual_prompt = f"""
+        Create a high quality, visually engaging marketing image
+        that represents the following social media content.
+        No text in the image.
+        
+        CONTENT:
+        {output[:800]}
+        """
+
+        image_response = client.images.generate(
+            model="gpt-image-1",
+            prompt=visual_prompt,
+            size="1024x1024"
+        )
+
+        image_url = image_response.data[0].url
+
+        return {
+            "output": output,
+            "image": image_url,
+            "error": None
+        }
 
     except HTTPException:
         raise
