@@ -28,6 +28,7 @@ class User(Base):
     # Relationships
     profile = relationship("Profile", back_populates="user", uselist=False)
     saved_content = relationship("SavedContent", back_populates="user")
+    saved_images = relationship("SavedImage", back_populates="user")  # <-- NEW
 
 
 # --------------------------
@@ -66,6 +67,24 @@ class SavedContent(Base):
     result = Column(String)
 
     user = relationship("User", back_populates="saved_content")
+
+
+# --------------------------
+# SAVED IMAGES  (NEW)
+# --------------------------
+class SavedImage(Base):
+    __tablename__ = "saved_images"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    text_content = Column(Text, nullable=True)  # text associated with image
+    image_url = Column(Text, nullable=False)    # OpenAI image URL
+    image_style = Column(String, nullable=True) # style user selected
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", back_populates="saved_images")
 
 
 # --------------------------

@@ -22,6 +22,7 @@ from app.routes.content_history import router as history_router
 from app.ai.ads_routes import router as ads_router
 from app.routes.dashboard_routes import router as dashboard_router
 from app.routes.work_routes import router as work_router
+from app.ai import image_routes
 
 import sys
 print(">>> Python executable:", sys.executable)
@@ -57,6 +58,7 @@ app.include_router(profile_router, prefix="/api")
 app.include_router(usage_router, prefix="/api/auth")
 app.include_router(dashboard_router, prefix="/api")
 app.include_router(work_router, prefix="/api")
+app.include_router(image_routes.router, prefix="/api")
 
 # AI Routes
 app.include_router(content_router, prefix="/api/content")
