@@ -17,7 +17,7 @@ class ContentRequest(BaseModel):
     prompt: str | None = None
     text: str | None = None
     platform: str | None = None
-    generate_image: bool = False   # <-- NEW TOGGLE
+    generate_image: bool = False
 
 
 def get_db():
@@ -109,7 +109,7 @@ def generate_content(
         if not output:
             raise HTTPException(500, "Empty AI response")
 
-        # Save text
+        # Save text always
         db.add(SavedContent(
             user_id=user.id,
             content_type="content",
@@ -122,9 +122,7 @@ def generate_content(
         db.commit()
         db.refresh(user)
 
-        # ---------- IMAGE LOGIC ----------
-
-        # If toggle OFF → return only text
+        # ---------- IF IMAGE TOGGLE OFF ----------
         if not data.generate_image:
             return {
                 "output": output,
@@ -132,7 +130,7 @@ def generate_content(
                 "error": None
             }
 
-        # If FREE user → block image
+        # ---------- IF USER IS FREE ----------
         if user.subscription_plan == "free":
             return {
                 "output": output,
@@ -140,20 +138,21 @@ def generate_content(
                 "error": "AI Image is only available for paid users. Upgrade to unlock images."
             }
 
-        # Paid user + toggle ON → generate image
+        # ---------- PAID USER → GENERATE IMAGE ----------
         visual_prompt = f"""
-        Create a high quality, visually engaging marketing image
+        Create a high-quality, visually engaging marketing image
         that represents the following social media content.
-        No text in the image.
-        
+        Do NOT include any text in the image.
+
         CONTENT:
-        {output[:800]}
+        {output[:900]}
         """
 
         image_response = client.images.generate(
             model="gpt-image-1",
             prompt=visual_prompt,
-            size="1024x1024"
+            size="1024x1024",
+            response_format="url"   # <-- THIS WAS THE MISSING PIECE
         )
 
         image_url = image_response.data[0].url
