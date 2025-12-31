@@ -152,10 +152,27 @@ def generate_content(
             model="gpt-image-1",
             prompt=visual_prompt,
             size="1024x1024",
-            response_format="url"   # <-- THIS WAS THE MISSING PIECE
+            response_format="url"
         )
 
-        image_url = image_response.data[0].url
+        image_url = None
+
+        # Try URL
+        try:
+            image_url = image_response.data[0].url
+        except:
+            image_url = None
+
+        # Fallback base64
+        if not image_url:
+            try:
+                base64_data = image_response.data[0].b64_json
+                image_url = f"data:image/png;base64,{base64_data}"
+            except:
+                image_url = None
+
+        if not image_url:
+            raise HTTPException(500, "Image generated but no image returned from OpenAI.")
 
         return {
             "output": output,
