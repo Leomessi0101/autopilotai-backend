@@ -6,7 +6,9 @@ from app.database.models import Profile, User
 
 router = APIRouter()
 
+
 class ProfileUpdate(BaseModel):
+    # Existing
     full_name: str | None = None
     company_name: str | None = None
     company_website: str | None = None
@@ -18,6 +20,13 @@ class ProfileUpdate(BaseModel):
     signature: str | None = None
     writing_style: str | None = None
 
+    # NEW Personality settings
+    use_emojis: bool | None = True
+    use_hashtags: bool | None = True
+    length_pref: str | None = "medium"
+    creativity_level: int | None = 5
+    cta_style: str | None = "balanced"
+
 
 # -----------------------------
 # GET PROFILE
@@ -27,7 +36,6 @@ def get_profile(user: User = Depends(get_current_user)):
     db = SessionLocal()
 
     try:
-        # IMPORTANT: reattach user to this session
         db_user = db.query(User).filter(User.id == user.id).first()
 
         if db_user is None:
@@ -47,6 +55,12 @@ def get_profile(user: User = Depends(get_current_user)):
                 "target_audience": "",
                 "signature": "",
                 "writing_style": "",
+
+                "use_emojis": True,
+                "use_hashtags": True,
+                "length_pref": "medium",
+                "creativity_level": 5,
+                "cta_style": "balanced",
             }
 
         return {
@@ -60,6 +74,12 @@ def get_profile(user: User = Depends(get_current_user)):
             "target_audience": profile.target_audience or "",
             "signature": profile.signature or "",
             "writing_style": profile.writing_style or "",
+
+            "use_emojis": profile.use_emojis if profile.use_emojis is not None else True,
+            "use_hashtags": profile.use_hashtags if profile.use_hashtags is not None else True,
+            "length_pref": profile.length_pref or "medium",
+            "creativity_level": profile.creativity_level or 5,
+            "cta_style": profile.cta_style or "balanced",
         }
 
     finally:
@@ -74,7 +94,6 @@ def update_profile(data: ProfileUpdate, user: User = Depends(get_current_user)):
     db = SessionLocal()
 
     try:
-        # IMPORTANT: reattach
         db_user = db.query(User).filter(User.id == user.id).first()
 
         if db_user is None:
@@ -82,10 +101,11 @@ def update_profile(data: ProfileUpdate, user: User = Depends(get_current_user)):
 
         profile = db_user.profile
 
-        # Create if missing
+        # Create profile if missing
         if profile is None:
             profile = Profile(
                 user_id=db_user.id,
+
                 full_name=data.full_name,
                 company_name=data.company_name,
                 company_website=data.company_website,
@@ -96,6 +116,12 @@ def update_profile(data: ProfileUpdate, user: User = Depends(get_current_user)):
                 target_audience=data.target_audience,
                 signature=data.signature,
                 writing_style=data.writing_style,
+
+                use_emojis=data.use_emojis if data.use_emojis is not None else True,
+                use_hashtags=data.use_hashtags if data.use_hashtags is not None else True,
+                length_pref=data.length_pref or "medium",
+                creativity_level=data.creativity_level or 5,
+                cta_style=data.cta_style or "balanced",
             )
 
             db.add(profile)
@@ -113,6 +139,12 @@ def update_profile(data: ProfileUpdate, user: User = Depends(get_current_user)):
         profile.target_audience = data.target_audience
         profile.signature = data.signature
         profile.writing_style = data.writing_style
+
+        profile.use_emojis = data.use_emojis
+        profile.use_hashtags = data.use_hashtags
+        profile.length_pref = data.length_pref
+        profile.creativity_level = data.creativity_level
+        profile.cta_style = data.cta_style
 
         db.commit()
         return {"message": "Profile updated"}
