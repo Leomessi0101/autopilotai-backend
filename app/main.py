@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 # Database
 from app.database.session import engine
+from app.database import models   # <-- IMPORTANT: ensures all models register
 from app.database.models import Base
 
 # Routers
@@ -30,7 +31,7 @@ print(">>> Python executable:", sys.executable)
 # -------------------- APP SETUP --------------------
 app = FastAPI()
 
-# Create database tables
+# -------------------- CREATE DATABASE TABLES --------------------
 Base.metadata.create_all(bind=engine)
 
 # -------------------- CORS --------------------
@@ -45,7 +46,7 @@ origins = [
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_origin_regex=r"https://.*\.vercel\.app",   # 🔥 allow all vercel preview domains
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
