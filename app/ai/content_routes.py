@@ -35,30 +35,30 @@ def platform_instructions(platform: str) -> str:
         return (
             "Format for TikTok captions.\n"
             "- Short punchy hooks\n"
-            "- Casual, bold tone\n"
+            "- Casual bold tone\n"
             "- Emojis allowed\n"
-            "- Max 2–4 lines per post\n"
+            "- Max 2–4 short lines\n"
         )
     if platform == "twitter":
         return (
-            "Format for X (Twitter).\n"
+            "Format for X (Twitter)\n"
             "- Max 280 characters per post\n"
             "- Sharp hooks\n"
             "- No hashtags unless essential\n"
         )
     if platform == "linkedin":
         return (
-            "Format for LinkedIn.\n"
-            "- Professional tone\n"
-            "- Value-driven\n"
+            "Format for LinkedIn\n"
+            "- Professional serious tone\n"
+            "- Value focused\n"
             "- Line breaks for readability\n"
             "- No emojis or slang\n"
         )
 
     return (
-        "Format for Instagram.\n"
-        "- Strong hook first line\n"
-        "- 2–4 short lines\n"
+        "Format for Instagram\n"
+        "- Hook first line\n"
+        "- Short readable flow\n"
         "- Emojis allowed\n"
         "- 6–12 relevant hashtags\n"
     )
@@ -79,67 +79,63 @@ def generate_content(
             detail="Monthly generation limit reached. Please upgrade your plan."
         )
 
+    # ---------------- PROFILE LOAD (SAFE) ----------------
+    profile = db.query(Profile).filter(Profile.user_id == user.id).first()
+
+    if not profile:
+        class Dummy:
+            use_emojis = True
+            use_hashtags = True
+            length_pref = "medium"
+            creativity_level = 5
+            cta_style = "balanced"
+        profile = Dummy()
+
+    # ---------------- PROMPT LOGIC ----------------
     prompt = (data.topic or data.prompt or data.text or "").strip()
     if not prompt:
         raise HTTPException(422, "Missing topic/prompt/text")
 
     platform = (data.platform or "instagram").lower()
 
-    # ==========================
-    # GET USER PERSONALITY PREFS
-    # ==========================
-    profile: Profile = user.profile
+    # ---------------- AI BEHAVIOR RULES ----------------
+    emoji_rule = "Use emojis naturally" if profile.use_emojis else "Do NOT use emojis"
+    hashtag_rule = "Use strong relevant hashtags" if profile.use_hashtags else "Do NOT include hashtags"
 
-    # If somehow no profile exists → SAFE DEFAULTS
-    if not profile:
-        emoji_rule = "Emojis allowed."
-        hashtag_rule = "Use relevant hashtags."
-        length_text = "Balanced length."
-        cta_text = "Balanced CTA."
-        creativity = 5
-    else:
-        emoji_rule = "Do NOT use emojis." if not profile.use_emojis else "Emojis allowed where natural."
-        hashtag_rule = "Do NOT use hashtags." if not profile.use_hashtags else "Use relevant hashtags."
-        length_map = {
-            "short": "Keep posts short and punchy.",
-            "medium": "Use balanced length with substance.",
-            "long": "Write longer, detailed posts."
-        }
-        cta_map = {
-            "soft": "Use soft friendly CTA.",
-            "balanced": "Use balanced persuasive CTA.",
-            "aggressive": "Use strong direct CTA."
-        }
+    length_rule = {
+        "short": "Keep each post very short and punchy.",
+        "medium": "Keep posts balanced in length.",
+        "long": "Write longer, detailed posts."
+    }.get(profile.length_pref, "Balanced length.")
 
-        length_text = length_map.get(profile.length_pref, "Balanced length.")
-        cta_text = cta_map.get(profile.cta_style, "Balanced CTA.")
-        creativity = profile.creativity_level or 5
+    cta_rule = {
+        "soft": "Use soft and friendly CTA style.",
+        "balanced": "Use confident but not pushy CTAs.",
+        "aggressive": "Use extremely strong persuasive CTA style."
+    }.get(profile.cta_style, "Balanced CTA style.")
 
-    system_prompt = f"""
-You generate READY-TO-POST social media content.
-Never explain. Never give tips. Never comment.
-ONLY output final posts.
+    creativity_rule = f"Creativity intensity: {profile.creativity_level}/10"
 
-User AI Preferences:
-- {emoji_rule}
-- {hashtag_rule}
-- {length_text}
-- {cta_text}
-- Creativity level (1–10): {creativity}
-
-Output EXACTLY 5 posts.
-Each post must be clearly separated.
-
-{platform_instructions(platform)}
-"""
+    system_prompt = (
+        "You generate READY-TO-POST social media content.\n"
+        "Only output the posts. NO explanations.\n"
+        "Output EXACTLY 5 posts.\n"
+        "Separate posts clearly with spacing.\n\n"
+        f"{platform_instructions(platform)}\n\n"
+        f"{emoji_rule}\n"
+        f"{hashtag_rule}\n"
+        f"{length_rule}\n"
+        f"{cta_rule}\n"
+        f"{creativity_rule}"
+    )
 
     try:
-        # ---------- TEXT ----------
+        # ---------- TEXT GENERATION ----------
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Create social posts about: {prompt}"}
+                {"role": "user", "content": f"Create 5 posts about:\n\n{prompt}"}
             ]
         )
 
@@ -147,7 +143,7 @@ Each post must be clearly separated.
         if not output:
             raise HTTPException(500, "Empty AI response")
 
-        # ---------- SAVE TEXT ----------
+        # Save text always
         db.add(SavedContent(
             user_id=user.id,
             content_type="content",
@@ -160,7 +156,7 @@ Each post must be clearly separated.
         db.commit()
         db.refresh(user)
 
-        # ---------- IF IMAGE OFF ----------
+        # ---------- IF IMAGE TOGGLE OFF ----------
         if not data.generate_image:
             return {
                 "output": output,
@@ -168,7 +164,7 @@ Each post must be clearly separated.
                 "error": None
             }
 
-        # ---------- FREE USERS CAN'T USE ----------
+        # ---------- IF USER IS FREE ----------
         if user.subscription_plan == "free":
             return {
                 "output": output,
@@ -176,14 +172,15 @@ Each post must be clearly separated.
                 "error": "AI Image is only available for paid users. Upgrade to unlock images."
             }
 
-        # ---------- GENERATE IMAGE ----------
+        # ---------- PAID USER IMAGE ----------
         visual_prompt = f"""
-Create a high-quality visually engaging marketing image.
-Do NOT include text.
-Represent the vibe of this content:
+        Create a high-quality, visually engaging marketing image.
+        NO TEXT IN THE IMAGE.
+        Represent the theme creatively.
 
-{output[:900]}
-"""
+        CONTENT THE IMAGE SHOULD REPRESENT:
+        {output[:900]}
+        """
 
         image_response = client.images.generate(
             model="gpt-image-1",
@@ -193,13 +190,21 @@ Represent the vibe of this content:
         )
 
         image_url = None
+
         try:
             image_url = image_response.data[0].url
         except:
-            pass
+            image_url = None
 
         if not image_url:
-            raise HTTPException(500, "Image generated but OpenAI returned no URL")
+            try:
+                base64_data = image_response.data[0].b64_json
+                image_url = f"data:image/png;base64,{base64_data}"
+            except:
+                image_url = None
+
+        if not image_url:
+            raise HTTPException(500, "Image generated but no image returned from OpenAI.")
 
         return {
             "output": output,

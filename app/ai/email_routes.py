@@ -27,68 +27,6 @@ def get_db():
         db.close()
 
 
-def build_email_personality(profile: Profile | None) -> str:
-    if not profile:
-        return ""
-
-    rules = []
-
-    # --- Emojis ---
-    if hasattr(profile, "use_emojis"):
-        if profile.use_emojis:
-            rules.append("You MAY use emojis when helpful but not childish.")
-        else:
-            rules.append("DO NOT use emojis anywhere.")
-
-    # --- Hashtags (email usually none, but controlling anyway)
-    if hasattr(profile, "use_hashtags"):
-        if profile.use_hashtags:
-            rules.append("Hashtags allowed only when appropriate.")
-        else:
-            rules.append("DO NOT use hashtags anywhere.")
-
-    # --- Length preference ---
-    if hasattr(profile, "length_pref"):
-        if profile.length_pref == "short":
-            rules.append("Keep the email concise and short.")
-        elif profile.length_pref == "long":
-            rules.append("Provide detailed, structured email content.")
-        else:
-            rules.append("Use a balanced medium length.")
-
-    # --- Creativity ---
-    if hasattr(profile, "creativity_level"):
-        if profile.creativity_level <= 3:
-            rules.append("Very professional, logical, minimal flair.")
-        elif profile.creativity_level <= 7:
-            rules.append("Balanced professionalism and personality.")
-        else:
-            rules.append("Creative, engaging, persuasive voice.")
-
-    # --- CTA Style ---
-    if hasattr(profile, "cta_style"):
-        if profile.cta_style == "soft":
-            rules.append("Use a soft and friendly call-to-action.")
-        elif profile.cta_style == "aggressive":
-            rules.append("Use a strong and direct call-to-action.")
-        else:
-            rules.append("Use a balanced professional CTA.")
-
-    # --- Brand Tone ---
-    if profile.brand_tone:
-        rules.append(f"Brand tone: {profile.brand_tone}.")
-
-    # --- Writing Style ---
-    if profile.writing_style:
-        rules.append(f"Preferred writing style: {profile.writing_style}.")
-
-    # --- Signature ---
-    if profile.signature:
-        rules.append("Always end the email with this signature:\n" + profile.signature)
-
-    return "\n".join(rules)
-
-
 @router.post("/generate")
 def generate_email(
     data: EmailRequest,
@@ -104,6 +42,23 @@ def generate_email(
             detail="Monthly generation limit reached. Please upgrade your plan."
         )
 
+    # -------- SAFE PROFILE LOAD --------
+    profile = db.query(Profile).filter(Profile.user_id == user.id).first()
+
+    if not profile:
+        class Dummy:
+            use_emojis = True
+            use_hashtags = False
+            length_pref = "medium"
+            creativity_level = 5
+            cta_style = "balanced"
+            brand_tone = ""
+            writing_style = ""
+            signature = ""
+            company_name = ""
+        profile = Dummy()
+
+    # -------- INPUTS --------
     subject = (data.subject or "").strip()
     details = (data.details or data.prompt or data.text or "").strip()
 
@@ -113,21 +68,56 @@ def generate_email(
     if not subject:
         subject = "Quick question"
 
-    profile = db.query(Profile).filter(Profile.user_id == user.id).first()
+    # -------- PERSONALITY RULES --------
+    emoji_rule = "Use emojis only if natural and minimal." if profile.use_emojis else "Do NOT use emojis."
+    length_rule = (
+        "Keep this email short and concise."
+        if profile.length_pref == "short"
+        else "Balanced length with clarity."
+        if profile.length_pref == "medium"
+        else "More detailed email with depth."
+    )
 
-    personalization_rules = build_email_personality(profile)
+    cta_rule = {
+        "soft": "Use a calm, friendly CTA.",
+        "balanced": "Use a confident but non-pushy CTA.",
+        "aggressive": "Use a strong direct CTA."
+    }.get(profile.cta_style, "Balanced CTA.")
 
+    creativity_rule = f"Creativity level: {profile.creativity_level}/10"
+
+    tone_rule = (
+        profile.brand_tone
+        if profile.brand_tone
+        else "Professional and confident tone."
+    )
+
+    writing_style_rule = (
+        profile.writing_style
+        if profile.writing_style
+        else "Clear, direct writing style."
+    )
+
+    signature = profile.signature or ""
+    company_name = profile.company_name or ""
+
+    # -------- SYSTEM PROMPT --------
     system = (
         "You write FINAL, SEND-READY business emails.\n"
-        "You NEVER explain your writing.\n"
-        "You ONLY output the email itself.\n\n"
+        "NO explanations. NO commentary.\n"
+        "Output ONLY the email in this structure:\n\n"
+        "Subject: <subject here>\n\n"
+        "<email body>\n\n"
         "Rules:\n"
-        "- ALWAYS start with: Subject: ...\n"
-        "- Then new line then full email body\n"
-        "- Professional and persuasive\n"
-        "- Clear structure\n"
-        "- One clear CTA\n\n"
-        f"{personalization_rules}"
+        f"- {emoji_rule}\n"
+        f"- {length_rule}\n"
+        f"- {cta_rule}\n"
+        f"- {tone_rule}\n"
+        f"- {writing_style_rule}\n"
+        f"- {creativity_rule}\n\n"
+        "Make it persuasive, professional, human sounding.\n"
+        "Do NOT oversell. Respectful confidence.\n"
+        "No hashtags.\n"
     )
 
     try:
@@ -135,10 +125,22 @@ def generate_email(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": system},
-                {
-                    "role": "user",
-                    "content": f"Write this email:\n\nSubject idea: {subject}\n\nContext:\n{details}"
-                }
+                {"role": "user",
+                 "content": f"""
+Write this email.
+
+SUBJECT IDEA:
+{subject}
+
+CONTEXT:
+{details}
+
+COMPANY (if relevant):
+{company_name}
+
+If appropriate, include this signature:
+{signature}
+"""}
             ]
         )
 
@@ -146,6 +148,7 @@ def generate_email(
         if not output:
             raise HTTPException(500, "OpenAI returned empty output")
 
+        # -------- SAVE TO DB --------
         db.add(SavedContent(
             user_id=user.id,
             content_type="email",

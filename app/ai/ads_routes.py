@@ -13,6 +13,8 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
 class AdRequest(BaseModel):
+    platform: str | None = None
+    objective: str | None = None
     product: str | None = None
     audience: str | None = None
     prompt: str | None = None
@@ -35,7 +37,6 @@ def generate_ads(
 ):
     reset_if_new_month(user)
 
-    # ---------- LIMIT CHECK ----------
     limit = get_user_limit(user.subscription_plan)
     if limit is not None and user.used_generations >= limit:
         raise HTTPException(
@@ -43,6 +44,22 @@ def generate_ads(
             detail="Monthly generation limit reached. Please upgrade your plan."
         )
 
+    # -------- SAFE PROFILE LOAD --------
+    profile = db.query(Profile).filter(Profile.user_id == user.id).first()
+
+    if not profile:
+        class Dummy:
+            use_emojis = True
+            use_hashtags = True
+            length_pref = "medium"
+            creativity_level = 5
+            cta_style = "balanced"
+            brand_tone = ""
+            writing_style = ""
+        profile = Dummy()
+
+    platform = (data.platform or "meta").lower()
+    objective = (data.objective or "Sales").strip()
     product = (data.product or "").strip()
     audience = (data.audience or "").strip()
     prompt = (data.prompt or data.text or "").strip()
@@ -50,91 +67,109 @@ def generate_ads(
     if not prompt and (not product or not audience):
         raise HTTPException(422, "Provide prompt/text or product+audience")
 
-    # ---------------------------------
-    # LOAD USER AI PERSONALITY
-    # ---------------------------------
-    profile: Profile = user.profile
-
-    if not profile:
-        emoji_rule = "Do not use emojis."
-        hashtag_rule = "Do not include hashtags."
-        length_rule = "Balanced length ads."
-        cta_rule = "Use a persuasive CTA."
-        tone_rule = "Professional confident tone."
-        creativity = 5
-    else:
-        emoji_rule = (
-            "Do NOT use emojis."
-            if not profile.use_emojis
-            else "Emojis may be used sparingly only when appropriate."
-        )
-
-        hashtag_rule = (
-            "Do NOT include hashtags."
-            if not profile.use_hashtags
-            else "Include relevant tasteful hashtags when natural."
-        )
-
-        length_map = {
-            "short": "Keep each ad short and punchy.",
-            "medium": "Balanced engaging ad length.",
-            "long": "Write longer persuasive ad copy with depth."
-        }
-        length_rule = length_map.get(profile.length_pref, "Balanced length ads.")
-
-        cta_map = {
-            "soft": "Use a soft friendly CTA.",
-            "balanced": "Use a confident persuasive CTA.",
-            "aggressive": "Use a strong direct CTA to drive conversion."
-        }
-        cta_rule = cta_map.get(profile.cta_style, "Use a persuasive CTA.")
-
-        tone_rule = (
-            f"Match this writing style if available: '{profile.writing_style}'. "
-            f"If blank, default to confident marketing tone."
-        )
-
-        creativity = profile.creativity_level or 5
-
-    # ---------------------------------
-    # SYSTEM PROMPT
-    # ---------------------------------
-    system = f"""
-You write HIGH CONVERTING FACEBOOK / INSTAGRAM / SOCIAL MEDIA ADS.
-You ONLY output ads. No tips. No explanations.
-
-You must ALWAYS output EXACTLY 3 ads.
-
-Each ad must have:
-AD X:
-Headline:
-Body:
-CTA:
-
-PERSONALITY RULES:
-- {emoji_rule}
-- {hashtag_rule}
-- {length_rule}
-- {tone_rule}
-- {cta_rule}
-- Creativity level (1–10): {creativity}
-
-General rules:
-- Compelling hook immediately
-- Emotional + logical persuasion
-- Clear benefits
-- Human, not robotic
-"""
-
     if not prompt:
-        prompt = f"Create ads for {product} targeting {audience}."
+        prompt = f"Create ads for {product} targeting {audience} with objective {objective}."
+
+    # ---------- PERSONALITY RULES ----------
+    emoji_rule = "Emojis allowed when natural." if profile.use_emojis else "Do NOT use emojis."
+    hashtag_rule = "Use relevant hashtags when logical." if profile.use_hashtags else "Do NOT use hashtags."
+    length_rule = (
+        "Very short punchy ad copy."
+        if profile.length_pref == "short"
+        else "Balanced ad length."
+        if profile.length_pref == "medium"
+        else "More detailed, persuasive ad copy."
+    )
+
+    cta_rule = {
+        "soft": "Use gentle CTA wording.",
+        "balanced": "Use confident but friendly CTA.",
+        "aggressive": "Use strong, decisive CTA.",
+    }.get(profile.cta_style, "Balanced CTA.")
+
+    creativity_rule = f"Creativity level: {profile.creativity_level}/10"
+
+    tone_rule = (
+        profile.brand_tone
+        if profile.brand_tone
+        else "Confident, modern marketing tone."
+    )
+
+    writing_style_rule = (
+        profile.writing_style
+        if profile.writing_style
+        else "Clear, persuasive writing style."
+    )
+
+    # ---------- PLATFORM LOGIC ----------
+    platform_format = ""
+
+    if platform == "meta":
+        platform_format = (
+            "Write Facebook + Instagram style ads.\n"
+            "- Strong hook first line\n"
+            "- Skimmable short sentences\n"
+            "- Optional emojis if allowed\n"
+            "- 1 CTA\n"
+        )
+
+    elif platform == "google":
+        platform_format = (
+            "Write Google Search Ads.\n"
+            "- Short headlines\n"
+            "- Compelling descriptions\n"
+            "- Clear value clarity\n"
+            "- 1 CTA phrase\n"
+        )
+
+    elif platform == "tiktok":
+        platform_format = (
+            "Write TikTok Ad captions.\n"
+            "- Fast hook\n"
+            "- Energetic language\n"
+            "- Relatable tone\n"
+        )
+
+    # ---------- SYSTEM PROMPT ----------
+    system = (
+        "You generate HIGH-CONVERTING ads.\n"
+        "Return ONLY ad content—no explanation.\n\n"
+        "FORMAT STRICTLY:\n\n"
+        "AD 1:\nHeadline:\nPrimary text:\nCTA:\n\n"
+        "AD 2:\nHeadline:\nPrimary text:\nCTA:\n\n"
+        "AD 3:\nHeadline:\nPrimary text:\nCTA:\n\n"
+        "RULES:\n"
+        f"- {emoji_rule}\n"
+        f"- {hashtag_rule}\n"
+        f"- {length_rule}\n"
+        f"- {cta_rule}\n"
+        f"- {tone_rule}\n"
+        f"- {writing_style_rule}\n"
+        f"- {creativity_rule}\n\n"
+        f"{platform_format}"
+    )
 
     try:
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": system},
-                {"role": "user", "content": prompt}
+                {"role": "user",
+                 "content": f"""
+Create 3 ads.
+
+OBJECTIVE:
+{objective}
+
+PRODUCT:
+{product}
+
+AUDIENCE:
+{audience}
+
+PROMPT:
+{prompt}
+"""}
             ]
         )
 
@@ -142,11 +177,11 @@ General rules:
         if not output:
             raise HTTPException(500, "OpenAI returned empty output")
 
-        # ---------- SAVE ----------
+        # Save to DB
         db.add(SavedContent(
             user_id=user.id,
             content_type="ad",
-            prompt=prompt if (product == "" and audience == "") else f"{product} → {audience}",
+            prompt=f"{product} → {audience}",
             result=output
         ))
 
