@@ -33,96 +33,35 @@ def platform_instructions(platform: str) -> str:
 
     if platform == "tiktok":
         return (
-            "Format for TikTok captions:\n"
+            "Format for TikTok captions.\n"
             "- Short punchy hooks\n"
-            "- Casual bold tone\n"
+            "- Casual, bold tone\n"
             "- Emojis allowed\n"
-            "- 2–4 short lines only\n"
+            "- Max 2–4 lines per post\n"
         )
     if platform == "twitter":
         return (
-            "Format for X (Twitter):\n"
+            "Format for X (Twitter).\n"
             "- Max 280 characters per post\n"
-            "- Strong hooks\n"
-            "- No unnecessary hashtags\n"
+            "- Sharp hooks\n"
+            "- No hashtags unless essential\n"
         )
     if platform == "linkedin":
         return (
-            "Format for LinkedIn:\n"
+            "Format for LinkedIn.\n"
             "- Professional tone\n"
             "- Value-driven\n"
-            "- Line breaks\n"
-            "- No emojis\n"
+            "- Line breaks for readability\n"
+            "- No emojis or slang\n"
         )
 
     return (
-        "Format for Instagram:\n"
-        "- Hook first line\n"
-        "- 2–4 lines max\n"
+        "Format for Instagram.\n"
+        "- Strong hook first line\n"
+        "- 2–4 short lines\n"
         "- Emojis allowed\n"
         "- 6–12 relevant hashtags\n"
     )
-
-
-def build_behavior_rules(profile: Profile | None):
-    """
-    Convert stored profile behavior into readable AI instructions.
-    Handles defaults safely if profile doesn't exist or fields are null.
-    """
-
-    if not profile:
-        return (
-            "AI Behavior Rules:\n"
-            "- Use a balanced tone\n"
-            "- Normal creativity\n"
-            "- Emojis allowed\n"
-            "- Hashtags allowed\n"
-            "- Medium length content\n"
-            "- Soft marketing CTA\n"
-        )
-
-    rules = "AI Behavior Rules:\n"
-
-    # Creativity
-    creativity = profile.creativity_level or 5
-    if creativity <= 3:
-        rules += "- Keep creativity low. Be factual and direct.\n"
-    elif creativity <= 7:
-        rules += "- Medium creativity. Natural but not crazy.\n"
-    else:
-        rules += "- Very creative, engaging and bold.\n"
-
-    # Emojis
-    if profile.use_emojis == False:
-        rules += "- DO NOT use emojis.\n"
-    else:
-        rules += "- Emojis allowed.\n"
-
-    # Hashtags
-    if profile.use_hashtags == False:
-        rules += "- DO NOT include hashtags.\n"
-    else:
-        rules += "- Hashtags allowed where appropriate.\n"
-
-    # Length
-    length = (profile.length_pref or "medium").lower()
-    if length == "short":
-        rules += "- Keep responses short and punchy.\n"
-    elif length == "long":
-        rules += "- Provide longer, more detailed content.\n"
-    else:
-        rules += "- Medium length responses.\n"
-
-    # CTA Style
-    cta = (profile.cta_style or "soft").lower()
-    if cta == "strong":
-        rules += "- Use strong persuasive CTA.\n"
-    elif cta == "none":
-        rules += "- No marketing CTA.\n"
-    else:
-        rules += "- Use soft CTA tone.\n"
-
-    return rules
 
 
 @router.post("/generate")
@@ -146,28 +85,61 @@ def generate_content(
 
     platform = (data.platform or "instagram").lower()
 
-    # ------------ LOAD USER PROFILE RULES ------------
-    profile = db.query(Profile).filter(Profile.user_id == user.id).first()
-    behavior_rules = build_behavior_rules(profile)
+    # ==========================
+    # GET USER PERSONALITY PREFS
+    # ==========================
+    profile: Profile = user.profile
 
-    system_prompt = (
-        "You generate READY-TO-POST social media content.\n"
-        "Do NOT give explanations.\n"
-        "Do NOT talk about strategy.\n"
-        "Only output final posts.\n\n"
-        f"{behavior_rules}\n"
-        "Output EXACTLY 5 posts.\n"
-        "Separate each clearly.\n\n"
-        f"{platform_instructions(platform)}"
-    )
+    # If somehow no profile exists → SAFE DEFAULTS
+    if not profile:
+        emoji_rule = "Emojis allowed."
+        hashtag_rule = "Use relevant hashtags."
+        length_text = "Balanced length."
+        cta_text = "Balanced CTA."
+        creativity = 5
+    else:
+        emoji_rule = "Do NOT use emojis." if not profile.use_emojis else "Emojis allowed where natural."
+        hashtag_rule = "Do NOT use hashtags." if not profile.use_hashtags else "Use relevant hashtags."
+        length_map = {
+            "short": "Keep posts short and punchy.",
+            "medium": "Use balanced length with substance.",
+            "long": "Write longer, detailed posts."
+        }
+        cta_map = {
+            "soft": "Use soft friendly CTA.",
+            "balanced": "Use balanced persuasive CTA.",
+            "aggressive": "Use strong direct CTA."
+        }
+
+        length_text = length_map.get(profile.length_pref, "Balanced length.")
+        cta_text = cta_map.get(profile.cta_style, "Balanced CTA.")
+        creativity = profile.creativity_level or 5
+
+    system_prompt = f"""
+You generate READY-TO-POST social media content.
+Never explain. Never give tips. Never comment.
+ONLY output final posts.
+
+User AI Preferences:
+- {emoji_rule}
+- {hashtag_rule}
+- {length_text}
+- {cta_text}
+- Creativity level (1–10): {creativity}
+
+Output EXACTLY 5 posts.
+Each post must be clearly separated.
+
+{platform_instructions(platform)}
+"""
 
     try:
-        # ---------- TEXT GENERATION ----------
+        # ---------- TEXT ----------
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Create 5 posts to showcase: {prompt}"}
+                {"role": "user", "content": f"Create social posts about: {prompt}"}
             ]
         )
 
@@ -175,7 +147,7 @@ def generate_content(
         if not output:
             raise HTTPException(500, "Empty AI response")
 
-        # Save text always
+        # ---------- SAVE TEXT ----------
         db.add(SavedContent(
             user_id=user.id,
             content_type="content",
@@ -188,7 +160,7 @@ def generate_content(
         db.commit()
         db.refresh(user)
 
-        # ---------- IF IMAGE TOGGLE OFF ----------
+        # ---------- IF IMAGE OFF ----------
         if not data.generate_image:
             return {
                 "output": output,
@@ -196,7 +168,7 @@ def generate_content(
                 "error": None
             }
 
-        # ---------- IF USER IS FREE ----------
+        # ---------- FREE USERS CAN'T USE ----------
         if user.subscription_plan == "free":
             return {
                 "output": output,
@@ -204,14 +176,14 @@ def generate_content(
                 "error": "AI Image is only available for paid users. Upgrade to unlock images."
             }
 
-        # ---------- PAID USER → GENERATE IMAGE ----------
+        # ---------- GENERATE IMAGE ----------
         visual_prompt = f"""
-        Create a high-quality, visually engaging marketing image.
-        No text in the image.
-        It should visually represent the following content:
+Create a high-quality visually engaging marketing image.
+Do NOT include text.
+Represent the vibe of this content:
 
-        {output[:900]}
-        """
+{output[:900]}
+"""
 
         image_response = client.images.generate(
             model="gpt-image-1",
@@ -221,18 +193,13 @@ def generate_content(
         )
 
         image_url = None
-
         try:
             image_url = image_response.data[0].url
         except:
-            try:
-                base64_data = image_response.data[0].b64_json
-                image_url = f"data:image/png;base64,{base64_data}"
-            except:
-                image_url = None
+            pass
 
         if not image_url:
-            raise HTTPException(500, "Image generated but OpenAI did not return an image URL.")
+            raise HTTPException(500, "Image generated but OpenAI returned no URL")
 
         return {
             "output": output,

@@ -27,52 +27,66 @@ def get_db():
         db.close()
 
 
-# ---------- AI Personality Builder ----------
-def build_email_behavior(profile: Profile | None):
+def build_email_personality(profile: Profile | None) -> str:
     if not profile:
-        return (
-            "Email Tone & Behavior Rules:\n"
-            "- Professional but friendly\n"
-            "- Moderate creativity\n"
-            "- Include a clear CTA\n"
-            "- No emojis unless casual context\n"
-            "- Keep length medium\n"
-        )
+        return ""
 
-    rules = "Email Tone & Behavior Rules:\n"
+    rules = []
 
-    # Creativity
-    creativity = profile.creativity_level or 5
-    if creativity <= 3:
-        rules += "- Be formal, factual and direct.\n"
-    elif creativity <= 7:
-        rules += "- Balanced creativity – natural and engaging.\n"
-    else:
-        rules += "- Highly persuasive and engaging tone.\n"
+    # --- Emojis ---
+    if hasattr(profile, "use_emojis"):
+        if profile.use_emojis:
+            rules.append("You MAY use emojis when helpful but not childish.")
+        else:
+            rules.append("DO NOT use emojis anywhere.")
 
-    # Emojis
-    if profile.use_emojis is False:
-        rules += "- Do NOT use emojis.\n"
+    # --- Hashtags (email usually none, but controlling anyway)
+    if hasattr(profile, "use_hashtags"):
+        if profile.use_hashtags:
+            rules.append("Hashtags allowed only when appropriate.")
+        else:
+            rules.append("DO NOT use hashtags anywhere.")
 
-    # Length preference
-    length = (profile.length_pref or "medium").lower()
-    if length == "short":
-        rules += "- Keep the email short and concise.\n"
-    elif length == "long":
-        rules += "- Provide more detailed messaging.\n"
-    else:
-        rules += "- Medium readable length.\n"
+    # --- Length preference ---
+    if hasattr(profile, "length_pref"):
+        if profile.length_pref == "short":
+            rules.append("Keep the email concise and short.")
+        elif profile.length_pref == "long":
+            rules.append("Provide detailed, structured email content.")
+        else:
+            rules.append("Use a balanced medium length.")
 
-    # CTA style
-    cta = (profile.cta_style or "soft").lower()
-    if cta == "strong":
-        rules += "- Use strong marketing-style CTA.\n"
-    elif cta == "none":
-        rules += "- No CTA unless essential.\n"
-    else:
-        rules += "- Use a gentle CTA.\n"
+    # --- Creativity ---
+    if hasattr(profile, "creativity_level"):
+        if profile.creativity_level <= 3:
+            rules.append("Very professional, logical, minimal flair.")
+        elif profile.creativity_level <= 7:
+            rules.append("Balanced professionalism and personality.")
+        else:
+            rules.append("Creative, engaging, persuasive voice.")
 
-    return rules
+    # --- CTA Style ---
+    if hasattr(profile, "cta_style"):
+        if profile.cta_style == "soft":
+            rules.append("Use a soft and friendly call-to-action.")
+        elif profile.cta_style == "aggressive":
+            rules.append("Use a strong and direct call-to-action.")
+        else:
+            rules.append("Use a balanced professional CTA.")
+
+    # --- Brand Tone ---
+    if profile.brand_tone:
+        rules.append(f"Brand tone: {profile.brand_tone}.")
+
+    # --- Writing Style ---
+    if profile.writing_style:
+        rules.append(f"Preferred writing style: {profile.writing_style}.")
+
+    # --- Signature ---
+    if profile.signature:
+        rules.append("Always end the email with this signature:\n" + profile.signature)
+
+    return "\n".join(rules)
 
 
 @router.post("/generate")
@@ -99,27 +113,31 @@ def generate_email(
     if not subject:
         subject = "Quick question"
 
-    # ---------- Load Profile ----------
     profile = db.query(Profile).filter(Profile.user_id == user.id).first()
-    behavior_rules = build_email_behavior(profile)
 
-    system_prompt = (
+    personalization_rules = build_email_personality(profile)
+
+    system = (
         "You write FINAL, SEND-READY business emails.\n"
-        "You NEVER explain.\n"
-        "You NEVER talk about strategy.\n"
-        "ONLY output:\n"
-        "Subject line + Full email body.\n\n"
-        f"{behavior_rules}"
+        "You NEVER explain your writing.\n"
+        "You ONLY output the email itself.\n\n"
+        "Rules:\n"
+        "- ALWAYS start with: Subject: ...\n"
+        "- Then new line then full email body\n"
+        "- Professional and persuasive\n"
+        "- Clear structure\n"
+        "- One clear CTA\n\n"
+        f"{personalization_rules}"
     )
 
     try:
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": system_prompt},
+                {"role": "system", "content": system},
                 {
                     "role": "user",
-                    "content": f"Write an email.\n\nSubject idea: {subject}\n\nContext:\n{details}"
+                    "content": f"Write this email:\n\nSubject idea: {subject}\n\nContext:\n{details}"
                 }
             ]
         )

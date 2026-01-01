@@ -27,56 +27,6 @@ def get_db():
         db.close()
 
 
-# ---------- AI Personality Builder ----------
-def build_ad_behavior(profile: Profile | None):
-    if not profile:
-        return (
-            "Ad Behavior Rules:\n"
-            "- High converting tone\n"
-            "- Clear benefit driven language\n"
-            "- Medium creativity\n"
-            "- Use CTA\n"
-            "- Emojis allowed\n"
-        )
-
-    rules = "Ad Behavior Rules:\n"
-
-    # Creativity
-    creativity = profile.creativity_level or 5
-    if creativity <= 3:
-        rules += "- Keep creativity low. Direct, benefit-focused.\n"
-    elif creativity <= 7:
-        rules += "- Balanced creativity. Engaging but clear.\n"
-    else:
-        rules += "- Bold, emotionally engaging creative ad tone.\n"
-
-    # Emojis
-    if profile.use_emojis is False:
-        rules += "- Do NOT use emojis.\n"
-    else:
-        rules += "- Emojis allowed if platform appropriate.\n"
-
-    # Length preference
-    length = (profile.length_pref or "medium").lower()
-    if length == "short":
-        rules += "- Prefer short punchy ad text.\n"
-    elif length == "long":
-        rules += "- Allowed to write longer persuasive copy.\n"
-    else:
-        rules += "- Medium length ad copy.\n"
-
-    # CTA style
-    cta = (profile.cta_style or "soft").lower()
-    if cta == "strong":
-        rules += "- Use strong CTA like BUY NOW / SIGN UP TODAY.\n"
-    elif cta == "none":
-        rules += "- Avoid marketing CTA.\n"
-    else:
-        rules += "- Use softer CTA like Learn More / Check It Out.\n"
-
-    return rules
-
-
 @router.post("/generate")
 def generate_ads(
     data: AdRequest,
@@ -85,6 +35,7 @@ def generate_ads(
 ):
     reset_if_new_month(user)
 
+    # ---------- LIMIT CHECK ----------
     limit = get_user_limit(user.subscription_plan)
     if limit is not None and user.used_generations >= limit:
         raise HTTPException(
@@ -99,22 +50,84 @@ def generate_ads(
     if not prompt and (not product or not audience):
         raise HTTPException(422, "Provide prompt/text or product+audience")
 
+    # ---------------------------------
+    # LOAD USER AI PERSONALITY
+    # ---------------------------------
+    profile: Profile = user.profile
+
+    if not profile:
+        emoji_rule = "Do not use emojis."
+        hashtag_rule = "Do not include hashtags."
+        length_rule = "Balanced length ads."
+        cta_rule = "Use a persuasive CTA."
+        tone_rule = "Professional confident tone."
+        creativity = 5
+    else:
+        emoji_rule = (
+            "Do NOT use emojis."
+            if not profile.use_emojis
+            else "Emojis may be used sparingly only when appropriate."
+        )
+
+        hashtag_rule = (
+            "Do NOT include hashtags."
+            if not profile.use_hashtags
+            else "Include relevant tasteful hashtags when natural."
+        )
+
+        length_map = {
+            "short": "Keep each ad short and punchy.",
+            "medium": "Balanced engaging ad length.",
+            "long": "Write longer persuasive ad copy with depth."
+        }
+        length_rule = length_map.get(profile.length_pref, "Balanced length ads.")
+
+        cta_map = {
+            "soft": "Use a soft friendly CTA.",
+            "balanced": "Use a confident persuasive CTA.",
+            "aggressive": "Use a strong direct CTA to drive conversion."
+        }
+        cta_rule = cta_map.get(profile.cta_style, "Use a persuasive CTA.")
+
+        tone_rule = (
+            f"Match this writing style if available: '{profile.writing_style}'. "
+            f"If blank, default to confident marketing tone."
+        )
+
+        creativity = profile.creativity_level or 5
+
+    # ---------------------------------
+    # SYSTEM PROMPT
+    # ---------------------------------
+    system = f"""
+You write HIGH CONVERTING FACEBOOK / INSTAGRAM / SOCIAL MEDIA ADS.
+You ONLY output ads. No tips. No explanations.
+
+You must ALWAYS output EXACTLY 3 ads.
+
+Each ad must have:
+AD X:
+Headline:
+Body:
+CTA:
+
+PERSONALITY RULES:
+- {emoji_rule}
+- {hashtag_rule}
+- {length_rule}
+- {tone_rule}
+- {cta_rule}
+- Creativity level (1–10): {creativity}
+
+General rules:
+- Compelling hook immediately
+- Emotional + logical persuasion
+- Clear benefits
+- Human, not robotic
+"""
+
     if not prompt:
         prompt = f"Create ads for {product} targeting {audience}."
-
-    # ---------- LOAD PROFILE ----------
-    profile = db.query(Profile).filter(Profile.user_id == user.id).first()
-    behavior_rules = build_ad_behavior(profile)
-
-    system = (
-        "You write FINAL, READY-TO-USE, HIGH-CONVERTING ADS.\n"
-        "No explanations. No tips. No commentary.\n\n"
-        f"{behavior_rules}\n"
-        "Output EXACTLY 3 ads:\n\n"
-        "AD 1:\nHeadline:\nPrimary text:\nCTA:\n\n"
-        "AD 2:\nHeadline:\nPrimary text:\nCTA:\n\n"
-        "AD 3:\nHeadline:\nPrimary text:\nCTA:"
-    )
 
     try:
         response = client.chat.completions.create(
@@ -129,6 +142,7 @@ def generate_ads(
         if not output:
             raise HTTPException(500, "OpenAI returned empty output")
 
+        # ---------- SAVE ----------
         db.add(SavedContent(
             user_id=user.id,
             content_type="ad",
