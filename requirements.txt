@@ -10,3 +10,4 @@ openai
 requests
 resend
 email-validator
+psycopg2-binary
