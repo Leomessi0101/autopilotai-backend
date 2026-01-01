@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.database.session import SessionLocal
-from app.database.models import SavedContent
+from app.database.models import SavedContent, Profile
 from app.utils.auth import get_current_user
 from app.utils.usage import get_user_limit, reset_if_new_month
 from openai import OpenAI
@@ -33,35 +33,96 @@ def platform_instructions(platform: str) -> str:
 
     if platform == "tiktok":
         return (
-            "Format for TikTok captions.\n"
+            "Format for TikTok captions:\n"
             "- Short punchy hooks\n"
-            "- Casual, bold tone\n"
+            "- Casual bold tone\n"
             "- Emojis allowed\n"
-            "- Max 2–4 lines per post\n"
+            "- 2–4 short lines only\n"
         )
     if platform == "twitter":
         return (
-            "Format for X (Twitter).\n"
+            "Format for X (Twitter):\n"
             "- Max 280 characters per post\n"
-            "- Sharp hooks\n"
-            "- No hashtags unless essential\n"
+            "- Strong hooks\n"
+            "- No unnecessary hashtags\n"
         )
     if platform == "linkedin":
         return (
-            "Format for LinkedIn.\n"
+            "Format for LinkedIn:\n"
             "- Professional tone\n"
-            "- Value-driven hooks\n"
-            "- Line breaks for readability\n"
-            "- No emojis or slang\n"
+            "- Value-driven\n"
+            "- Line breaks\n"
+            "- No emojis\n"
         )
 
     return (
-        "Format for Instagram.\n"
-        "- Strong hook in first line\n"
-        "- 2–4 short lines\n"
+        "Format for Instagram:\n"
+        "- Hook first line\n"
+        "- 2–4 lines max\n"
         "- Emojis allowed\n"
         "- 6–12 relevant hashtags\n"
     )
+
+
+def build_behavior_rules(profile: Profile | None):
+    """
+    Convert stored profile behavior into readable AI instructions.
+    Handles defaults safely if profile doesn't exist or fields are null.
+    """
+
+    if not profile:
+        return (
+            "AI Behavior Rules:\n"
+            "- Use a balanced tone\n"
+            "- Normal creativity\n"
+            "- Emojis allowed\n"
+            "- Hashtags allowed\n"
+            "- Medium length content\n"
+            "- Soft marketing CTA\n"
+        )
+
+    rules = "AI Behavior Rules:\n"
+
+    # Creativity
+    creativity = profile.creativity_level or 5
+    if creativity <= 3:
+        rules += "- Keep creativity low. Be factual and direct.\n"
+    elif creativity <= 7:
+        rules += "- Medium creativity. Natural but not crazy.\n"
+    else:
+        rules += "- Very creative, engaging and bold.\n"
+
+    # Emojis
+    if profile.use_emojis == False:
+        rules += "- DO NOT use emojis.\n"
+    else:
+        rules += "- Emojis allowed.\n"
+
+    # Hashtags
+    if profile.use_hashtags == False:
+        rules += "- DO NOT include hashtags.\n"
+    else:
+        rules += "- Hashtags allowed where appropriate.\n"
+
+    # Length
+    length = (profile.length_pref or "medium").lower()
+    if length == "short":
+        rules += "- Keep responses short and punchy.\n"
+    elif length == "long":
+        rules += "- Provide longer, more detailed content.\n"
+    else:
+        rules += "- Medium length responses.\n"
+
+    # CTA Style
+    cta = (profile.cta_style or "soft").lower()
+    if cta == "strong":
+        rules += "- Use strong persuasive CTA.\n"
+    elif cta == "none":
+        rules += "- No marketing CTA.\n"
+    else:
+        rules += "- Use soft CTA tone.\n"
+
+    return rules
 
 
 @router.post("/generate")
@@ -85,18 +146,23 @@ def generate_content(
 
     platform = (data.platform or "instagram").lower()
 
+    # ------------ LOAD USER PROFILE RULES ------------
+    profile = db.query(Profile).filter(Profile.user_id == user.id).first()
+    behavior_rules = build_behavior_rules(profile)
+
     system_prompt = (
         "You generate READY-TO-POST social media content.\n"
-        "You NEVER give advice, tips, explanations, or strategies.\n"
-        "You ONLY output finished posts.\n\n"
+        "Do NOT give explanations.\n"
+        "Do NOT talk about strategy.\n"
+        "Only output final posts.\n\n"
+        f"{behavior_rules}\n"
         "Output EXACTLY 5 posts.\n"
-        "Each post must be clearly separated.\n"
-        "No commentary. No explanations.\n\n"
+        "Separate each clearly.\n\n"
         f"{platform_instructions(platform)}"
     )
 
     try:
-        # ---------- TEXT ----------
+        # ---------- TEXT GENERATION ----------
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
@@ -109,7 +175,7 @@ def generate_content(
         if not output:
             raise HTTPException(500, "Empty AI response")
 
-        # Save text ALWAYS
+        # Save text always
         db.add(SavedContent(
             user_id=user.id,
             content_type="content",
@@ -122,7 +188,7 @@ def generate_content(
         db.commit()
         db.refresh(user)
 
-        # ---------- NO IMAGE ----------
+        # ---------- IF IMAGE TOGGLE OFF ----------
         if not data.generate_image:
             return {
                 "output": output,
@@ -130,7 +196,7 @@ def generate_content(
                 "error": None
             }
 
-        # ---------- FREE → BLOCK ----------
+        # ---------- IF USER IS FREE ----------
         if user.subscription_plan == "free":
             return {
                 "output": output,
@@ -138,40 +204,35 @@ def generate_content(
                 "error": "AI Image is only available for paid users. Upgrade to unlock images."
             }
 
-        # ---------- PAID → GENERATE IMAGE ----------
+        # ---------- PAID USER → GENERATE IMAGE ----------
         visual_prompt = f"""
-        Create a high-quality, visually engaging marketing image
-        that represents the following social media content.
-        Absolutely NO text in the image.
+        Create a high-quality, visually engaging marketing image.
+        No text in the image.
+        It should visually represent the following content:
 
-        CONTENT:
         {output[:900]}
         """
 
         image_response = client.images.generate(
             model="gpt-image-1",
             prompt=visual_prompt,
-            size="1024x1024"
+            size="1024x1024",
+            response_format="url"
         )
 
         image_url = None
 
-        # Prefer URL (most cases)
         try:
             image_url = image_response.data[0].url
         except:
-            image_url = None
-
-        # Fallback to base64
-        if not image_url:
             try:
-                b64 = image_response.data[0].b64_json
-                image_url = f"data:image/png;base64,{b64}"
+                base64_data = image_response.data[0].b64_json
+                image_url = f"data:image/png;base64,{base64_data}"
             except:
                 image_url = None
 
         if not image_url:
-            raise HTTPException(500, "Image generated but OpenAI returned no image data.")
+            raise HTTPException(500, "Image generated but OpenAI did not return an image URL.")
 
         return {
             "output": output,

@@ -51,6 +51,21 @@ class Profile(Base):
     signature = Column(String, nullable=True)
     writing_style = Column(String, nullable=True)
 
+    # --------------------------
+    # AI BEHAVIOR SETTINGS (NEW)
+    # --------------------------
+    use_emojis = Column(Boolean, default=True)
+    use_hashtags = Column(Boolean, default=True)
+
+    # short / medium / long
+    length_pref = Column(String, default="medium")
+
+    # 1–10 scale
+    creativity_level = Column(Integer, default=5)
+
+    # soft / strong / none
+    cta_style = Column(String, default="soft")
+
     user = relationship("User", back_populates="profile")
 
 
@@ -78,9 +93,9 @@ class SavedImage(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
-    text_content = Column(Text, nullable=True)  # text associated with image
-    image_url = Column(Text, nullable=False)    # OpenAI image URL
-    image_style = Column(String, nullable=True) # style user selected
+    text_content = Column(Text, nullable=True)
+    image_url = Column(Text, nullable=False)
+    image_style = Column(String, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
 
