@@ -96,7 +96,7 @@ def generate_content(
     )
 
     try:
-        # ---------- TEXT GENERATION ----------
+        # ---------- TEXT ----------
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
@@ -109,7 +109,7 @@ def generate_content(
         if not output:
             raise HTTPException(500, "Empty AI response")
 
-        # Save text always
+        # Save text ALWAYS
         db.add(SavedContent(
             user_id=user.id,
             content_type="content",
@@ -122,7 +122,7 @@ def generate_content(
         db.commit()
         db.refresh(user)
 
-        # ---------- IF IMAGE TOGGLE OFF ----------
+        # ---------- NO IMAGE ----------
         if not data.generate_image:
             return {
                 "output": output,
@@ -130,7 +130,7 @@ def generate_content(
                 "error": None
             }
 
-        # ---------- IF USER IS FREE ----------
+        # ---------- FREE → BLOCK ----------
         if user.subscription_plan == "free":
             return {
                 "output": output,
@@ -138,11 +138,11 @@ def generate_content(
                 "error": "AI Image is only available for paid users. Upgrade to unlock images."
             }
 
-        # ---------- PAID USER → GENERATE IMAGE ----------
+        # ---------- PAID → GENERATE IMAGE ----------
         visual_prompt = f"""
         Create a high-quality, visually engaging marketing image
         that represents the following social media content.
-        Do NOT include any text in the image.
+        Absolutely NO text in the image.
 
         CONTENT:
         {output[:900]}
@@ -151,28 +151,27 @@ def generate_content(
         image_response = client.images.generate(
             model="gpt-image-1",
             prompt=visual_prompt,
-            size="1024x1024",
-            response_format="url"
+            size="1024x1024"
         )
 
         image_url = None
 
-        # Try URL
+        # Prefer URL (most cases)
         try:
             image_url = image_response.data[0].url
         except:
             image_url = None
 
-        # Fallback base64
+        # Fallback to base64
         if not image_url:
             try:
-                base64_data = image_response.data[0].b64_json
-                image_url = f"data:image/png;base64,{base64_data}"
+                b64 = image_response.data[0].b64_json
+                image_url = f"data:image/png;base64,{b64}"
             except:
                 image_url = None
 
         if not image_url:
-            raise HTTPException(500, "Image generated but no image returned from OpenAI.")
+            raise HTTPException(500, "Image generated but OpenAI returned no image data.")
 
         return {
             "output": output,
