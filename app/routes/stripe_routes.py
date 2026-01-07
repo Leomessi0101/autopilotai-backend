@@ -72,6 +72,7 @@ def create_checkout_session(
             mode="subscription",
             payment_method_types=["card"],
             line_items=[{"price": PRICE_IDS[plan], "quantity": 1}],
+            allow_promotion_codes=True,  # ✅ PROMO CODES ENABLED
             success_url=f"{FRONTEND_URL}/dashboard?checkout=success",
             cancel_url=f"{FRONTEND_URL}/pricing?checkout=cancelled",
             customer_email=user.email,
