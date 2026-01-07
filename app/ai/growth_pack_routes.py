@@ -3,12 +3,12 @@ from pydantic import BaseModel
 from app.utils.auth import get_current_user
 from app.database.session import SessionLocal
 from app.utils.usage import get_user_limit, reset_if_new_month
-
-from app.ai.content_routes import generate_content_internal, ContentRequest
-from app.ai.email_routes import generate_email_internal, EmailRequest
-from app.ai.ads_routes import generate_ads_internal, AdRequest
+from app.database.models import SavedContent
+from openai import OpenAI
+import os
 
 router = APIRouter()
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
 class GrowthPackRequest(BaseModel):
@@ -23,65 +23,70 @@ def generate_growth_pack(
     db = SessionLocal()
 
     try:
-        # ---- Reset month if needed ----
         reset_if_new_month(user)
 
-        # ---- Check usage ONCE ----
         limit = get_user_limit(user.subscription_plan)
         used = user.used_generations or 0
 
         if limit is not None and used >= limit:
             raise HTTPException(
                 status_code=403,
-                detail="Monthly generation limit reached. Please upgrade your plan."
+                detail="Monthly generation limit reached. Please upgrade."
             )
 
-        if not data.prompt or not data.prompt.strip():
+        if not data.prompt.strip():
             raise HTTPException(status_code=400, detail="Prompt is required")
 
-        # ---- Build request objects (IMPORTANT) ----
-        content_req = ContentRequest(
+        system = (
+            "You are a senior growth marketer.\n"
+            "Generate THREE sections.\n"
+            "NO explanations.\n\n"
+            "FORMAT STRICTLY:\n\n"
+            "=== SOCIAL POSTS ===\n"
+            "5 high-quality social posts.\n\n"
+            "=== EMAIL ===\n"
+            "One persuasive business email.\n\n"
+            "=== ADS ===\n"
+            "3 ads with headline, primary text, CTA.\n"
+        )
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": data.prompt},
+            ]
+        )
+
+        output = response.choices[0].message.content.strip()
+        if not output:
+            raise HTTPException(500, "Empty AI response")
+
+        # Split sections
+        def extract(label):
+            if label not in output:
+                return ""
+            return output.split(label)[1].split("===")[0].strip()
+
+        social = extract("=== SOCIAL POSTS ===")
+        email = extract("=== EMAIL ===")
+        ads = extract("=== ADS ===")
+
+        # Save as ONE grouped item
+        db.add(SavedContent(
+            user_id=user.id,
+            content_type="growth_pack",
             prompt=data.prompt,
-            generate_image=False   # 🔒 prevent image logic & 500 error
-        )
+            result=output
+        ))
 
-        email_req = EmailRequest(
-            prompt=data.prompt
-        )
-
-        ads_req = AdRequest(
-            prompt=data.prompt
-        )
-
-        # ---- Generate WITHOUT charging ----
-        content = generate_content_internal(
-            data=content_req,
-            user=user,
-            db=db,
-            charge_usage=False
-        )
-
-        email = generate_email_internal(
-            data=email_req,
-            user=user,
-            db=db,
-            charge_usage=False
-        )
-
-        ads = generate_ads_internal(
-            data=ads_req,
-            user=user,
-            db=db,
-            charge_usage=False
-        )
-
-        # ---- Charge ONCE (atomic action) ----
+        # Charge ONCE
         user.used_generations = (user.used_generations or 0) + 1
         db.add(user)
         db.commit()
 
         return {
-            "content": content,
+            "content": social,
             "email": email,
             "ads": ads
         }
