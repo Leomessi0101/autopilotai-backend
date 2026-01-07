@@ -64,20 +64,24 @@ def platform_instructions(platform: str) -> str:
     )
 
 
-@router.post("/generate")
-def generate_content(
+# ======================================================
+# INTERNAL GENERATOR (REUSABLE, OPTIONAL USAGE CHARGE)
+# ======================================================
+def generate_content_internal(
     data: ContentRequest,
-    user=Depends(get_current_user),
-    db: Session = Depends(get_db)
+    user,
+    db: Session,
+    charge_usage: bool = True
 ):
     reset_if_new_month(user)
 
-    limit = get_user_limit(user.subscription_plan)
-    if limit is not None and user.used_generations >= limit:
-        raise HTTPException(
-            status_code=403,
-            detail="Monthly generation limit reached. Please upgrade your plan."
-        )
+    if charge_usage:
+        limit = get_user_limit(user.subscription_plan)
+        if limit is not None and user.used_generations >= limit:
+            raise HTTPException(
+                status_code=403,
+                detail="Monthly generation limit reached. Please upgrade your plan."
+            )
 
     # ---------------- PROFILE LOAD (SAFE) ----------------
     profile = db.query(Profile).filter(Profile.user_id == user.id).first()
@@ -129,90 +133,101 @@ def generate_content(
         f"{creativity_rule}"
     )
 
-    try:
-        # ---------- TEXT GENERATION ----------
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Create 5 posts about:\n\n{prompt}"}
-            ]
-        )
+    # ---------- TEXT GENERATION ----------
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Create 5 posts about:\n\n{prompt}"}
+        ]
+    )
 
-        output = response.choices[0].message.content.strip()
-        if not output:
-            raise HTTPException(500, "Empty AI response")
+    output = response.choices[0].message.content.strip()
+    if not output:
+        raise HTTPException(500, "Empty AI response")
 
-        # Save text always
-        db.add(SavedContent(
-            user_id=user.id,
-            content_type="content",
-            prompt=f"{prompt} ({platform})",
-            result=output
-        ))
+    db.add(SavedContent(
+        user_id=user.id,
+        content_type="content",
+        prompt=f"{prompt} ({platform})",
+        result=output
+    ))
 
+    if charge_usage:
         user.used_generations = (user.used_generations or 0) + 1
         db.add(user)
-        db.commit()
-        db.refresh(user)
 
-        # ---------- IF IMAGE TOGGLE OFF ----------
-        if not data.generate_image:
-            return {
-                "output": output,
-                "image": None,
-                "error": None
-            }
+    db.commit()
+    db.refresh(user)
 
-        # ---------- IF USER IS FREE ----------
-        if user.subscription_plan == "free":
-            return {
-                "output": output,
-                "image": None,
-                "error": "AI Image is only available for paid users. Upgrade to unlock images."
-            }
+    return output
 
-        # ---------- PAID USER IMAGE ----------
-        visual_prompt = f"""
-        Create a high-quality, visually engaging marketing image.
-        NO TEXT IN THE IMAGE.
-        Represent the theme creatively.
 
-        CONTENT THE IMAGE SHOULD REPRESENT:
-        {output[:900]}
-        """
+# ======================================================
+# PUBLIC ROUTE (UNCHANGED BEHAVIOR)
+# ======================================================
+@router.post("/generate")
+def generate_content(
+    data: ContentRequest,
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    output = generate_content_internal(
+        data=data,
+        user=user,
+        db=db,
+        charge_usage=True
+    )
 
-        image_response = client.images.generate(
-            model="gpt-image-1",
-            prompt=visual_prompt,
-            size="1024x1024",
-            response_format="url"
-        )
-
-        image_url = None
-
-        try:
-            image_url = image_response.data[0].url
-        except:
-            image_url = None
-
-        if not image_url:
-            try:
-                base64_data = image_response.data[0].b64_json
-                image_url = f"data:image/png;base64,{base64_data}"
-            except:
-                image_url = None
-
-        if not image_url:
-            raise HTTPException(500, "Image generated but no image returned from OpenAI.")
-
+    # ---------- IF IMAGE TOGGLE OFF ----------
+    if not data.generate_image:
         return {
             "output": output,
-            "image": image_url,
+            "image": None,
             "error": None
         }
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(500, f"OpenAI error: {str(e)}")
+    # ---------- IF USER IS FREE ----------
+    if user.subscription_plan == "free":
+        return {
+            "output": output,
+            "image": None,
+            "error": "AI Image is only available for paid users. Upgrade to unlock images."
+        }
+
+    # ---------- PAID USER IMAGE ----------
+    visual_prompt = f"""
+    Create a high-quality, visually engaging marketing image.
+    NO TEXT IN THE IMAGE.
+    Represent the theme creatively.
+
+    CONTENT THE IMAGE SHOULD REPRESENT:
+    {output[:900]}
+    """
+
+    image_response = client.images.generate(
+        model="gpt-image-1",
+        prompt=visual_prompt,
+        size="1024x1024",
+        response_format="url"
+    )
+
+    image_url = None
+
+    try:
+        image_url = image_response.data[0].url
+    except:
+        try:
+            base64_data = image_response.data[0].b64_json
+            image_url = f"data:image/png;base64,{base64_data}"
+        except:
+            image_url = None
+
+    if not image_url:
+        raise HTTPException(500, "Image generated but no image returned from OpenAI.")
+
+    return {
+        "output": output,
+        "image": image_url,
+        "error": None
+    }

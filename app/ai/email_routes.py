@@ -27,20 +27,24 @@ def get_db():
         db.close()
 
 
-@router.post("/generate")
-def generate_email(
+# ======================================================
+# INTERNAL GENERATOR (REUSABLE, OPTIONAL USAGE CHARGE)
+# ======================================================
+def generate_email_internal(
     data: EmailRequest,
-    user=Depends(get_current_user),
-    db: Session = Depends(get_db)
+    user,
+    db: Session,
+    charge_usage: bool = True
 ):
     reset_if_new_month(user)
 
-    limit = get_user_limit(user.subscription_plan)
-    if limit is not None and user.used_generations >= limit:
-        raise HTTPException(
-            status_code=403,
-            detail="Monthly generation limit reached. Please upgrade your plan."
-        )
+    if charge_usage:
+        limit = get_user_limit(user.subscription_plan)
+        if limit is not None and user.used_generations >= limit:
+            raise HTTPException(
+                status_code=403,
+                detail="Monthly generation limit reached. Please upgrade your plan."
+            )
 
     # -------- SAFE PROFILE LOAD --------
     profile = db.query(Profile).filter(Profile.user_id == user.id).first()
@@ -120,13 +124,13 @@ def generate_email(
         "No hashtags.\n"
     )
 
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user",
-                 "content": f"""
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": system},
+            {
+                "role": "user",
+                "content": f"""
 Write this email.
 
 SUBJECT IDEA:
@@ -140,30 +144,47 @@ COMPANY (if relevant):
 
 If appropriate, include this signature:
 {signature}
-"""}
-            ]
-        )
+"""
+            }
+        ]
+    )
 
-        output = (response.choices[0].message.content or "").strip()
-        if not output:
-            raise HTTPException(500, "OpenAI returned empty output")
+    output = (response.choices[0].message.content or "").strip()
+    if not output:
+        raise HTTPException(500, "OpenAI returned empty output")
 
-        # -------- SAVE TO DB --------
-        db.add(SavedContent(
-            user_id=user.id,
-            content_type="email",
-            prompt=subject,
-            result=output
-        ))
+    # -------- SAVE TO DB --------
+    db.add(SavedContent(
+        user_id=user.id,
+        content_type="email",
+        prompt=subject,
+        result=output
+    ))
 
+    if charge_usage:
         user.used_generations = (user.used_generations or 0) + 1
         db.add(user)
-        db.commit()
-        db.refresh(user)
 
-        return {"output": output}
+    db.commit()
+    db.refresh(user)
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(500, f"OpenAI error: {str(e)}")
+    return output
+
+
+# ======================================================
+# PUBLIC ROUTE (UNCHANGED BEHAVIOR)
+# ======================================================
+@router.post("/generate")
+def generate_email(
+    data: EmailRequest,
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    output = generate_email_internal(
+        data=data,
+        user=user,
+        db=db,
+        charge_usage=True
+    )
+
+    return {"output": output}
