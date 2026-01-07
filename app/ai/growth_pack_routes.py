@@ -22,54 +22,69 @@ def generate_growth_pack(
 ):
     db = SessionLocal()
 
-    # ---- Reset month if needed ----
-    reset_if_new_month(user)
+    try:
+        # ---- Reset month if needed ----
+        reset_if_new_month(user)
 
-    # ---- Check usage ONCE ----
-    limit = get_user_limit(user.subscription_plan)
-    used = user.used_generations or 0
+        # ---- Check usage ONCE ----
+        limit = get_user_limit(user.subscription_plan)
+        used = user.used_generations or 0
 
-    if limit is not None and used >= limit:
-        raise HTTPException(status_code=403, detail="Usage limit reached")
+        if limit is not None and used >= limit:
+            raise HTTPException(
+                status_code=403,
+                detail="Monthly generation limit reached. Please upgrade your plan."
+            )
 
-    if not data.prompt.strip():
-        raise HTTPException(status_code=400, detail="Prompt is required")
+        if not data.prompt or not data.prompt.strip():
+            raise HTTPException(status_code=400, detail="Prompt is required")
 
-    # ---- Build request objects ----
-    content_req = ContentRequest(prompt=data.prompt)
-    email_req = EmailRequest(prompt=data.prompt)
-    ads_req = AdRequest(prompt=data.prompt)
+        # ---- Build request objects (IMPORTANT) ----
+        content_req = ContentRequest(
+            prompt=data.prompt,
+            generate_image=False   # 🔒 prevent image logic & 500 error
+        )
 
-    # ---- Generate WITHOUT charging ----
-    content = generate_content_internal(
-        data=content_req,
-        user=user,
-        db=db,
-        charge_usage=False
-    )
+        email_req = EmailRequest(
+            prompt=data.prompt
+        )
 
-    email = generate_email_internal(
-        data=email_req,
-        user=user,
-        db=db,
-        charge_usage=False
-    )
+        ads_req = AdRequest(
+            prompt=data.prompt
+        )
 
-    ads = generate_ads_internal(
-        data=ads_req,
-        user=user,
-        db=db,
-        charge_usage=False
-    )
+        # ---- Generate WITHOUT charging ----
+        content = generate_content_internal(
+            data=content_req,
+            user=user,
+            db=db,
+            charge_usage=False
+        )
 
-    # ---- Charge ONCE ----
-    user.used_generations = (user.used_generations or 0) + 1
-    db.add(user)
-    db.commit()
-    db.close()
+        email = generate_email_internal(
+            data=email_req,
+            user=user,
+            db=db,
+            charge_usage=False
+        )
 
-    return {
-        "content": content,
-        "email": email,
-        "ads": ads
-    }
+        ads = generate_ads_internal(
+            data=ads_req,
+            user=user,
+            db=db,
+            charge_usage=False
+        )
+
+        # ---- Charge ONCE (atomic action) ----
+        user.used_generations = (user.used_generations or 0) + 1
+        db.add(user)
+        db.commit()
+
+        return {
+            "content": content,
+            "email": email,
+            "ads": ads
+        }
+
+    finally:
+        db.close()
