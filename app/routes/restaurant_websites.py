@@ -108,3 +108,17 @@ def generate_restaurant_website_api(
         "username": website.username,
         "url": f"/r/{website.username}"
     }
+
+
+@router.get("/{username}")
+def get_restaurant_website(username: str, db: Session = Depends(get_db)):
+    website = db.query(Website).filter(Website.username == username).first()
+
+    if not website:
+        raise HTTPException(status_code=404, detail="Website not found")
+
+    return {
+        "username": website.username,
+        "template": website.template,
+        "content_json": website.content_json,
+    }
