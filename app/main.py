@@ -43,6 +43,7 @@ origins = [
     "https://autopilotai.dev",
     "https://www.autopilotai.dev",
     "https://autopilotai-frontend.vercel.app",
+    "https://autopilotai-api.onrender.com",  # ✅ IMPORTANT ADDITION
 ]
 
 app.add_middleware(
