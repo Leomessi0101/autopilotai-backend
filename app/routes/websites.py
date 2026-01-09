@@ -45,3 +45,20 @@ def get_restaurant_website(username: str, db: Session = Depends(get_db)):
         "template": website.template,
         "content_json": website.content_json,
     }
+
+
+@router.get("/restaurant-create-test")
+def create_test_restaurant(db: Session = Depends(get_db)):
+    website = RestaurantWebsite(
+        user_id=1,
+        username="testrestaurant",
+        content_json='{"hero":{"headline":"Test Restaurant","subheadline":"Best food in town"}}'
+    )
+    db.add(website)
+    db.commit()
+    db.refresh(website)
+
+    return {
+        "status": "created",
+        "username": website.username
+    }
