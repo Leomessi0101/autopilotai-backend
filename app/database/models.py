@@ -1,7 +1,9 @@
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Text, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
-from app.database.base import Base
+from sqlalchemy.sql import func
+from app.database.database import Base
+
 
 # --------------------------
 # USER MODEL
@@ -28,7 +30,10 @@ class User(Base):
     # Relationships
     profile = relationship("Profile", back_populates="user", uselist=False)
     saved_content = relationship("SavedContent", back_populates="user")
-    saved_images = relationship("SavedImage", back_populates="user")  # <-- NEW
+    saved_images = relationship("SavedImage", back_populates="user")
+    restaurant_website = relationship(
+        "RestaurantWebsite", back_populates="user", uselist=False
+    )
 
 
 # --------------------------
@@ -52,18 +57,13 @@ class Profile(Base):
     writing_style = Column(String, nullable=True)
 
     # --------------------------
-    # AI BEHAVIOR SETTINGS (NEW)
+    # AI BEHAVIOR SETTINGS
     # --------------------------
     use_emojis = Column(Boolean, default=True)
     use_hashtags = Column(Boolean, default=True)
 
-    # short / medium / long
     length_pref = Column(String, default="medium")
-
-    # 1–10 scale
     creativity_level = Column(Integer, default=5)
-
-    # soft / strong / none
     cta_style = Column(String, default="soft")
 
     user = relationship("User", back_populates="profile")
@@ -85,7 +85,7 @@ class SavedContent(Base):
 
 
 # --------------------------
-# SAVED IMAGES  (NEW)
+# SAVED IMAGES
 # --------------------------
 class SavedImage(Base):
     __tablename__ = "saved_images"
@@ -113,7 +113,9 @@ class DashboardSettings(Base):
 
     stocks_json = Column(Text, default="[]")
     cryptos_json = Column(Text, default='["BTC","ETH","SOL"]')
-    currency_pairs_json = Column(Text, default='["USD:THB","EUR:THB","NOK:THB","BTC:USD"]')
+    currency_pairs_json = Column(
+        Text, default='["USD:THB","EUR:THB","NOK:THB","BTC:USD"]'
+    )
     city = Column(String, nullable=True)
 
     widgets_order_json = Column(Text, default="[]")
@@ -139,3 +141,23 @@ class Task(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", backref="tasks")
+
+
+# --------------------------
+# RESTAURANT WEBSITE (NEW)
+# --------------------------
+class RestaurantWebsite(Base):
+    __tablename__ = "restaurant_websites"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
+    username = Column(String(50), unique=True, index=True, nullable=False)
+
+    template = Column(String(50), default="restaurant", nullable=False)
+
+    content_json = Column(Text, nullable=False)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User", back_populates="restaurant_website")
