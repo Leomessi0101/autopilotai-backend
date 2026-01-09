@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.utils.auth import get_current_user
 from app.database.session import SessionLocal
+from app.database.models import Website
 from app.ai.restaurant_site_generator import generate_restaurant_website
 
 router = APIRouter(prefix="/api/restaurants", tags=["Restaurant Websites"])
@@ -33,7 +34,7 @@ class RestaurantWebsiteRequest(BaseModel):
 
 
 # -------------------------
-# GENERATE WEBSITE (PAID USERS ONLY)
+# GENERATE + SAVE WEBSITE
 # -------------------------
 @router.post("/generate")
 def generate_restaurant_website_api(
@@ -42,17 +43,28 @@ def generate_restaurant_website_api(
     db: Session = Depends(get_db),
 ):
     # 🔒 REQUIRE PAID PLAN
-    if user.subscription_plan == "free" and user.email != "321@123.com":
+    if user.subscription_plan == "free":
         raise HTTPException(
             status_code=403,
             detail="Only paid users can create a website."
         )
 
-    # 🔒 BASIC USERNAME VALIDATION
+    # 🔒 USERNAME VALIDATION
     if not data.username.isalnum():
         raise HTTPException(
             status_code=400,
             detail="Username must be alphanumeric (no spaces or symbols)."
+        )
+
+    # 🔒 PREVENT OVERWRITE
+    existing = db.query(Website).filter(
+        Website.username == data.username
+    ).first()
+
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail="This website username is already taken."
         )
 
     # 🧠 AI GENERATION
@@ -64,8 +76,20 @@ def generate_restaurant_website_api(
         "email": data.email,
     })
 
+    # 💾 SAVE TO DB
+    website = Website(
+        username=data.username,
+        template="restaurant",
+        content_json=site_json,
+        user_id=user.id
+    )
+
+    db.add(website)
+    db.commit()
+    db.refresh(website)
+
     return {
-        "username": data.username,
-        "template": "restaurant",
-        "content_json": site_json
+        "success": True,
+        "username": website.username,
+        "url": f"/r/{website.username}"
     }
