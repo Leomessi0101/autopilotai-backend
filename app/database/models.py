@@ -16,24 +16,20 @@ class User(Base):
     email = Column(String, unique=True, nullable=False)
     password = Column(String, nullable=False)
 
-    # Subscription fields
     subscription_plan = Column(String, default="basic")
     monthly_limit = Column(Integer, nullable=True, default=50)
     used_generations = Column(Integer, default=0)
 
     last_reset = Column(DateTime, default=datetime.utcnow)
 
-    # 🔐 PASSWORD RESET FIELDS
     reset_token = Column(String, nullable=True)
     reset_token_expires = Column(DateTime, nullable=True)
 
-    # Relationships
     profile = relationship("Profile", back_populates="user", uselist=False)
     saved_content = relationship("SavedContent", back_populates="user")
     saved_images = relationship("SavedImage", back_populates="user")
-    restaurant_website = relationship(
-        "RestaurantWebsite", back_populates="user", uselist=False
-    )
+
+    websites = relationship("Website", back_populates="user")
 
 
 # --------------------------
@@ -56,12 +52,8 @@ class Profile(Base):
     signature = Column(String, nullable=True)
     writing_style = Column(String, nullable=True)
 
-    # --------------------------
-    # AI BEHAVIOR SETTINGS
-    # --------------------------
     use_emojis = Column(Boolean, default=True)
     use_hashtags = Column(Boolean, default=True)
-
     length_pref = Column(String, default="medium")
     creativity_level = Column(Integer, default=5)
     cta_style = Column(String, default="soft")
@@ -113,9 +105,7 @@ class DashboardSettings(Base):
 
     stocks_json = Column(Text, default="[]")
     cryptos_json = Column(Text, default='["BTC","ETH","SOL"]')
-    currency_pairs_json = Column(
-        Text, default='["USD:THB","EUR:THB","NOK:THB","BTC:USD"]'
-    )
+    currency_pairs_json = Column(Text, default='["USD:THB","EUR:THB","NOK:THB","BTC:USD"]')
     city = Column(String, nullable=True)
 
     widgets_order_json = Column(Text, default="[]")
@@ -144,20 +134,18 @@ class Task(Base):
 
 
 # --------------------------
-# RESTAURANT WEBSITE (NEW)
+# WEBSITES (NEW)
 # --------------------------
-class RestaurantWebsite(Base):
-    __tablename__ = "restaurant_websites"
+class Website(Base):
+    __tablename__ = "websites"
 
     id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
-    user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
-    username = Column(String(50), unique=True, index=True, nullable=False)
-
-    template = Column(String(50), default="restaurant", nullable=False)
-
+    username = Column(String, unique=True, index=True, nullable=False)
+    template = Column(String, nullable=False)
     content_json = Column(Text, nullable=False)
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime, server_default=func.now())
 
-    user = relationship("User", back_populates="restaurant_website")
+    user = relationship("User", back_populates="websites")
