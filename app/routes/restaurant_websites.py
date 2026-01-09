@@ -1,3 +1,5 @@
+import json
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -42,8 +44,8 @@ def generate_restaurant_website_api(
     user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    # 🔒 REQUIRE PAID PLAN
-    if user.subscription_plan == "free" and user.email != "321@123.com":
+    # 🔒 REQUIRE PAID PLAN (TEMP DEV BYPASS OPTIONAL)
+    if user.subscription_plan == "free":
         raise HTTPException(
             status_code=403,
             detail="Only paid users can create a website."
@@ -68,25 +70,38 @@ def generate_restaurant_website_api(
         )
 
     # 🧠 AI GENERATION
-    site_json = generate_restaurant_website({
-        "name": data.name,
-        "cuisine": data.cuisine,
-        "city": data.city,
-        "phone": data.phone,
-        "email": data.email,
-    })
+    try:
+        site_json = generate_restaurant_website({
+            "name": data.name,
+            "cuisine": data.cuisine,
+            "city": data.city,
+            "phone": data.phone,
+            "email": data.email,
+        })
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"AI generation failed: {str(e)}"
+        )
 
-    # 💾 SAVE TO DB
-    website = Website(
-        username=data.username,
-        template="restaurant",
-        content_json=site_json,
-        user_id=user.id
-    )
+    # 💾 SAVE TO DB (JSON → STRING)
+    try:
+        website = Website(
+            username=data.username,
+            template="restaurant",
+            content_json=json.dumps(site_json),
+            user_id=user.id
+        )
 
-    db.add(website)
-    db.commit()
-    db.refresh(website)
+        db.add(website)
+        db.commit()
+        db.refresh(website)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Database save failed: {str(e)}"
+        )
 
     return {
         "success": True,
