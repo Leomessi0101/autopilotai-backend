@@ -11,3 +11,4 @@ requests
 resend
 email-validator
 psycopg2-binary
+boto3
