@@ -3,6 +3,7 @@ import json
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from fastapi import Body
 
 from app.utils.auth import get_current_user
 from app.database.session import SessionLocal
@@ -123,3 +124,30 @@ def get_restaurant_website(username: str, db: Session = Depends(get_db)):
         "content_json": website.content_json,
         "user_id": website.user_id,   # ✅ ADD THIS LINE
     }
+
+@router.post("/{username}/menu")
+def save_menu(
+    username: str,
+    payload: dict = Body(...),
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    website = db.query(Website).filter(Website.username == username).first()
+
+    if not website:
+        raise HTTPException(status_code=404, detail="Website not found")
+
+    # 🔒 Ownership check
+    if website.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    try:
+        content = json.loads(website.content_json)
+        content["menu"] = payload.get("menu", [])
+        website.content_json = json.dumps(content)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return {"success": True}
