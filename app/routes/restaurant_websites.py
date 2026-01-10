@@ -121,4 +121,5 @@ def get_restaurant_website(username: str, db: Session = Depends(get_db)):
         "username": website.username,
         "template": website.template,
         "content_json": website.content_json,
+        "user_id": website.user_id,   # ✅ ADD THIS LINE
     }
