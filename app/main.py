@@ -27,6 +27,7 @@ from app.ai import image_routes
 from app.ai.growth_pack_routes import router as growth_pack_router
 from app.routes.restaurant_websites import router as restaurant_websites_router
 from app.routes import websites_routes
+from app.routes import dashboard_websites_routes
 
 import sys
 print(">>> Python executable:", sys.executable)
@@ -68,6 +69,7 @@ app.include_router(image_routes.router, prefix="/api")
 app.include_router(growth_pack_router, prefix="/api")
 app.include_router(restaurant_websites_router)
 app.include_router(websites_routes.router)
+app.include_router(dashboard_websites_routes.router)
 
 # AI Routes
 app.include_router(content_router, prefix="/api/content")
