@@ -4,6 +4,8 @@ from pydantic import BaseModel
 from app.utils.auth import get_current_user
 from app.database.session import SessionLocal
 from app.database.models import User, DashboardSettings, Task
+from app.database.models import Website
+import re
 
 router = APIRouter()
 
@@ -28,6 +30,12 @@ def _require_subscribed(user: User):
     if (user.subscription_plan or "free").lower() == "free":
         raise HTTPException(403, "AI Suggestions are available for subscribed users only.")
 
+def _validate_username(username: str):
+    if not re.match(r"^[a-z0-9\-]{3,30}$", username):
+        raise HTTPException(
+            status_code=400,
+            detail="Username must be 3–30 characters, lowercase letters, numbers or hyphens only",
+        )
 
 # -------------------------
 # Settings schemas
@@ -39,6 +47,9 @@ class SettingsUpdate(BaseModel):
     city: str | None = None
     widgets_order: list[str] | None = None
     widgets_collapsed: dict | None = None
+
+class CreateWebsiteRequest(BaseModel):
+    username: str
 
 
 @router.get("/dashboard/settings")
@@ -57,6 +68,28 @@ def get_settings(user: User = Depends(get_current_user)):
     finally:
         db.close()
 
+@router.get("/dashboard/websites/me")
+def get_my_website(user: User = Depends(get_current_user)):
+    db = SessionLocal()
+    try:
+        site = (
+            db.query(Website)
+            .filter(Website.user_id == user.id)
+            .first()
+        )
+
+        if not site:
+            return {
+                "exists": False
+            }
+
+        return {
+            "exists": True,
+            "username": site.username,
+            "template": site.template,
+        }
+    finally:
+        db.close()
 
 @router.post("/dashboard/settings")
 def update_settings(payload: SettingsUpdate, user: User = Depends(get_current_user)):
@@ -82,6 +115,105 @@ def update_settings(payload: SettingsUpdate, user: User = Depends(get_current_us
     finally:
         db.close()
 
+
+@router.post("/dashboard/websites/create")
+def create_website(
+    payload: CreateWebsiteRequest,
+    user: User = Depends(get_current_user),
+):
+    # --------------------------------------------------
+    # 1) PAID USERS ONLY
+    # --------------------------------------------------
+    if (user.subscription_plan or "free") == "free":
+        raise HTTPException(
+            status_code=403,
+            detail="Website builder is available for paid plans only",
+        )
+
+    db = SessionLocal()
+    try:
+        # --------------------------------------------------
+        # 2) MAX 1 WEBSITE PER USER
+        # --------------------------------------------------
+        existing_count = (
+            db.query(Website)
+            .filter(Website.user_id == user.id)
+            .count()
+        )
+
+        if existing_count >= 1:
+            raise HTTPException(
+                status_code=403,
+                detail="Your plan allows only one website",
+            )
+
+        username = payload.username.strip().lower()
+        _validate_username(username)
+
+        # --------------------------------------------------
+        # 3) UNIQUE USERNAME
+        # --------------------------------------------------
+        existing = db.query(Website).filter(Website.username == username).first()
+        if existing:
+            raise HTTPException(
+                status_code=400,
+                detail="Username already taken",
+            )
+
+        # --------------------------------------------------
+        # 4) INITIAL BUSINESS TEMPLATE CONTENT
+        # (clean, explicit, future-proof)
+        # --------------------------------------------------
+        initial_content = {
+            "template": "business",
+            "template_version": 1,
+            "theme": "light",
+            "hero": {
+                "headline": "Your Business Name",
+                "subheadline": "Short description of what you do",
+                "image": None,
+            },
+            "about": {
+                "title": "About Us",
+                "text": "Write a short introduction about your business here.",
+            },
+            "services": {
+                "title": "Our Services",
+                "items": [
+                    {
+                        "title": "Service One",
+                        "description": "Describe your service here.",
+                    }
+                ],
+            },
+            "contact": {
+                "phone": "",
+                "email": "",
+            },
+        }
+
+        # --------------------------------------------------
+        # 5) CREATE WEBSITE ROW
+        # --------------------------------------------------
+        site = Website(
+            user_id=user.id,
+            username=username,
+            template="business",
+            content_json=json.dumps(initial_content),
+        )
+
+        db.add(site)
+        db.commit()
+        db.refresh(site)
+
+        return {
+            "ok": True,
+            "username": username,
+            "redirect": f"/r/{username}?edit=1",
+        }
+
+    finally:
+        db.close()
 
 # -------------------------
 # Tasks
