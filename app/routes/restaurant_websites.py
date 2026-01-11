@@ -2,12 +2,9 @@ import json
 import os
 import uuid
 import boto3
-from fastapi import UploadFile, File
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Body
 from sqlalchemy.orm import Session
-from fastapi import Body
 
 from app.utils.auth import get_current_user
 from app.database.session import SessionLocal
@@ -47,6 +44,9 @@ def get_db():
 # -------------------------
 # REQUEST MODEL
 # -------------------------
+from pydantic import BaseModel
+
+
 class RestaurantWebsiteRequest(BaseModel):
     username: str
     name: str
@@ -150,7 +150,7 @@ def get_restaurant_website(username: str, db: Session = Depends(get_db)):
 
 
 # -------------------------
-# SAVE MENU (OWNER ONLY)
+# SAVE WEBSITE CONTENT (OWNER ONLY)
 # -------------------------
 @router.post("/{username}/menu")
 def save_menu(
@@ -170,15 +170,40 @@ def save_menu(
     try:
         content = json.loads(website.content_json)
 
-        # ✅ ALWAYS save menu (existing behavior)
+        # -------------------------
+        # SAFE MERGE STRATEGY
+        # -------------------------
+
+        # ✅ Always save menu
         if "menu" in payload:
             content["menu"] = payload["menu"]
 
-        # ✅ NEW: persist hero data (banner image, etc.)
-        if "hero" in payload:
+        # ✅ Merge hero (headline, subheadline, image)
+        if "hero" in payload and isinstance(payload["hero"], dict):
             content["hero"] = {
                 **content.get("hero", {}),
                 **payload["hero"],
+            }
+
+        # ✅ NEW: merge contact info
+        if "contact" in payload and isinstance(payload["contact"], dict):
+            content["contact"] = {
+                **content.get("contact", {}),
+                **payload["contact"],
+            }
+
+        # ✅ NEW: merge location info
+        if "location" in payload and isinstance(payload["location"], dict):
+            content["location"] = {
+                **content.get("location", {}),
+                **payload["location"],
+            }
+
+        # ✅ NEW: merge opening hours
+        if "hours" in payload and isinstance(payload["hours"], dict):
+            content["hours"] = {
+                **content.get("hours", {}),
+                **payload["hours"],
             }
 
         website.content_json = json.dumps(content)
