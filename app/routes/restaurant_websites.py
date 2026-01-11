@@ -169,9 +169,21 @@ def save_menu(
 
     try:
         content = json.loads(website.content_json)
-        content["menu"] = payload.get("menu", [])
+
+        # ✅ ALWAYS save menu (existing behavior)
+        if "menu" in payload:
+            content["menu"] = payload["menu"]
+
+        # ✅ NEW: persist hero data (banner image, etc.)
+        if "hero" in payload:
+            content["hero"] = {
+                **content.get("hero", {}),
+                **payload["hero"],
+            }
+
         website.content_json = json.dumps(content)
         db.commit()
+
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
