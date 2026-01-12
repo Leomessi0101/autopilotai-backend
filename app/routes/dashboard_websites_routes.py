@@ -2,10 +2,18 @@ from fastapi import APIRouter, HTTPException, Depends, Body
 from sqlalchemy.orm import Session
 import json
 import re
+import os
 
 from app.database.session import SessionLocal
 from app.database.models import Website, User
 from app.utils.auth import get_current_user
+
+# OPTIONAL: OpenAI (safe to import even if key is missing)
+try:
+    from openai import OpenAI
+    openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+except Exception:
+    openai_client = None
 
 router = APIRouter(prefix="/api/dashboard/websites")
 
@@ -19,6 +27,99 @@ def _validate_username(username: str):
             status_code=400,
             detail="Username must be 3–30 chars, lowercase letters, numbers or hyphens only",
         )
+
+
+def generate_ai_content_fallback(template: str, username: str, ai_input: dict):
+    """
+    Deterministic AI-style content (no OpenAI).
+    Used as fallback and default behavior.
+    """
+
+    name = ai_input.get("business_name") or username.replace("-", " ").title()
+    description = ai_input.get("description", "").strip()
+    goal = ai_input.get("goal", "").strip()
+    location = ai_input.get("location", "").strip()
+
+    if template == "restaurant":
+        return {
+            "template": "restaurant",
+            "template_version": 1,
+            "hero": {
+                "headline": name,
+                "subheadline": description or "Great food, great atmosphere.",
+                "image": None,
+            },
+            "menu": [],
+            "contact": {"phone": "", "email": ""},
+            "location": {"address": "", "city": location},
+            "hours": {"mon_fri": "11:00 – 22:00", "sat_sun": "12:00 – 23:00"},
+        }
+
+    # business
+    return {
+        "template": "business",
+        "template_version": 1,
+        "theme": "light",
+        "hero": {
+            "headline": name,
+            "subheadline": description or "We help clients achieve better results.",
+            "image": None,
+        },
+        "about": {
+            "title": f"About {name}",
+            "text": description or "A short introduction to your business.",
+        },
+        "services": {
+            "title": "Our Services",
+            "items": [
+                {
+                    "title": goal or "Primary Service",
+                    "description": "Describe what you offer and how it helps your customers.",
+                }
+            ],
+        },
+        "contact": {"phone": "", "email": ""},
+    }
+
+
+def generate_ai_content_openai(template: str, username: str, ai_input: dict):
+    """
+    Real OpenAI generation.
+    If OpenAI fails for any reason, caller MUST fallback.
+    """
+
+    if not openai_client:
+        raise RuntimeError("OpenAI not configured")
+
+    system_prompt = (
+        "You generate clean, professional website content. "
+        "Return valid JSON only. No markdown. No explanations."
+    )
+
+    user_prompt = {
+        "template": template,
+        "username": username,
+        "business_name": ai_input.get("business_name"),
+        "description": ai_input.get("description"),
+        "goal": ai_input.get("goal"),
+        "location": ai_input.get("location"),
+    }
+
+    response = openai_client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {
+                "role": "user",
+                "content": f"Generate initial website content JSON for this input:\n{json.dumps(user_prompt)}",
+            },
+        ],
+        temperature=0.7,
+        max_tokens=700,
+    )
+
+    content = response.choices[0].message.content
+    return json.loads(content)
 
 
 # =========================
@@ -75,6 +176,7 @@ def create_website(
 
     username = payload.get("username", "").strip().lower()
     template = payload.get("template", "").strip()
+    ai_input = payload.get("ai_input") or {}
 
     if not username or not template:
         raise HTTPException(status_code=400, detail="Missing username or template")
@@ -91,47 +193,20 @@ def create_website(
         raise HTTPException(status_code=400, detail="Username already taken")
 
     # -------------------------
-    # Initial content per template
+    # Generate initial content
     # -------------------------
-    if template == "restaurant":
-        content = {
-            "template": "restaurant",
-            "template_version": 1,
-            "hero": {
-                "headline": username,
-                "subheadline": "",
-                "image": None,
-            },
-            "menu": [],
-            "contact": {"phone": "", "email": ""},
-            "location": {"address": "", "city": ""},
-            "hours": {"mon_fri": "11:00 – 22:00", "sat_sun": "12:00 – 23:00"},
-        }
-    else:  # business
-        content = {
-            "template": "business",
-            "template_version": 1,
-            "theme": "light",
-            "hero": {
-                "headline": "Your Business Name",
-                "subheadline": "Short description of what you do",
-                "image": None,
-            },
-            "about": {
-                "title": "About Us",
-                "text": "Write a short introduction about your business.",
-            },
-            "services": {
-                "title": "Our Services",
-                "items": [
-                    {
-                        "title": "Service One",
-                        "description": "Describe your service.",
-                    }
-                ],
-            },
-            "contact": {"phone": "", "email": ""},
-        }
+    content = None
+
+    if ai_input:
+        try:
+            # Try real OpenAI first
+            content = generate_ai_content_openai(template, username, ai_input)
+        except Exception:
+            # Always fallback safely
+            content = generate_ai_content_fallback(template, username, ai_input)
+    else:
+        # Backward compatibility: old behavior
+        content = generate_ai_content_fallback(template, username, {})
 
     # -------------------------
     # Create website
