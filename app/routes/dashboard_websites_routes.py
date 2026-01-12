@@ -4,18 +4,21 @@ import json
 import re
 import os
 
-from openai import OpenAI
-
 from app.database.session import SessionLocal
 from app.database.models import Website, User
 from app.utils.auth import get_current_user
 
+# =========================
+# OPTIONAL: OpenAI
+# =========================
+try:
+    from openai import OpenAI
+    _openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+except Exception:
+    _openai_client = None
+
 router = APIRouter(prefix="/api/dashboard/websites")
 
-# =========================
-# OPENAI CLIENT
-# =========================
-openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # =========================
 # HELPERS
@@ -28,142 +31,66 @@ def _validate_username(username: str):
         )
 
 
-def generate_ai_content_openai(template: str, username: str, ai_input: dict):
+def _ai_generate_website_text(template: str, ai_input: dict):
     """
-    Generate initial website content using OpenAI.
-    Falls back safely if anything goes wrong.
+    Uses OpenAI to generate website copy.
+    If OpenAI fails or key missing, returns None.
     """
 
-    name = ai_input.get("business_name") or username.replace("-", " ").title()
-    description = ai_input.get("description", "")
-    goal = ai_input.get("goal", "")
-    location = ai_input.get("location", "")
+    if not _openai_client:
+        return None
 
-    system_prompt = (
-        "You generate structured JSON content for websites. "
-        "Return ONLY valid JSON. No markdown. No explanation."
-    )
+    business_name = ai_input.get("business_name", "").strip()
+    description = ai_input.get("short_description", "").strip()
+    primary_goal = ai_input.get("primary_goal", "").strip()
+    city = ai_input.get("city", "").strip()
 
-    if template == "restaurant":
-        user_prompt = f"""
-Generate initial website content for a restaurant.
+    if not business_name:
+        return None
 
-Business name: {name}
+    prompt = f"""
+You are generating website copy for a {template} website.
+
+Business name: {business_name}
 Description: {description}
-Location: {location}
-Goal: {goal}
+City: {city}
+Primary goal: {primary_goal}
 
-JSON structure:
+Return JSON ONLY in this format:
+
 {{
-  "template": "restaurant",
-  "template_version": 1,
-  "hero": {{
-    "headline": "...",
-    "subheadline": "...",
-    "image": null
-  }},
-  "menu": [],
-  "contact": {{ "phone": "", "email": "" }},
-  "location": {{ "address": "", "city": "{location}" }},
-  "hours": {{ "mon_fri": "11:00 – 22:00", "sat_sun": "12:00 – 23:00" }}
+  "hero_headline": "...",
+  "hero_subheadline": "...",
+  "about_text": "...",
+  "services": [
+    {{ "title": "...", "description": "..." }},
+    {{ "title": "...", "description": "..." }}
+  ]
 }}
-"""
-    else:
-        user_prompt = f"""
-Generate initial website content for a business website.
 
-Business name: {name}
-Description: {description}
-Location: {location}
-Goal: {goal}
-
-JSON structure:
-{{
-  "template": "business",
-  "template_version": 1,
-  "theme": "light",
-  "hero": {{
-    "headline": "...",
-    "subheadline": "...",
-    "image": null
-  }},
-  "about": {{
-    "title": "About {name}",
-    "text": "..."
-  }},
-  "services": {{
-    "title": "Our Services",
-    "items": [
-      {{
-        "title": "...",
-        "description": "..."
-      }}
-    ]
-  }},
-  "contact": {{ "phone": "", "email": "" }}
-}}
+Tone:
+- Professional
+- Clean
+- Conversion-focused
+- Short and clear
 """
 
     try:
-        response = openai_client.chat.completions.create(
+        response = _openai_client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
+                {"role": "system", "content": "You generate clean website copy."},
+                {"role": "user", "content": prompt},
             ],
-            temperature=0.6,
+            temperature=0.7,
+            max_tokens=500,
         )
 
-        content = response.choices[0].message.content
-        parsed = json.loads(content)
-
-        # Safety check
-        if not isinstance(parsed, dict):
-            raise ValueError("Invalid AI response")
-
-        return parsed
+        raw = response.choices[0].message.content
+        return json.loads(raw)
 
     except Exception:
-        # Safe fallback (never break creation)
-        if template == "restaurant":
-            return {
-                "template": "restaurant",
-                "template_version": 1,
-                "hero": {
-                    "headline": name,
-                    "subheadline": description or "Fresh food. Great atmosphere.",
-                    "image": None,
-                },
-                "menu": [],
-                "contact": {"phone": "", "email": ""},
-                "location": {"address": "", "city": location},
-                "hours": {"mon_fri": "11:00 – 22:00", "sat_sun": "12:00 – 23:00"},
-            }
-
-        return {
-            "template": "business",
-            "template_version": 1,
-            "theme": "light",
-            "hero": {
-                "headline": name,
-                "subheadline": description or "Helping clients achieve better results.",
-                "image": None,
-            },
-            "about": {
-                "title": f"About {name}",
-                "text": description or "Short description of what we do.",
-            },
-            "services": {
-                "title": "Our Services",
-                "items": [
-                    {
-                        "title": goal or "Primary Service",
-                        "description": "Describe what you offer and how it helps.",
-                    }
-                ],
-            },
-            "contact": {"phone": "", "email": ""},
-        }
+        return None
 
 
 # =========================
@@ -237,9 +164,51 @@ def create_website(
         raise HTTPException(status_code=400, detail="Username already taken")
 
     # -------------------------
-    # AI-GENERATED INITIAL CONTENT
+    # AI generation (optional)
     # -------------------------
-    content = generate_ai_content_openai(template, username, ai_input)
+    ai_content = _ai_generate_website_text(template, ai_input)
+
+    # -------------------------
+    # Initial content per template
+    # -------------------------
+    if template == "restaurant":
+        content = {
+            "template": "restaurant",
+            "template_version": 1,
+            "hero": {
+                "headline": ai_content["hero_headline"] if ai_content else username,
+                "subheadline": ai_content["hero_subheadline"] if ai_content else "",
+                "image": None,
+            },
+            "menu": [],
+            "contact": {"phone": "", "email": ""},
+            "location": {
+                "address": "",
+                "city": ai_input.get("city", ""),
+            },
+            "hours": {"mon_fri": "11:00 – 22:00", "sat_sun": "12:00 – 23:00"},
+        }
+
+    else:  # business
+        content = {
+            "template": "business",
+            "template_version": 1,
+            "theme": "light",
+            "hero": {
+                "headline": ai_content["hero_headline"] if ai_content else "Your Business",
+                "subheadline": ai_content["hero_subheadline"] if ai_content else "",
+                "image": None,
+            },
+            "about": {
+                "title": "About Us",
+                "text": ai_content["about_text"] if ai_content else "",
+            },
+            "services": {
+                "title": "Our Services",
+                "items": ai_content["services"] if ai_content else [],
+            },
+            "contact": {"phone": "", "email": ""},
+        }
 
     # -------------------------
     # Create website
