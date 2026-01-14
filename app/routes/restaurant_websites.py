@@ -9,7 +9,9 @@ from sqlalchemy.orm import Session
 from app.utils.auth import get_current_user
 from app.database.session import SessionLocal
 from app.database.models import Website
+
 from app.ai.restaurant_site_generator import generate_restaurant_website
+from app.ai.website_ai import generate_ai_structure  # ✅ NEW (LEGO AI)
 
 router = APIRouter(prefix="/api/restaurants", tags=["Restaurant Websites"])
 
@@ -90,7 +92,7 @@ def generate_restaurant_website_api(
             detail="This website username is already taken."
         )
 
-    # 🧠 AI GENERATION
+    # 🧠 AI CONTENT GENERATION (TEXT, MENU, ETC.)
     try:
         site_json = generate_restaurant_website({
             "name": data.name,
@@ -105,12 +107,13 @@ def generate_restaurant_website_api(
             detail=f"AI generation failed: {str(e)}"
         )
 
-    # 💾 SAVE TO DB (JSON → STRING)
+    # 💾 SAVE TO DB
     try:
         website = Website(
             username=data.username,
             template="restaurant",
             content_json=json.dumps(site_json),
+            ai_structure_json=None,  # 👈 GENERATED ON FIRST VIEW
             user_id=user.id
         )
 
@@ -141,10 +144,22 @@ def get_restaurant_website(username: str, db: Session = Depends(get_db)):
     if not website:
         raise HTTPException(status_code=404, detail="Website not found")
 
+    # --------------------------------------------------
+    # 🧠 AI STRUCTURE (LEGO LAYOUT) — GENERATE ONCE
+    # --------------------------------------------------
+    if website.ai_structure_json is None:
+        structure = generate_ai_structure(
+            business_type="restaurant",
+            goal="bookings"
+        )
+        website.ai_structure_json = json.dumps(structure)
+        db.commit()
+
     return {
         "username": website.username,
         "template": website.template,
         "content_json": website.content_json,
+        "ai_structure_json": website.ai_structure_json,
         "user_id": website.user_id,
     }
 
@@ -170,36 +185,32 @@ def save_menu(
     try:
         content = json.loads(website.content_json)
 
-        # -------------------------
-        # SAFE MERGE STRATEGY
-        # -------------------------
-
         # ✅ Always save menu
         if "menu" in payload:
             content["menu"] = payload["menu"]
 
-        # ✅ Merge hero (headline, subheadline, image)
+        # ✅ Merge hero
         if "hero" in payload and isinstance(payload["hero"], dict):
             content["hero"] = {
                 **content.get("hero", {}),
                 **payload["hero"],
             }
 
-        # ✅ NEW: merge contact info
+        # ✅ Merge contact
         if "contact" in payload and isinstance(payload["contact"], dict):
             content["contact"] = {
                 **content.get("contact", {}),
                 **payload["contact"],
             }
 
-        # ✅ NEW: merge location info
+        # ✅ Merge location
         if "location" in payload and isinstance(payload["location"], dict):
             content["location"] = {
                 **content.get("location", {}),
                 **payload["location"],
             }
 
-        # ✅ NEW: merge opening hours
+        # ✅ Merge opening hours
         if "hours" in payload and isinstance(payload["hours"], dict):
             content["hours"] = {
                 **content.get("hours", {}),
