@@ -1,14 +1,21 @@
-from fastapi import Request, HTTPException, status
-from jose import jwt, JWTError
-from app.database.session import SessionLocal
-from app.database.models import User
-import os
 from fastapi import Depends, HTTPException, Header
 from sqlalchemy.orm import Session
+from jose import jwt
+import os
 
+from app.database.session import SessionLocal
+from app.database.models import User
 
-SECRET_KEY = os.getenv("JWT_SECRET", "supersecretkey")
+SECRET = os.getenv("JWT_SECRET", "supersecretkey")
 ALGORITHM = "HS256"
+
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 
 def get_current_user(
@@ -28,7 +35,7 @@ def get_current_user(
 
     user = db.query(User).filter(User.id == user_id).first()
 
-    # 🔥 DEV FORCE-ALLOW
+    # 🔥 DEV MODE: FORCE USER EXISTS
     if not user:
         user = User(
             id=user_id,
