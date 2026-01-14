@@ -1,5 +1,3 @@
-print("🔥 dashboard_websites_routes.py LOADED")
-
 from fastapi import APIRouter, HTTPException, Depends, Body
 from sqlalchemy.orm import Session
 import json
@@ -10,10 +8,10 @@ from app.database.session import SessionLocal
 from app.database.models import Website, User
 from app.utils.auth import get_current_user
 
-# =========================
-# DEV SETTINGS
-# =========================
-DEV_EMAIL = "Test@user.com"  # 👈 CHANGE TO YOUR EMAIL
+# ======================================================
+# DEBUG CONFIRMATION (DO NOT REMOVE YET)
+# ======================================================
+print("🔥 dashboard_websites_routes.py LOADED")
 
 # =========================
 # OPTIONAL: OpenAI
@@ -39,11 +37,6 @@ def _validate_username(username: str):
 
 
 def _ai_generate_website_text(template: str, ai_input: dict):
-    """
-    Uses OpenAI to generate website copy.
-    If OpenAI fails or key missing, returns None.
-    """
-
     if not _openai_client:
         return None
 
@@ -74,12 +67,6 @@ Return JSON ONLY in this format:
     {{ "title": "...", "description": "..." }}
   ]
 }}
-
-Tone:
-- Professional
-- Clean
-- Conversion-focused
-- Short and clear
 """
 
     try:
@@ -93,9 +80,7 @@ Tone:
             max_tokens=500,
         )
 
-        raw = response.choices[0].message.content
-        return json.loads(raw)
-
+        return json.loads(response.choices[0].message.content)
     except Exception:
         return None
 
@@ -121,7 +106,7 @@ def get_my_website(
 
 
 # =========================
-# CREATE WEBSITE
+# CREATE WEBSITE (UNLOCKED)
 # =========================
 @router.post("/create")
 def create_website(
@@ -129,11 +114,7 @@ def create_website(
     user: User = Depends(get_current_user),
     db: Session = Depends(SessionLocal),
 ):
-# 🚨 TEMP DEBUG: ALLOW ALL USERS
-# REMOVE AFTER TESTING
-pass
-
-
+    # 🔥 ALL PAYWALLS REMOVED — DEV MODE
     username = payload.get("username", "").strip().lower()
     template = payload.get("template", "").strip()
     ai_input = payload.get("ai_input") or {}
@@ -143,23 +124,18 @@ pass
 
     _validate_username(username)
 
-    if template not in ("restaurant", "business"):
+    if template not in ("restaurant", "business", "ai-generated"):
         raise HTTPException(status_code=400, detail="Invalid template")
 
-    # -------------------------
-    # Unique username
-    # -------------------------
+    # username must still be unique
     if db.query(Website).filter(Website.username == username).first():
         raise HTTPException(status_code=400, detail="Username already taken")
 
-    # -------------------------
-    # AI generation (optional)
-    # -------------------------
     ai_content = _ai_generate_website_text(template, ai_input)
 
-    # -------------------------
-    # Initial content per template
-    # -------------------------
+    # =========================
+    # BUILD CONTENT
+    # =========================
     if template == "restaurant":
         content = {
             "template": "restaurant",
@@ -171,37 +147,29 @@ pass
             },
             "menu": [],
             "contact": {"phone": "", "email": ""},
-            "location": {
-                "address": "",
-                "city": ai_input.get("city", ""),
-            },
+            "location": {"address": "", "city": ai_input.get("city", "")},
             "hours": {"mon_fri": "11:00 – 22:00", "sat_sun": "12:00 – 23:00"},
         }
 
-    else:  # business
+    else:
         content = {
-            "template": "business",
+            "template": "ai-generated",
             "template_version": 1,
-            "theme": "light",
-            "hero": {
-                "headline": ai_content["hero_headline"] if ai_content else "Your Business",
-                "subheadline": ai_content["hero_subheadline"] if ai_content else "",
-                "image": None,
-            },
-            "about": {
-                "title": "About Us",
-                "text": ai_content["about_text"] if ai_content else "",
-            },
-            "services": {
-                "title": "Our Services",
-                "items": ai_content["services"] if ai_content else [],
-            },
+            "hero_headline": ai_content["hero_headline"] if ai_content else "Your Business",
+            "hero_subheadline": ai_content["hero_subheadline"] if ai_content else "",
+            "cta_text": "Get started",
+            "features": [
+                "Fast setup",
+                "AI generated",
+                "Mobile ready",
+            ],
+            "about_text": ai_content["about_text"] if ai_content else "",
             "contact": {"phone": "", "email": ""},
         }
 
-    # -------------------------
-    # Create website
-    # -------------------------
+    # =========================
+    # SAVE WEBSITE
+    # =========================
     site = Website(
         user_id=user.id,
         username=username,
