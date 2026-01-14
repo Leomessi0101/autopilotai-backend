@@ -134,7 +134,7 @@ class Task(Base):
 
 
 # --------------------------
-# WEBSITES (NEW)
+# WEBSITES
 # --------------------------
 class Website(Base):
     __tablename__ = "websites"
@@ -142,9 +142,24 @@ class Website(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
+    # public URL username (your existing system)
     username = Column(String, unique=True, index=True, nullable=False)
+
+    # existing builder
     template = Column(String, nullable=False)
     content_json = Column(Text, nullable=False)
+
+    # NEW: AI layout system
+    ai_structure_json = Column(Text, nullable=True)
+    ai_version = Column(Integer, default=1)
+
+    # NEW: publishing
+    publish_status = Column(String, default="draft")  # draft | published
+    last_published_at = Column(DateTime, nullable=True)
+
+    # NEW: custom domain
+    custom_domain = Column(String, unique=True, nullable=True)
+    domain_verified = Column(Boolean, default=False)
 
     created_at = Column(DateTime, server_default=func.now())
 
