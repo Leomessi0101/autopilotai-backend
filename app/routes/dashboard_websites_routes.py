@@ -127,7 +127,7 @@ def create_website(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    plan = (user.subscription or "free").lower()
+    plan = (user.subscription_plan or "free").lower()
     if plan == "free" and user.email != "Test@user.com":
         raise HTTPException(
             status_code=403,
