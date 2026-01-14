@@ -9,6 +9,11 @@ from app.database.models import Website, User
 from app.utils.auth import get_current_user
 
 # =========================
+# DEV SETTINGS
+# =========================
+DEV_EMAIL = "Test@user.com"  # 👈 CHANGE TO YOUR EMAIL
+
+# =========================
 # OPTIONAL: OpenAI
 # =========================
 try:
@@ -123,23 +128,23 @@ def create_website(
     db: Session = Depends(SessionLocal),
 ):
     # -------------------------
-    # Paid users only
+    # Paid users only (DEV BYPASS)
     # -------------------------
-    if (user.subscription_plan or "free") == "free":
+    if (user.subscription_plan or "free") == "free" and user.email != DEV_EMAIL:
         raise HTTPException(
             status_code=403,
             detail="Upgrade your plan to create a website",
         )
 
     # -------------------------
-    # Max 1 site per user
+    # Max 1 site per user (DEV BYPASS)
     # -------------------------
     existing_count = (
         db.query(Website)
         .filter(Website.user_id == user.id)
         .count()
     )
-    if existing_count >= 1:
+    if existing_count >= 1 and user.email != DEV_EMAIL:
         raise HTTPException(
             status_code=403,
             detail="Your plan allows only one website",
