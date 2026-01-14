@@ -66,7 +66,6 @@ app.include_router(dashboard_websites_routes.router)
 
 # public website renderers AFTER
 app.include_router(restaurant_websites_router)
-app.include_router(websites_routes.router)
 
 # AI Routes
 app.include_router(content_router, prefix="/api/content")
