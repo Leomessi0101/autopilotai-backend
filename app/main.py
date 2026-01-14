@@ -2,17 +2,20 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import os
+import sys
+
 print("PRICE_GROWTH FROM ENV:", os.getenv("PRICE_GROWTH"))
+print(">>> Python executable:", sys.executable)
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-# Database
+# -------------------- DATABASE --------------------
 from app.database.session import engine
-from app.database import models   # <-- IMPORTANT: ensures all models register
+from app.database import models   # ensures all models register
 from app.database.models import Base
 
-# Routers
+# -------------------- ROUTERS --------------------
 from app.routes.profile_routes import router as profile_router
 from app.routes.usage_routes import router as usage_router
 from app.routes.stripe_routes import router as stripe_router
@@ -29,32 +32,22 @@ from app.routes.restaurant_websites import router as restaurant_websites_router
 from app.routes import websites_routes
 from app.routes import dashboard_websites_routes
 
-import sys
-print(">>> Python executable:", sys.executable)
-
 # -------------------- APP SETUP --------------------
 app = FastAPI()
 
 # -------------------- CREATE DATABASE TABLES --------------------
 Base.metadata.create_all(bind=engine)
 
-# -------------------- CORS --------------------
-origins = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "https://autopilotai.dev",
-    "https://www.autopilotai.dev",
-    "https://autopilotai-frontend.vercel.app",
-    "https://autopilotai-api.onrender.com",  # ✅ IMPORTANT ADDITION
-]
-
+# -------------------- CORS (FIXED – NO CONFLICTS) --------------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
-    allow_origin_regex=r"https://.*\.vercel\.app",
+    # allow autopilotai.dev, www, vercel previews, localhost
+    allow_origin_regex=r"^https://(www\.)?autopilotai\.dev$|^https://.*\.vercel\.app$|^http://localhost:3000$|^http://127\.0\.0\.1:3000$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=86400,
 )
 
 # -------------------- ROUTES --------------------
@@ -68,7 +61,7 @@ app.include_router(work_router, prefix="/api")
 app.include_router(image_routes.router, prefix="/api")
 app.include_router(growth_pack_router, prefix="/api")
 
-# 🔥 IMPORTANT: dashboard websites FIRST
+# 🔥 dashboard website builder FIRST
 app.include_router(dashboard_websites_routes.router)
 
 # public website renderers AFTER
@@ -79,7 +72,6 @@ app.include_router(websites_routes.router)
 app.include_router(content_router, prefix="/api/content")
 app.include_router(email_router, prefix="/api/email")
 app.include_router(ads_router, prefix="/api/ads")
-
 
 # -------------------- DEBUG: PRINT ROUTES --------------------
 @app.on_event("startup")
