@@ -5,14 +5,12 @@ import boto3
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Body
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
 
 from app.utils.auth import get_current_user
 from app.database.session import SessionLocal
 from app.database.models import Website
 
-from app.ai.restaurant_site_generator import generate_restaurant_website
-from app.ai.website_ai import generate_ai_structure  # LEGO AI
+from app.ai.website_ai import generate_ai_structure  # canonical AI layout
 
 router = APIRouter(prefix="/api/restaurants", tags=["Restaurant Websites"])
 
@@ -45,109 +43,19 @@ def get_db():
 
 
 # -------------------------
-# REQUEST MODEL
-# -------------------------
-class RestaurantWebsiteRequest(BaseModel):
-    username: str
-    name: str
-    cuisine: str
-    city: str
-    phone: str
-    email: str | None = None
-
-
-# -------------------------
-# GENERATE + SAVE WEBSITE
+# DISABLED: LEGACY GENERATE
 # -------------------------
 @router.post("/generate")
-def generate_restaurant_website_api(
-    data: RestaurantWebsiteRequest,
-    user=Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    # 🔒 REQUIRE PAID PLAN (DEV BYPASS OK)
-    if user.subscription_plan == "free" and user.email != "321@123.com":
-        raise HTTPException(
-            status_code=403,
-            detail="Only paid users can create a website."
-        )
-
-    # 🔒 USERNAME VALIDATION
-    if not data.username.isalnum():
-        raise HTTPException(
-            status_code=400,
-            detail="Username must be alphanumeric."
-        )
-
-    # 🔒 PREVENT OVERWRITE
-    existing = db.query(Website).filter(
-        Website.username == data.username
-    ).first()
-
-    if existing:
-        raise HTTPException(
-            status_code=409,
-            detail="This website username is already taken."
-        )
-
-    # -------------------------
-    # 🧠 AI CONTENT GENERATION
-    # -------------------------
-    try:
-        site_json = generate_restaurant_website({
-            "name": data.name,
-            "cuisine": data.cuisine,
-            "city": data.city,
-            "phone": data.phone,
-            "email": data.email,
-        })
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"AI content generation failed: {str(e)}"
-        )
-
-    # -------------------------
-    # 🧠 AI STRUCTURE GENERATION (ONCE)
-    # -------------------------
-    try:
-        ai_structure = generate_ai_structure(
-            business_type="restaurant",
-            goal="bookings"
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"AI layout generation failed: {str(e)}"
-        )
-
-    # -------------------------
-    # 💾 SAVE TO DB
-    # -------------------------
-    try:
-        website = Website(
-            username=data.username,
-            template="restaurant",
-            content_json=json.dumps(site_json),
-            ai_structure_json=json.dumps(ai_structure),
-            user_id=user.id
-        )
-
-        db.add(website)
-        db.commit()
-        db.refresh(website)
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Database save failed: {str(e)}"
-        )
-
-    return {
-        "success": True,
-        "username": website.username,
-        "url": f"/r/{website.username}"
-    }
+def generate_restaurant_website_api():
+    """
+    ❌ Disabled.
+    Website creation is now handled exclusively via:
+    POST /api/dashboard/websites/create
+    """
+    raise HTTPException(
+        status_code=410,
+        detail="Website generation has moved. Use the dashboard flow.",
+    )
 
 
 # -------------------------
@@ -160,14 +68,20 @@ def get_restaurant_website(username: str, db: Session = Depends(get_db)):
     if not website:
         raise HTTPException(status_code=404, detail="Website not found")
 
-    # 🛟 BACKWARD COMPATIBILITY (OLD SITES)
+    # --------------------------------------------------
+    # 🧠 AI STRUCTURE (LAZY BACKFILL, SAFE)
+    # --------------------------------------------------
     if website.ai_structure_json is None:
-        structure = generate_ai_structure(
-            business_type="restaurant",
-            goal="bookings"
-        )
-        website.ai_structure_json = json.dumps(structure)
-        db.commit()
+        try:
+            structure = generate_ai_structure(
+                business_type=website.template or "business",
+                goal="conversions",
+            )
+            website.ai_structure_json = json.dumps(structure)
+            db.commit()
+        except Exception:
+            # do not block rendering if structure fails
+            pass
 
     return {
         "username": website.username,
@@ -267,6 +181,4 @@ def upload_menu_image(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-    return {
-        "url": f"{R2_PUBLIC_BASE_URL}/{key}"
-    }
+    return {"url": f"{R2_PUBLIC_BASE_URL}/{key}"}

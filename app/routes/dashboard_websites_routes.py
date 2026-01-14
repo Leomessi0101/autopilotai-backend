@@ -7,7 +7,7 @@ from app.database.session import SessionLocal
 from app.database.models import Website, User
 from app.utils.auth import get_current_user
 
-from app.ai.website_ai import generate_ai_structure  # ✅ single source of structure
+from app.ai.website_ai import generate_ai_structure
 
 router = APIRouter(prefix="/api/dashboard/websites")
 
@@ -31,6 +31,73 @@ def get_db():
         db.close()
 
 
+def build_default_content(template: str, ai_input: dict, username: str):
+    """
+    Deterministic, cheap, always-present starter content.
+    """
+    name = ai_input.get("business_name") or username.replace("-", " ").title()
+    city = ai_input.get("city") or ""
+    goal = ai_input.get("primary_goal") or "Get started"
+
+    hero_headline = f"{name}"
+    hero_subheadline = (
+        f"Serving {city} with quality and care."
+        if city
+        else "Built with AutopilotAI."
+    )
+
+    services = [
+        {
+            "title": "Professional service",
+            "description": "Reliable, high-quality service tailored to your needs.",
+        },
+        {
+            "title": "Fast response",
+            "description": "Quick turnaround and clear communication.",
+        },
+        {
+            "title": "Trusted by customers",
+            "description": "Focused on long-term results and satisfaction.",
+        },
+    ]
+
+    content = {
+        "hero": {
+            "headline": hero_headline,
+            "subheadline": hero_subheadline,
+            "image": None,
+            "cta_text": goal,
+            "cta_link": "#contact",
+        },
+        "services": services,
+        "cta": {
+            "headline": "Ready to get started?",
+            "text": "Contact us today and take the next step.",
+            "link": "#contact",
+        },
+    }
+
+    if template == "restaurant":
+        content.update(
+            {
+                "menu": [],
+                "hours": {
+                    "mon_fri": "11:00 – 22:00",
+                    "sat_sun": "12:00 – 23:00",
+                },
+                "location": {
+                    "city": city,
+                },
+                "contact": {
+                    "phone": "",
+                    "email": "",
+                },
+            }
+        )
+
+    return content
+
+
 # =========================
 # GET MY WEBSITE
 # =========================
@@ -52,7 +119,7 @@ def get_my_website(
 
 
 # =========================
-# CREATE WEBSITE (AI-FIRST)
+# CREATE WEBSITE (CANONICAL)
 # =========================
 @router.post("/create")
 def create_website(
@@ -60,9 +127,6 @@ def create_website(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    # -------------------------
-    # PAID CHECK
-    # -------------------------
     plan = (user.subscription or "free").lower()
     if plan == "free" and user.email != "Test@user.com":
         raise HTTPException(
@@ -70,9 +134,6 @@ def create_website(
             detail="Website builder is available for paid plans only",
         )
 
-    # -------------------------
-    # ONE SITE PER USER
-    # -------------------------
     if db.query(Website).filter(Website.user_id == user.id).count() >= 1:
         raise HTTPException(
             status_code=403,
@@ -94,34 +155,20 @@ def create_website(
     if db.query(Website).filter(Website.username == username).first():
         raise HTTPException(status_code=400, detail="Username already taken")
 
-    # -------------------------
-    # AI STRUCTURE (ONCE)
-    # -------------------------
-    try:
-        structure = generate_ai_structure(
-            business_type=template,
-            goal=ai_input.get("primary_goal", "conversions"),
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"AI layout generation failed: {str(e)}",
-        )
+    # 🧠 AI STRUCTURE (ONCE)
+    structure = generate_ai_structure(
+        business_type=template,
+        goal=ai_input.get("primary_goal", "conversions"),
+    )
 
-    # -------------------------
-    # EMPTY CONTENT (AI FILLS LATER)
-    # -------------------------
-    base_content = {
-        "template": template,
-        "template_version": 1,
-        "ai_input": ai_input,  # 🔑 store intent forever
-    }
+    # 🧱 DEFAULT CONTENT (ALWAYS PRESENT)
+    content = build_default_content(template, ai_input, username)
 
     site = Website(
         user_id=user.id,
         username=username,
         template=template,
-        content_json=json.dumps(base_content),
+        content_json=json.dumps(content),
         ai_structure_json=json.dumps(structure),
     )
 
