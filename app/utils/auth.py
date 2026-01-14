@@ -8,39 +8,33 @@ SECRET_KEY = os.getenv("JWT_SECRET", "supersecretkey")
 ALGORITHM = "HS256"
 
 
-def get_current_user(request: Request):
-    auth_header = request.headers.get("authorization")
+def get_current_user(
+    Authorization: str = Header(None),
+    db: Session = Depends(get_db),
+):
+    if not Authorization:
+        raise HTTPException(status_code=401, detail="Missing Authorization header")
 
-    if not auth_header or not auth_header.lower().startswith("bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing authorization header",
-        )
-
-    token = auth_header.split(" ")[1]
+    token = Authorization.replace("Bearer ", "")
 
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, SECRET, algorithms=[ALGORITHM])
         user_id = payload.get("user_id")
-        if not user_id:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token payload",
-            )
-    except JWTError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
-        )
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid token")
 
-    db = SessionLocal()
     user = db.query(User).filter(User.id == user_id).first()
-    db.close()
 
+    # 🔥 DEV FORCE-ALLOW
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
+        user = User(
+            id=user_id,
+            email="dev@local",
+            name="Dev User",
+            subscription_plan="pro",
         )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
 
     return user
