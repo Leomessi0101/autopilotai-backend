@@ -5,13 +5,14 @@ import boto3
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Body
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
 
 from app.utils.auth import get_current_user
 from app.database.session import SessionLocal
 from app.database.models import Website
 
 from app.ai.restaurant_site_generator import generate_restaurant_website
-from app.ai.website_ai import generate_ai_structure  # ✅ NEW (LEGO AI)
+from app.ai.website_ai import generate_ai_structure  # LEGO AI
 
 router = APIRouter(prefix="/api/restaurants", tags=["Restaurant Websites"])
 
@@ -46,9 +47,6 @@ def get_db():
 # -------------------------
 # REQUEST MODEL
 # -------------------------
-from pydantic import BaseModel
-
-
 class RestaurantWebsiteRequest(BaseModel):
     username: str
     name: str
@@ -67,7 +65,7 @@ def generate_restaurant_website_api(
     user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    # 🔒 REQUIRE PAID PLAN (TEMP DEV BYPASS OPTIONAL)
+    # 🔒 REQUIRE PAID PLAN (DEV BYPASS OK)
     if user.subscription_plan == "free" and user.email != "321@123.com":
         raise HTTPException(
             status_code=403,
@@ -78,7 +76,7 @@ def generate_restaurant_website_api(
     if not data.username.isalnum():
         raise HTTPException(
             status_code=400,
-            detail="Username must be alphanumeric (no spaces or symbols)."
+            detail="Username must be alphanumeric."
         )
 
     # 🔒 PREVENT OVERWRITE
@@ -92,7 +90,9 @@ def generate_restaurant_website_api(
             detail="This website username is already taken."
         )
 
-    # 🧠 AI CONTENT GENERATION (TEXT, MENU, ETC.)
+    # -------------------------
+    # 🧠 AI CONTENT GENERATION
+    # -------------------------
     try:
         site_json = generate_restaurant_website({
             "name": data.name,
@@ -104,16 +104,32 @@ def generate_restaurant_website_api(
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"AI generation failed: {str(e)}"
+            detail=f"AI content generation failed: {str(e)}"
         )
 
+    # -------------------------
+    # 🧠 AI STRUCTURE GENERATION (ONCE)
+    # -------------------------
+    try:
+        ai_structure = generate_ai_structure(
+            business_type="restaurant",
+            goal="bookings"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"AI layout generation failed: {str(e)}"
+        )
+
+    # -------------------------
     # 💾 SAVE TO DB
+    # -------------------------
     try:
         website = Website(
             username=data.username,
             template="restaurant",
             content_json=json.dumps(site_json),
-            ai_structure_json=None,  # 👈 GENERATED ON FIRST VIEW
+            ai_structure_json=json.dumps(ai_structure),
             user_id=user.id
         )
 
@@ -135,7 +151,7 @@ def generate_restaurant_website_api(
 
 
 # -------------------------
-# GET WEBSITE (PUBLIC)
+# GET WEBSITE (PUBLIC, READ-ONLY)
 # -------------------------
 @router.get("/{username}")
 def get_restaurant_website(username: str, db: Session = Depends(get_db)):
@@ -144,9 +160,7 @@ def get_restaurant_website(username: str, db: Session = Depends(get_db)):
     if not website:
         raise HTTPException(status_code=404, detail="Website not found")
 
-    # --------------------------------------------------
-    # 🧠 AI STRUCTURE (LEGO LAYOUT) — GENERATE ONCE
-    # --------------------------------------------------
+    # 🛟 BACKWARD COMPATIBILITY (OLD SITES)
     if website.ai_structure_json is None:
         structure = generate_ai_structure(
             business_type="restaurant",
@@ -185,32 +199,27 @@ def save_menu(
     try:
         content = json.loads(website.content_json)
 
-        # ✅ Always save menu
         if "menu" in payload:
             content["menu"] = payload["menu"]
 
-        # ✅ Merge hero
         if "hero" in payload and isinstance(payload["hero"], dict):
             content["hero"] = {
                 **content.get("hero", {}),
                 **payload["hero"],
             }
 
-        # ✅ Merge contact
         if "contact" in payload and isinstance(payload["contact"], dict):
             content["contact"] = {
                 **content.get("contact", {}),
                 **payload["contact"],
             }
 
-        # ✅ Merge location
         if "location" in payload and isinstance(payload["location"], dict):
             content["location"] = {
                 **content.get("location", {}),
                 **payload["location"],
             }
 
-        # ✅ Merge opening hours
         if "hours" in payload and isinstance(payload["hours"], dict):
             content["hours"] = {
                 **content.get("hours", {}),

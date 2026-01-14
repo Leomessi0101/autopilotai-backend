@@ -2,20 +2,12 @@ from fastapi import APIRouter, HTTPException, Depends, Body
 from sqlalchemy.orm import Session
 import json
 import re
-import os
 
 from app.database.session import SessionLocal
 from app.database.models import Website, User
 from app.utils.auth import get_current_user
 
-# =========================
-# OPTIONAL: OpenAI
-# =========================
-try:
-    from openai import OpenAI
-    _openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-except Exception:
-    _openai_client = None
+from app.ai.website_ai import generate_ai_structure  # ✅ single source of structure
 
 router = APIRouter(prefix="/api/dashboard/websites")
 
@@ -31,51 +23,12 @@ def _validate_username(username: str):
         )
 
 
-def _ai_generate_website_text(template: str, ai_input: dict):
-    if not _openai_client:
-        return None
-
-    business_name = ai_input.get("business_name", "").strip()
-    description = ai_input.get("short_description", "").strip()
-    primary_goal = ai_input.get("primary_goal", "").strip()
-    city = ai_input.get("city", "").strip()
-
-    if not business_name:
-        return None
-
-    prompt = f"""
-You are generating website copy for a {template} website.
-
-Business name: {business_name}
-Description: {description}
-City: {city}
-Primary goal: {primary_goal}
-
-Return JSON ONLY in this format:
-
-{{
-  "hero_headline": "...",
-  "hero_subheadline": "...",
-  "about_text": "...",
-  "services": [
-    {{ "title": "...", "description": "..." }}
-  ]
-}}
-"""
-
+def get_db():
+    db = SessionLocal()
     try:
-        response = _openai_client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "You generate clean website copy."},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0.7,
-            max_tokens=500,
-        )
-        return json.loads(response.choices[0].message.content)
-    except Exception:
-        return None
+        yield db
+    finally:
+        db.close()
 
 
 # =========================
@@ -84,7 +37,7 @@ Return JSON ONLY in this format:
 @router.get("/me")
 def get_my_website(
     user: User = Depends(get_current_user),
-    db: Session = Depends(SessionLocal),
+    db: Session = Depends(get_db),
 ):
     site = db.query(Website).filter(Website.user_id == user.id).first()
 
@@ -99,20 +52,18 @@ def get_my_website(
 
 
 # =========================
-# CREATE WEBSITE
+# CREATE WEBSITE (AI-FIRST)
 # =========================
 @router.post("/create")
 def create_website(
     payload: dict = Body(...),
     user: User = Depends(get_current_user),
-    db: Session = Depends(SessionLocal),
+    db: Session = Depends(get_db),
 ):
     # -------------------------
-    # PAID CHECK (FIXED)
+    # PAID CHECK
     # -------------------------
     plan = (user.subscription or "free").lower()
-
-    # dev bypass so you can test without paying
     if plan == "free" and user.email != "Test@user.com":
         raise HTTPException(
             status_code=403,
@@ -120,7 +71,7 @@ def create_website(
         )
 
     # -------------------------
-    # Max 1 site per user
+    # ONE SITE PER USER
     # -------------------------
     if db.query(Website).filter(Website.user_id == user.id).count() >= 1:
         raise HTTPException(
@@ -143,41 +94,35 @@ def create_website(
     if db.query(Website).filter(Website.username == username).first():
         raise HTTPException(status_code=400, detail="Username already taken")
 
-    ai_content = _ai_generate_website_text(template, ai_input)
+    # -------------------------
+    # AI STRUCTURE (ONCE)
+    # -------------------------
+    try:
+        structure = generate_ai_structure(
+            business_type=template,
+            goal=ai_input.get("primary_goal", "conversions"),
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"AI layout generation failed: {str(e)}",
+        )
 
-    if template == "restaurant":
-        content = {
-            "template": "restaurant",
-            "template_version": 1,
-            "hero": {
-                "headline": ai_content["hero_headline"] if ai_content else username,
-                "subheadline": ai_content["hero_subheadline"] if ai_content else "",
-                "image": None,
-            },
-            "menu": [],
-            "contact": {"phone": "", "email": ""},
-            "location": {"address": "", "city": ai_input.get("city", "")},
-            "hours": {"mon_fri": "11:00 – 22:00", "sat_sun": "12:00 – 23:00"},
-        }
-    else:
-        content = {
-            "template": "business",
-            "template_version": 1,
-            "hero": {
-                "headline": ai_content["hero_headline"] if ai_content else "Your Business",
-                "subheadline": ai_content["hero_subheadline"] if ai_content else "",
-                "image": None,
-            },
-            "about": {"text": ai_content.get("about_text", "") if ai_content else ""},
-            "services": ai_content.get("services", []) if ai_content else [],
-            "contact": {"phone": "", "email": ""},
-        }
+    # -------------------------
+    # EMPTY CONTENT (AI FILLS LATER)
+    # -------------------------
+    base_content = {
+        "template": template,
+        "template_version": 1,
+        "ai_input": ai_input,  # 🔑 store intent forever
+    }
 
     site = Website(
         user_id=user.id,
         username=username,
         template=template,
-        content_json=json.dumps(content),
+        content_json=json.dumps(base_content),
+        ai_structure_json=json.dumps(structure),
     )
 
     db.add(site)
