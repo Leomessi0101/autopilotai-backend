@@ -1,3 +1,5 @@
+print("🔥 dashboard_websites_routes.py LOADED")
+
 from fastapi import APIRouter, HTTPException, Depends, Body
 from sqlalchemy.orm import Session
 import json
@@ -127,28 +129,10 @@ def create_website(
     user: User = Depends(get_current_user),
     db: Session = Depends(SessionLocal),
 ):
-    # -------------------------
-    # Paid users only (DEV BYPASS)
-    # -------------------------
-    if (user.subscription_plan or "free") == "free" and user.email != DEV_EMAIL:
-        raise HTTPException(
-            status_code=403,
-            detail="Upgrade your plan to create a website",
-        )
+# 🚨 TEMP DEBUG: ALLOW ALL USERS
+# REMOVE AFTER TESTING
+pass
 
-    # -------------------------
-    # Max 1 site per user (DEV BYPASS)
-    # -------------------------
-    existing_count = (
-        db.query(Website)
-        .filter(Website.user_id == user.id)
-        .count()
-    )
-    if existing_count >= 1 and user.email != DEV_EMAIL:
-        raise HTTPException(
-            status_code=403,
-            detail="Your plan allows only one website",
-        )
 
     username = payload.get("username", "").strip().lower()
     template = payload.get("template", "").strip()
