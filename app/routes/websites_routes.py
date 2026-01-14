@@ -65,7 +65,7 @@ def save_website_content(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if user.subscription_plan == "free" and user.email != "321@123.com":
+    if user.subscription_plan == "free" and user.email != "test@user.com":
         raise HTTPException(
             status_code=403,
             detail="Website builder is available for paid plans only",
