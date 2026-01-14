@@ -67,14 +67,19 @@ app.include_router(dashboard_router, prefix="/api")
 app.include_router(work_router, prefix="/api")
 app.include_router(image_routes.router, prefix="/api")
 app.include_router(growth_pack_router, prefix="/api")
+
+# 🔥 IMPORTANT: dashboard websites FIRST
+app.include_router(dashboard_websites_routes.router)
+
+# public website renderers AFTER
 app.include_router(restaurant_websites_router)
 app.include_router(websites_routes.router)
-app.include_router(dashboard_websites_routes.router)
 
 # AI Routes
 app.include_router(content_router, prefix="/api/content")
 app.include_router(email_router, prefix="/api/email")
 app.include_router(ads_router, prefix="/api/ads")
+
 
 # -------------------- DEBUG: PRINT ROUTES --------------------
 @app.on_event("startup")
