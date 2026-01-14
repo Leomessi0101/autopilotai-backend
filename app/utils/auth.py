@@ -3,6 +3,9 @@ from jose import jwt, JWTError
 from app.database.session import SessionLocal
 from app.database.models import User
 import os
+from fastapi import Depends, HTTPException, Header
+from sqlalchemy.orm import Session
+
 
 SECRET_KEY = os.getenv("JWT_SECRET", "supersecretkey")
 ALGORITHM = "HS256"
