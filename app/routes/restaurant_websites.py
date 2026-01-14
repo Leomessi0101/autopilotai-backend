@@ -151,6 +151,40 @@ def save_menu(
 
 
 # -------------------------
+# SAVE WEBSITE CONTENT (OWNER ONLY) — GENERIC PATCH
+# -------------------------
+@router.post("/{username}/content")
+def save_content(
+    username: str,
+    payload: dict = Body(...),
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    website = db.query(Website).filter(Website.username == username).first()
+
+    if not website:
+        raise HTTPException(status_code=404, detail="Website not found")
+
+    if website.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    try:
+        content = json.loads(website.content_json) if website.content_json else {}
+
+        # shallow merge top-level keys
+        for k, v in payload.items():
+            content[k] = v
+
+        website.content_json = json.dumps(content)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return {"success": True}
+
+
+# -------------------------
 # UPLOAD IMAGE (OWNER ONLY)
 # -------------------------
 @router.post("/{username}/upload-image")
