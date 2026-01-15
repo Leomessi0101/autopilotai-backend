@@ -216,3 +216,31 @@ def upload_menu_image(
         raise HTTPException(status_code=500, detail=str(e))
 
     return {"url": f"{R2_PUBLIC_BASE_URL}/{key}"}
+
+# -------------------------
+# SAVE AI CONTENT (OWNER ONLY)
+# -------------------------
+@router.post("/{username}/save")
+def save_ai_content(
+    username: str,
+    payload: dict = Body(...),
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    website = db.query(Website).filter(Website.username == username).first()
+
+    if not website:
+        raise HTTPException(status_code=404, detail="Website not found")
+
+    if website.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    try:
+        website.content_json = json.dumps(payload)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return {"success": True}
+
