@@ -17,36 +17,81 @@ SECTION_SETS = {
     "restaurant": [
         ["about", "services", "testimonial", "cta"],
         ["services", "process", "testimonial", "cta"],
+        ["trust", "services", "testimonial", "cta"],
+        ["about", "trust", "services", "cta"],
     ],
     "business": [
         ["about", "services", "cta"],
         ["services", "process", "testimonial", "cta"],
+        ["trust", "services", "cta"],
+        ["about", "trust", "services", "testimonial", "cta"],
     ],
 }
 
 THEMES = [
     {"palette": "light", "accent": "indigo"},
+    {"palette": "light", "accent": "orange"},
     {"palette": "dark", "accent": "indigo"},
+    {"palette": "dark", "accent": "emerald"},
+    {"palette": "light", "accent": "neutral"},
 ]
 
 FOOTER_VARIANTS = [{"variant": "minimal"}, {"variant": "standard"}]
 
 
 # ======================================================
-# INTENT DETECTION (UNCHANGED)
+# INTENT DETECTION (CHEAP + DETERMINISTIC)
 # ======================================================
 
 _RE_WORD = re.compile(r"[a-z0-9]+", re.I)
 
 RESTAURANT_KEYWORDS = [
-    "restaurant", "cafe", "pizza", "burger", "sushi", "thai", "italian",
+    "restaurant", "cafe", "pizza", "burger", "sushi", "thai", "italian", "menu", "dine-in", "takeaway", "delivery"
 ]
 
-BUSINESS_BUCKETS: List[Tuple[str, List[str], str]] = [
-    ("car", ["car", "auto", "detailing", "dealership"], "Book a service"),
-    ("gym", ["gym", "fitness", "training", "bjj", "boxing"], "Book a trial"),
-    ("agency", ["agency", "marketing", "ads", "seo"], "Get a free audit"),
-    ("tech", ["saas", "software", "app", "platform", "ai"], "Start free trial"),
+BUSINESS_BUCKETS: List[Tuple[str, List[str], str, List[str]]] = [
+    (
+        "car",
+        ["car", "auto", "detailing", "dealership", "wrap", "tint", "ceramic", "polish", "used cars", "financing"],
+        "Book a service",
+        ["Interior & exterior detailing", "Paint correction & protection", "Quick turnaround"],
+    ),
+    (
+        "gym",
+        ["gym", "fitness", "training", "bjj", "boxing", "muay thai", "mma", "pt", "personal trainer"],
+        "Book a trial",
+        ["Beginner-friendly classes", "Personal coaching", "Flexible memberships"],
+    ),
+    (
+        "agency",
+        ["agency", "marketing", "ads", "seo", "branding", "content", "creative", "funnels"],
+        "Get a free audit",
+        ["Growth strategy", "Ads & creatives", "Landing pages that convert"],
+    ),
+    (
+        "construction",
+        ["construction", "builder", "renovation", "remodel", "plumbing", "electric", "roof", "handyman"],
+        "Request a quote",
+        ["On-site estimate", "Clear pricing", "Reliable workmanship"],
+    ),
+    (
+        "beauty",
+        ["salon", "barber", "hair", "nails", "spa", "massage", "lashes", "skincare"],
+        "Book now",
+        ["High-quality treatments", "Friendly atmosphere", "Easy booking"],
+    ),
+    (
+        "professional",
+        ["law", "lawyer", "attorney", "accounting", "tax", "consulting", "broker", "real estate"],
+        "Schedule a consultation",
+        ["Expert guidance", "Clear next steps", "Fast response"],
+    ),
+    (
+        "tech",
+        ["saas", "software", "app", "platform", "ai", "automation", "tool", "startup"],
+        "Start free trial",
+        ["Product overview", "Simple onboarding", "Fast support"],
+    ),
 ]
 
 GENERIC_SERVICES = ["Professional service", "Fast response", "Trusted quality"]
@@ -67,15 +112,23 @@ def infer_intent(ai_input: Dict[str, Any]) -> Dict[str, Any]:
     services = GENERIC_SERVICES[:]
     goal = "Get started"
 
-    for bucket, keywords, default_goal in BUSINESS_BUCKETS:
+    # pick first matching bucket (deterministic)
+    for bucket, keywords, default_goal, default_services in BUSINESS_BUCKETS:
         if any(k in combined for k in keywords):
             industry = bucket
             goal = default_goal
+            services = default_services[:]
             break
 
-    name = ai_input.get("business_name") or ""
+    name = (ai_input.get("business_name") or "").strip()
     if not name and w:
         name = " ".join(word.title() for word in w[:2])
+
+    if template == "restaurant":
+        if not services or services == GENERIC_SERVICES:
+            services = ["Signature dishes", "Fresh ingredients", "Takeaway & dine-in"]
+        if not goal:
+            goal = "Reserve a table"
 
     return {
         "template": template,
@@ -99,55 +152,90 @@ def stable_seed(*values: str) -> int:
 def generate_ai_structure(business_type: str, goal: str, version: int = 1):
     rng = random.Random(stable_seed(business_type, goal, str(version)))
 
+    # If section set missing, fallback to business
+    section_choices = SECTION_SETS.get(business_type) or SECTION_SETS["business"]
+
     return {
         "hero": {"variant": rng.choice(HERO_VARIANTS)},
-        "sections": rng.choice(SECTION_SETS[business_type]),
+        "sections": rng.choice(section_choices),
         "theme": rng.choice(THEMES),
         "footer": rng.choice(FOOTER_VARIANTS),
     }
 
 
 # ======================================================
-# 🚀 REAL AI CONTENT GENERATION (NEW)
+# 🚀 REAL AI CONTENT GENERATION (WARM + FULL PAGE)
 # ======================================================
 
 CONTENT_SYSTEM_PROMPT = """
-You are an expert website copywriter.
+You are an expert conversion-focused website copywriter and creative director.
 
-Generate a READY-TO-PUBLISH business website.
-Do NOT ask questions.
-Do NOT use placeholders.
-Make confident assumptions.
-Assume the user will publish immediately.
+Generate a READY-TO-PUBLISH website content JSON.
+Rules:
+- Do NOT ask questions.
+- Do NOT use placeholders (no "Add your...", no brackets).
+- Make confident assumptions based on the business description.
+- Write warm, human, industry-specific copy.
+- Keep it simple, clear, and believable.
+- Avoid hype. Sound like a real business.
+- Output STRICT JSON only. No markdown. No commentary.
 """
 
+# We intentionally include extra keys the renderer can choose to use:
+# - trust, process, faq, highlight, audience
+# - image_slots + optional per-section image objects (null if unused)
 CONTENT_USER_PROMPT = """
-Business description:
+Business description (free text):
 {prompt}
 
 Business name:
 {business_name}
 
-Primary goal:
-{goal}
+Template:
+{template}
 
-Industry:
+Industry bucket:
 {industry}
 
-Return STRICT JSON ONLY with this shape:
+Primary goal (CTA intent):
+{goal}
+
+Return STRICT JSON ONLY with this exact shape:
 
 {{
+  "business_name": "",
+  "tagline": "",
   "hero": {{
     "headline": "",
     "subheadline": "",
-    "cta": ""
+    "cta_text": "",
+    "image": null
+  }},
+  "highlight": {{
+    "headline": "",
+    "subheadline": ""
   }},
   "about": {{
+    "title": "",
     "paragraphs": []
+  }},
+  "trust": {{
+    "title": "",
+    "items": []
   }},
   "services": {{
     "title": "",
     "items": [
+      {{
+        "title": "",
+        "description": "",
+        "image": null
+      }}
+    ]
+  }},
+  "process": {{
+    "title": "",
+    "steps": [
       {{
         "title": "",
         "description": ""
@@ -158,16 +246,186 @@ Return STRICT JSON ONLY with this shape:
     "quote": "",
     "author": ""
   }},
+  "faq": {{
+    "title": "",
+    "items": [
+      {{
+        "q": "",
+        "a": ""
+      }}
+    ]
+  }},
   "cta": {{
     "headline": "",
     "subheadline": "",
     "button": ""
   }},
+  "contact": {{
+    "phone": "",
+    "email": "",
+    "address": ""
+  }},
   "footer": {{
     "tagline": ""
-  }}
+  }},
+  "image_slots": [
+    {{
+      "id": "hero",
+      "label": "Hero image",
+      "recommended_prompt": "",
+      "placement": "hero",
+      "aspect_ratio": "16:9",
+      "optional": true
+    }}
+  ],
+  "ai_todos": []
 }}
+
+Important:
+- contact fields MUST be empty strings.
+- image fields MUST be either null or a string URL (but you can set them to null).
+- image_slots should propose 3 to 8 good places for images for this business type.
+- ai_todos should be short and practical (5 to 10 items max).
 """
+
+
+def _coerce_content_minimums(intent: Dict[str, Any], content: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Ensure no critical keys are missing / wrong type.
+    Keeps older/newer model output safe.
+    """
+    bn = (content.get("business_name") or "").strip() or (intent.get("business_name") or "").strip() or "Your Business"
+    goal = (intent.get("primary_goal") or "Get started").strip()
+
+    # Basic structure
+    content.setdefault("business_name", bn)
+    content.setdefault("tagline", "")
+
+    content.setdefault("hero", {})
+    content["hero"].setdefault("headline", bn)
+    content["hero"].setdefault("subheadline", "A simple, reliable solution for customers who want it done right.")
+    content["hero"].setdefault("cta_text", goal)
+    if "image" not in content["hero"]:
+        content["hero"]["image"] = None
+
+    content.setdefault("highlight", {})
+    content["highlight"].setdefault("headline", "Simple, fast, and done right.")
+    content["highlight"].setdefault("subheadline", "Clear communication, quality work, and a great experience end-to-end.")
+
+    content.setdefault("about", {})
+    content["about"].setdefault("title", "About")
+    if not isinstance(content["about"].get("paragraphs"), list):
+        content["about"]["paragraphs"] = []
+    if len(content["about"]["paragraphs"]) == 0:
+        content["about"]["paragraphs"] = [
+            "We focus on doing the basics extremely well: quality work, clear pricing, and a smooth experience.",
+            "From the first message to the final result, we keep things simple, honest, and dependable.",
+        ]
+
+    content.setdefault("trust", {})
+    content["trust"].setdefault("title", "Why choose us")
+    if not isinstance(content["trust"].get("items"), list) or len(content["trust"]["items"]) == 0:
+        content["trust"]["items"] = [
+            "Fast response and clear next steps",
+            "Quality you can see and feel",
+            "No surprises — just honest work",
+        ]
+
+    content.setdefault("services", {})
+    content["services"].setdefault("title", "Services")
+    if not isinstance(content["services"].get("items"), list) or len(content["services"]["items"]) == 0:
+        content["services"]["items"] = [
+            {"title": s, "description": "Delivered with care and attention to detail.", "image": None}
+            for s in (intent.get("services") or GENERIC_SERVICES)
+        ]
+    else:
+        # ensure service items have image key
+        for it in content["services"]["items"]:
+            if isinstance(it, dict) and "image" not in it:
+                it["image"] = None
+
+    content.setdefault("process", {})
+    content["process"].setdefault("title", "How it works")
+    if not isinstance(content["process"].get("steps"), list) or len(content["process"]["steps"]) == 0:
+        content["process"]["steps"] = [
+            {"title": "Reach out", "description": "Send a short message about what you need."},
+            {"title": "Get a plan", "description": "We reply with clear options and next steps."},
+            {"title": "Get it done", "description": "We deliver quickly, cleanly, and professionally."},
+        ]
+
+    content.setdefault("testimonial", {})
+    content["testimonial"].setdefault("quote", "“Professional, fast, and easy to work with.”")
+    content["testimonial"].setdefault("author", "Happy customer")
+
+    content.setdefault("faq", {})
+    content["faq"].setdefault("title", "FAQ")
+    if not isinstance(content["faq"].get("items"), list) or len(content["faq"]["items"]) == 0:
+        content["faq"]["items"] = [
+            {"q": "How fast can I get started?", "a": "Usually the same day — send a message and we’ll take it from there."},
+            {"q": "Do you offer flexible options?", "a": "Yes. We tailor it to what you actually need, without overcomplicating things."},
+            {"q": "Can I make changes later?", "a": "Absolutely. You can update details anytime."},
+        ]
+
+    content.setdefault("cta", {})
+    content["cta"].setdefault("headline", "Ready to get started?")
+    content["cta"].setdefault("subheadline", "Send a message and we’ll respond quickly with the next step.")
+    content["cta"].setdefault("button", goal)
+
+    # Contact MUST be empty strings
+    content.setdefault("contact", {})
+    content["contact"]["phone"] = ""
+    content["contact"]["email"] = ""
+    content["contact"]["address"] = ""
+
+    content.setdefault("footer", {})
+    content["footer"].setdefault("tagline", f"{bn} — built for results.")
+
+    # Image slots
+    slots = content.get("image_slots")
+    if not isinstance(slots, list) or len(slots) == 0:
+        content["image_slots"] = [
+            {
+                "id": "hero",
+                "label": "Hero image",
+                "recommended_prompt": f"high quality photo that fits {intent.get('raw_prompt','').strip()}",
+                "placement": "hero",
+                "aspect_ratio": "16:9",
+                "optional": True,
+            },
+            {
+                "id": "about",
+                "label": "About image",
+                "recommended_prompt": "warm, authentic photo of the team or the workspace",
+                "placement": "about",
+                "aspect_ratio": "4:3",
+                "optional": True,
+            },
+            {
+                "id": "services_1",
+                "label": "Service image 1",
+                "recommended_prompt": "high quality photo showing the service in action",
+                "placement": "services",
+                "aspect_ratio": "1:1",
+                "optional": True,
+            },
+        ]
+
+    # Todos
+    todos = content.get("ai_todos")
+    if not isinstance(todos, list):
+        todos = []
+    if len(todos) == 0:
+        content["ai_todos"] = [
+            "Add phone number",
+            "Add email address",
+            "Add address or city",
+            "Add 1–3 real photos",
+            "Tweak the hero headline to match your exact offer",
+        ]
+    else:
+        content["ai_todos"] = [str(t) for t in todos][:10]
+
+    return content
 
 
 def generate_publishable_content(intent: Dict[str, Any]) -> Dict[str, Any]:
@@ -179,44 +437,114 @@ def generate_publishable_content(intent: Dict[str, Any]) -> Dict[str, Any]:
                 business_name=intent["business_name"],
                 goal=intent["primary_goal"],
                 industry=intent["industry"],
+                template=intent["template"],
             ),
-            temperature=0.7,
+            temperature=0.8,
         )
-        return json.loads(response)
+        parsed = json.loads(response)
+        return _coerce_content_minimums(intent, parsed)
     except Exception:
-        # Fallback (never blank)
-        return {
+        # Fallback (never blank, still warm)
+        bn = (intent.get("business_name") or "Your Business").strip() or "Your Business"
+        goal = (intent.get("primary_goal") or "Get started").strip() or "Get started"
+
+        fallback = {
+            "business_name": bn,
+            "tagline": "Simple, reliable service — done right.",
             "hero": {
-                "headline": intent["business_name"],
-                "subheadline": "Professional services tailored to your needs.",
-                "cta": intent["primary_goal"],
+                "headline": bn,
+                "subheadline": "Clear communication, quality work, and a smooth experience from start to finish.",
+                "cta_text": goal,
+                "image": None,
+            },
+            "highlight": {
+                "headline": "Warm service. Real results.",
+                "subheadline": "We keep it simple — and we deliver what we promise.",
             },
             "about": {
+                "title": "About",
                 "paragraphs": [
-                    "We help customers achieve real results with reliable, high-quality service.",
-                    "Our focus is clarity, quality, and long-term value.",
-                ]
+                    "We focus on what customers actually want: a clear plan, great quality, and zero hassle.",
+                    "Whether it’s your first time or you’ve tried other options before, we make the process easy.",
+                ],
+            },
+            "trust": {
+                "title": "Why choose us",
+                "items": [
+                    "Fast response and clear next steps",
+                    "Quality you can see and feel",
+                    "Honest pricing and no surprises",
+                ],
             },
             "services": {
-                "title": "Our services",
+                "title": "Services",
                 "items": [
-                    {"title": s, "description": "Delivered with care and expertise."}
-                    for s in intent["services"]
+                    {"title": s, "description": "Delivered with care and attention to detail.", "image": None}
+                    for s in (intent.get("services") or GENERIC_SERVICES)
+                ],
+            },
+            "process": {
+                "title": "How it works",
+                "steps": [
+                    {"title": "Reach out", "description": "Send a short message about what you need."},
+                    {"title": "Get a plan", "description": "We reply with clear options and next steps."},
+                    {"title": "Get it done", "description": "We deliver quickly, cleanly, and professionally."},
                 ],
             },
             "testimonial": {
-                "quote": "Professional, reliable, and easy to work with.",
+                "quote": "“Professional, fast, and easy to work with.”",
                 "author": "Happy customer",
+            },
+            "faq": {
+                "title": "FAQ",
+                "items": [
+                    {"q": "How fast can I get started?", "a": "Usually the same day — send a message and we’ll take it from there."},
+                    {"q": "Do you offer flexible options?", "a": "Yes. We tailor it to what you actually need, without overcomplicating things."},
+                    {"q": "Can I update the site later?", "a": "Absolutely — you can edit anytime."},
+                ],
             },
             "cta": {
                 "headline": "Ready to get started?",
-                "subheadline": "Get in touch and take the next step.",
-                "button": intent["primary_goal"],
+                "subheadline": "Send a message and we’ll respond quickly with the next step.",
+                "button": goal,
             },
-            "footer": {
-                "tagline": f"{intent['business_name']} — built for results.",
-            },
+            "contact": {"phone": "", "email": "", "address": ""},
+            "footer": {"tagline": f"{bn} — built for results."},
+            "image_slots": [
+                {
+                    "id": "hero",
+                    "label": "Hero image",
+                    "recommended_prompt": "high quality hero photo that fits the business",
+                    "placement": "hero",
+                    "aspect_ratio": "16:9",
+                    "optional": True,
+                },
+                {
+                    "id": "about",
+                    "label": "About image",
+                    "recommended_prompt": "warm photo of team, workspace, or product",
+                    "placement": "about",
+                    "aspect_ratio": "4:3",
+                    "optional": True,
+                },
+                {
+                    "id": "services_1",
+                    "label": "Service image 1",
+                    "recommended_prompt": "photo showing the service in action",
+                    "placement": "services",
+                    "aspect_ratio": "1:1",
+                    "optional": True,
+                },
+            ],
+            "ai_todos": [
+                "Add phone number",
+                "Add email address",
+                "Add address or city",
+                "Add 1–3 real photos",
+            ],
         }
+
+        return _coerce_content_minimums(intent, fallback)
 
 
 # ======================================================
