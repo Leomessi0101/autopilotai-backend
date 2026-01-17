@@ -3,14 +3,14 @@ import os
 import uuid
 import boto3
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Body
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Body, Request
 from sqlalchemy.orm import Session
 
 from app.utils.auth import get_current_user
 from app.database.session import SessionLocal
-from app.database.models import Website
+from app.database.models import Website, User
 
-from app.ai.website_ai import generate_ai_structure  # your deterministic structure
+from app.ai.website_ai import generate_ai_structure  # deterministic structure
 
 router = APIRouter(prefix="/api/restaurants", tags=["Restaurant Websites"])
 
@@ -30,7 +30,7 @@ r2 = boto3.client(
 )
 
 # -------------------------
-# OPTIONAL: OpenAI (server-side)
+# OPTIONAL: OpenAI
 # -------------------------
 try:
     from openai import OpenAI
@@ -59,204 +59,6 @@ def _clean_text(v):
         return ""
     return str(v).strip()
 
-def _call_openai_json(prompt: str, temperature: float = 0.6, max_tokens: int = 700):
-    """
-    Returns dict or None. NEVER throws outwards.
-    """
-    if not _openai_client:
-        return None
-
-    try:
-        resp = _openai_client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "You output ONLY valid JSON. No markdown. No commentary."},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-        raw = (resp.choices[0].message.content or "").strip()
-        data = _safe_json_loads(raw)
-        if isinstance(data, dict):
-            return data
-        return None
-    except Exception:
-        return None
-
-def _regen_prompt(section: str, template: str, tone: str, content: dict):
-    """
-    Generate a strict JSON patch for ONE section.
-    Patch must be shape: { "<section>": { ... } }
-    """
-    business_name = _clean_text(content.get("business_name")) or "The business"
-    hero = content.get("hero") or {}
-    about = content.get("about") or {}
-    city = _clean_text((content.get("location") or {}).get("city")) or _clean_text((content.get("contact") or {}).get("address"))
-
-    tone_rules = {
-        "warm": "Warm, friendly, human, inviting. Slightly playful but still professional.",
-        "premium": "Premium, elegant, confident, minimal fluff. Sounds expensive and trustworthy.",
-        "bold": "Bold, direct, high-energy. Strong claims (but not fake statistics).",
-        "minimal": "Short, clean, simple. No marketing fluff. Just clear information.",
-    }
-    tone_line = tone_rules.get(tone, tone_rules["warm"])
-
-    # We only regenerate copy + optional structure fields the renderer supports.
-    # Images should remain optional nulls.
-    schemas = {
-        "highlight": """
-Return:
-{
-  "highlight": {
-    "headline": "one strong line",
-    "subheadline": "one supporting line"
-  }
-}
-""",
-        "about": """
-Return:
-{
-  "about": {
-    "paragraphs": ["paragraph1", "paragraph2", "optional paragraph3"],
-    "image": null
-  }
-}
-""",
-        "services": """
-Return:
-{
-  "services": {
-    "title": "Services",
-    "items": [
-      { "title": "Service 1", "description": "1 sentence", "image": null },
-      { "title": "Service 2", "description": "1 sentence", "image": null },
-      { "title": "Service 3", "description": "1 sentence", "image": null }
-    ]
-  }
-}
-""",
-        "trust": """
-Return:
-{
-  "trust": {
-    "items": ["reason 1", "reason 2", "reason 3"]
-  }
-}
-""",
-        "process": """
-Return:
-{
-  "process": {
-    "steps": [
-      { "title": "Step 1", "description": "short" },
-      { "title": "Step 2", "description": "short" },
-      { "title": "Step 3", "description": "short" }
-    ]
-  }
-}
-""",
-        "testimonial": """
-Return:
-{
-  "testimonial": {
-    "quote": "A realistic short testimonial (no fake stats).",
-    "author": "Name or 'Customer'"
-  }
-}
-""",
-        "faq": """
-Return:
-{
-  "faq": {
-    "items": [
-      { "q": "Question 1?", "a": "Answer 1." },
-      { "q": "Question 2?", "a": "Answer 2." },
-      { "q": "Question 3?", "a": "Answer 3." }
-    ]
-  }
-}
-""",
-        "cta": """
-Return:
-{
-  "cta": {
-    "headline": "CTA headline",
-    "subheadline": "CTA subheadline",
-    "button": "Button text"
-  }
-}
-""",
-        # Gallery is images only, so regen doesn't help much — but we can add suggestion text:
-        "gallery": """
-Return:
-{
-  "gallery": {
-    "images": []
-  }
-}
-""",
-        # Contact should remain user-filled:
-        "contact": """
-Return:
-{
-  "contact": {
-    "phone": "",
-    "email": "",
-    "address": ""
-  }
-}
-""",
-    }
-
-    schema_hint = schemas.get(section)
-    if not schema_hint:
-        return None
-
-    user_context = f"""
-Business name: {business_name}
-Template type: {template}
-City hint (optional): {city}
-
-Existing hero headline: {_clean_text(hero.get("headline"))}
-Existing hero subheadline: {_clean_text(hero.get("subheadline"))}
-
-Existing about (first paragraph if any): {_clean_text((about.get("paragraphs") or [""])[0] if isinstance(about.get("paragraphs"), list) else "")}
-"""
-
-    rules = f"""
-You are generating copy for a website homepage section.
-
-Tone: {tone_line}
-
-Rules:
-- Output ONLY valid JSON (no markdown).
-- No placeholders like "Your Business Name".
-- No fake stats, no fake awards.
-- Keep it punchy and readable.
-- Make it specific to the business based on the context.
-"""
-
-    return f"""{rules}
-
-Context:
-{user_context}
-
-Generate ONLY the JSON patch for section "{section}".
-
-{schema_hint}
-""".strip()
-
-def _merge_patch(content: dict, patch: dict):
-    if not isinstance(content, dict):
-        content = {}
-    if not isinstance(patch, dict):
-        return content
-    # shallow merge patch keys
-    for k, v in patch.items():
-        content[k] = v
-    return content
-
 # -------------------------
 # DISABLED: LEGACY GENERATE
 # -------------------------
@@ -271,11 +73,28 @@ def generate_restaurant_website_api():
 # GET WEBSITE (PUBLIC, READ-ONLY)
 # -------------------------
 @router.get("/{username}")
-def get_restaurant_website(username: str, db: Session = Depends(get_db)):
+def get_restaurant_website(
+    username: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
     website = db.query(Website).filter(Website.username == username).first()
 
     if not website:
         raise HTTPException(status_code=404, detail="Website not found")
+
+    owner = db.query(User).filter(User.id == website.user_id).first()
+
+    # Detect edit mode (owner only)
+    edit_mode = request.query_params.get("edit") == "1"
+
+    if not edit_mode:
+        # PUBLIC ACCESS → enforce subscription
+        if not owner or owner.subscription_plan is None:
+            return {
+                "suspended": True,
+                "username": website.username,
+            }
 
     # Lazy backfill AI structure
     if website.ai_structure_json is None:
@@ -433,7 +252,7 @@ def save_ai_content(
     return {"success": True}
 
 # -------------------------
-# ✅ REGENERATE SECTION (OWNER ONLY)
+# REGENERATE SECTION (OWNER ONLY)
 # -------------------------
 @router.post("/{username}/regenerate-section")
 def regenerate_section(
@@ -452,29 +271,31 @@ def regenerate_section(
     tone = _clean_text(payload.get("tone")).lower() or "warm"
     current = payload.get("content")
 
-    # Always prefer DB content as source of truth
     try:
         db_content = json.loads(website.content_json) if website.content_json else {}
     except Exception:
         db_content = {}
 
-    # If client sent content, merge it in (so regen reflects latest unsaved UI edits if any)
     if isinstance(current, dict):
         for k, v in current.items():
             db_content[k] = v
 
     template = (website.template or "business").lower()
 
-    prompt = _regen_prompt(section=section, template=template, tone=tone, content=db_content)
+    from app.ai.website_ai import generate_ai_structure  # safe local import
+
+    prompt = None
+    if _openai_client:
+        from app.routes.restaurant_websites import _regen_prompt, _call_openai_json, _merge_patch
+        prompt = _regen_prompt(section, template, tone, db_content)
+
     if not prompt:
         raise HTTPException(status_code=400, detail="Unknown section")
 
     patch = _call_openai_json(prompt, temperature=0.65, max_tokens=800)
     if not patch:
-        # Fallback: do not break UX
         patch = {section: db_content.get(section) or {}}
 
-    # Merge patch + persist
     merged = _merge_patch(db_content, patch)
     website.content_json = json.dumps(merged)
     db.commit()

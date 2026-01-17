@@ -12,23 +12,43 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
+
     name = Column(String, nullable=False)
     email = Column(String, unique=True, nullable=False)
     password = Column(String, nullable=False)
 
-    subscription_plan = Column(String, default="basic")
+    # --------------------------
+    # SUBSCRIPTION / BILLING
+    # --------------------------
+    subscription_plan = Column(String, default="free")  # free | starter | pro
+
+    # Website builder rules
+    can_publish = Column(Boolean, default=False)
+    max_pages = Column(Integer, default=1)
+
+    # --------------------------
+    # LEGACY AI USAGE (KEEP)
+    # --------------------------
     monthly_limit = Column(Integer, nullable=True, default=50)
     used_generations = Column(Integer, default=0)
-
     last_reset = Column(DateTime, default=datetime.utcnow)
 
+    # Stripe
+    stripe_customer_id = Column(String, nullable=True)
+    stripe_subscription_id = Column(String, nullable=True)
+
+    # --------------------------
+    # AUTH / RESET
+    # --------------------------
     reset_token = Column(String, nullable=True)
     reset_token_expires = Column(DateTime, nullable=True)
 
+    # --------------------------
+    # RELATIONSHIPS
+    # --------------------------
     profile = relationship("Profile", back_populates="user", uselist=False)
     saved_content = relationship("SavedContent", back_populates="user")
     saved_images = relationship("SavedImage", back_populates="user")
-
     websites = relationship("Website", back_populates="user")
 
 
@@ -69,6 +89,7 @@ class SavedContent(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
+
     content_type = Column(String)
     prompt = Column(String)
     result = Column(String)
@@ -105,7 +126,9 @@ class DashboardSettings(Base):
 
     stocks_json = Column(Text, default="[]")
     cryptos_json = Column(Text, default='["BTC","ETH","SOL"]')
-    currency_pairs_json = Column(Text, default='["USD:THB","EUR:THB","NOK:THB","BTC:USD"]')
+    currency_pairs_json = Column(
+        Text, default='["USD:THB","EUR:THB","NOK:THB","BTC:USD"]'
+    )
     city = Column(String, nullable=True)
 
     widgets_order_json = Column(Text, default="[]")
@@ -142,22 +165,22 @@ class Website(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
-    # public URL username (your existing system)
+    # public URL username
     username = Column(String, unique=True, index=True, nullable=False)
 
-    # existing builder
+    # builder
     template = Column(String, nullable=False)
     content_json = Column(Text, nullable=False)
 
-    # NEW: AI layout system
+    # AI layout system
     ai_structure_json = Column(Text, nullable=True)
     ai_version = Column(Integer, default=1)
 
-    # NEW: publishing
+    # publishing
     publish_status = Column(String, default="draft")  # draft | published
     last_published_at = Column(DateTime, nullable=True)
 
-    # NEW: custom domain
+    # custom domain
     custom_domain = Column(String, unique=True, nullable=True)
     domain_verified = Column(Boolean, default=False)
 
