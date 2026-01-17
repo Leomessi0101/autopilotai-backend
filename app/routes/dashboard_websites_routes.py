@@ -271,6 +271,87 @@ def infer_ai_input_from_prompt(prompt: str) -> dict:
         "raw_prompt": prompt,
     }
 
+def _is_empty_value(v) -> bool:
+    if v is None:
+        return True
+    if isinstance(v, str) and not v.strip():
+        return True
+    if isinstance(v, (list, tuple, dict)) and len(v) == 0:
+        return True
+    return False
+
+
+def _deep_merge_defaults(defaults: dict, incoming: dict) -> dict:
+    """
+    Deep merge where `incoming` overrides `defaults` ONLY when it has a real value.
+    - Keeps all keys from defaults
+    - Uses incoming values when present and non-empty
+    - Recursively merges dicts
+    """
+    if not isinstance(defaults, dict):
+        return incoming if not _is_empty_value(incoming) else defaults
+
+    out = dict(defaults)
+
+    if not isinstance(incoming, dict):
+        return out
+
+    for k, v in incoming.items():
+        if k not in out:
+            # accept new keys from incoming if they aren't empty
+            if not _is_empty_value(v):
+                out[k] = v
+            continue
+
+        dv = out.get(k)
+
+        # recurse dicts
+        if isinstance(dv, dict) and isinstance(v, dict):
+            out[k] = _deep_merge_defaults(dv, v)
+            continue
+
+        # merge lists: if incoming list has items, use it; else keep default
+        if isinstance(dv, list) and isinstance(v, list):
+            out[k] = v if len(v) > 0 else dv
+            continue
+
+        # normal scalar: only override if incoming is not empty
+        if not _is_empty_value(v):
+            out[k] = v
+
+    return out
+
+
+def _normalize_full_content(ai: dict, defaults: dict) -> dict:
+    """
+    Guarantees the final content has a full schema:
+    - start with defaults (complete)
+    - merge AI (partial)
+    - ensure required containers exist
+    """
+    ai = ai if isinstance(ai, dict) else {}
+    defaults = defaults if isinstance(defaults, dict) else {}
+
+    merged = _deep_merge_defaults(defaults, ai)
+
+    # hard guarantees for containers your frontend expects
+    if "hero" not in merged or not isinstance(merged["hero"], dict):
+        merged["hero"] = {}
+    if "about" not in merged or not isinstance(merged["about"], dict):
+        merged["about"] = {}
+    if "contact" not in merged or not isinstance(merged["contact"], dict):
+        merged["contact"] = {}
+    if "location" not in merged or not isinstance(merged["location"], dict):
+        merged["location"] = {}
+
+    # ensure about paragraphs is a list
+    ap = merged["about"].get("paragraphs")
+    if not isinstance(ap, list):
+        merged["about"]["paragraphs"] = []
+
+    return merged
+
+
 
 # =========================
 # DEFAULTS (FULL BUILDER COVERAGE)
@@ -563,6 +644,7 @@ Rules:
         print("OpenAI content generation failed:", str(e))
         return None
 
+
 # =========================
 # CREATE WEBSITE (CANONICAL)
 # =========================
@@ -595,6 +677,9 @@ def create_website(
     if db.query(Website).filter(Website.username == username).first():
         raise HTTPException(status_code=400, detail="Username already taken")
 
+    # -------------------------
+    # AI INPUT
+    # -------------------------
     ai_input = infer_ai_input_from_prompt(prompt)
     template = ai_input["business_type"]
 
@@ -609,21 +694,31 @@ def create_website(
         version=1,
     )
 
-    # Inject plan metadata (NO DB schema changes)
     structure["plan"] = {
         "name": plan,
         "max_pages": max_pages,
         "can_publish": plan in ("starter", "pro"),
     }
 
-    # Build strong defaults first (full schema)
+    # -------------------------
+    # CONTENT GENERATION (IMPORTANT)
+    # -------------------------
     defaults = build_default_content(template, ai_input, username)
 
-    # Try OpenAI, then normalize/patch to guarantee full coverage
-    ai_content = ai_generate_content_with_openai(template, ai_input, username) or {}
-    content = _normalize_full_content(ai_content, defaults)
+    ai_content = ai_generate_content_with_openai(
+        template=template,
+        ai_input=ai_input,
+        username=username,
+    )
 
-    # Publishing status is tied to subscription plan
+    content = _normalize_full_content(
+        ai=ai_content or {},
+        defaults=defaults,
+    )
+
+    # -------------------------
+    # SAVE WEBSITE
+    # -------------------------
     publish_status = "published" if plan in ("starter", "pro") else "draft"
 
     site = Website(
