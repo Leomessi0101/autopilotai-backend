@@ -1,11 +1,11 @@
-from fastapi import APIRouter, HTTPException, Request, Query
+from fastapi import APIRouter, HTTPException, Request
 import stripe
 import os
 from sqlalchemy.orm import Session
-from jose import jwt, JWTError
-
 from app.database.session import SessionLocal
 from app.database.models import User
+from jose import jwt, JWTError
+from fastapi import Query
 
 router = APIRouter()
 
@@ -58,10 +58,14 @@ def create_checkout_session(
     plan: str = Query(...),
     request: Request = None,
 ):
+    # ✅ ALLOW CORS PREFLIGHT
+    if request.method == "OPTIONS":
+        return {}
+
     plan = plan.lower()
 
     if plan not in PRICE_IDS or not PRICE_IDS[plan]:
-        raise HTTPException(status_code=400, detail="Invalid plan")
+        raise HTTPException(400, "Invalid or missing price ID for plan")
 
     user = get_current_user_from_request(request)
 
@@ -84,7 +88,7 @@ def create_checkout_session(
 
     except Exception as e:
         print("STRIPE ERROR:", str(e))
-        raise HTTPException(status_code=500, detail="Stripe checkout failed")
+        raise HTTPException(500, "Stripe checkout failed")
 
 
 # -------------------- STRIPE WEBHOOK --------------------
@@ -94,10 +98,12 @@ async def stripe_webhook(request: Request):
     sig_header = request.headers.get("stripe-signature")
 
     try:
-        event = stripe.Webhook.construct_event(payload, sig_header, WEBHOOK_SECRET)
+        event = stripe.Webhook.construct_event(
+            payload, sig_header, WEBHOOK_SECRET
+        )
     except Exception as e:
         print("Webhook signature error:", e)
-        raise HTTPException(status_code=400, detail="Invalid webhook signature")
+        raise HTTPException(400, "Invalid webhook signature")
 
     db: Session = SessionLocal()
 
@@ -105,54 +111,24 @@ async def stripe_webhook(request: Request):
         event_type = event["type"]
         data = event["data"]["object"]
 
-        # -------------------- CHECKOUT COMPLETED --------------------
         if event_type == "checkout.session.completed":
             user_id = int(data["metadata"]["user_id"])
             plan = data["metadata"]["plan"]
 
             user = db.query(User).filter(User.id == user_id).first()
-            if not user:
-                return {"status": "ok"}
-
-            user.subscription_plan = plan
-            user.stripe_customer_id = data.get("customer")
-            user.stripe_subscription_id = data.get("subscription")
-            user.used_generations = 0
-
-            if plan == "starter":
-                user.can_publish = True
-                user.max_pages = 1
-            elif plan == "pro":
-                user.can_publish = True
-                user.max_pages = 3
-
-            db.commit()
-            print(f"✅ User {user.id} subscribed to {plan}")
-
-        # -------------------- SUBSCRIPTION UPDATED --------------------
-        elif event_type == "customer.subscription.updated":
-            subscription = data
-            customer_id = subscription.get("customer")
-            status = subscription.get("status")
-
-            user = db.query(User).filter(
-                User.stripe_customer_id == customer_id
-            ).first()
-
             if user:
-                if status in ["active", "trialing"]:
-                    user.can_publish = True
-                    db.commit()
-                    print(f"ℹ️ Subscription active for user {user.id}")
-                else:
-                    user.can_publish = False
-                    db.commit()
-                    print(f"⚠️ Subscription paused for user {user.id}")
+                user.subscription_plan = plan
+                user.can_publish = True
+                user.max_pages = 1 if plan == "starter" else 3
+                user.stripe_customer_id = data.get("customer")
+                user.stripe_subscription_id = data.get("subscription")
+                db.commit()
 
-        # -------------------- SUBSCRIPTION DELETED --------------------
-        elif event_type == "customer.subscription.deleted":
+        elif event_type in (
+            "customer.subscription.deleted",
+            "invoice.payment_failed",
+        ):
             customer_id = data.get("customer")
-
             user = db.query(User).filter(
                 User.stripe_customer_id == customer_id
             ).first()
@@ -161,35 +137,7 @@ async def stripe_webhook(request: Request):
                 user.subscription_plan = "free"
                 user.can_publish = False
                 user.max_pages = 1
-                user.stripe_subscription_id = None
                 db.commit()
-                print(f"❌ Subscription cancelled for user {user.id}")
-
-        # -------------------- PAYMENT FAILED --------------------
-        elif event_type == "invoice.payment_failed":
-            customer_id = data.get("customer")
-
-            user = db.query(User).filter(
-                User.stripe_customer_id == customer_id
-            ).first()
-
-            if user:
-                user.can_publish = False
-                db.commit()
-                print(f"❌ Payment failed — publishing disabled for user {user.id}")
-
-        # -------------------- PAYMENT SUCCEEDED --------------------
-        elif event_type == "invoice.payment_succeeded":
-            customer_id = data.get("customer")
-
-            user = db.query(User).filter(
-                User.stripe_customer_id == customer_id
-            ).first()
-
-            if user and user.subscription_plan in ["starter", "pro"]:
-                user.can_publish = True
-                db.commit()
-                print(f"✅ Payment recovered for user {user.id}")
 
     finally:
         db.close()
@@ -200,10 +148,11 @@ async def stripe_webhook(request: Request):
 # -------------------- CUSTOMER BILLING PORTAL --------------------
 @router.post("/customer-portal")
 def create_customer_portal(request: Request):
+
     user = get_current_user_from_request(request)
 
     if not user.email:
-        raise HTTPException(status_code=400, detail="No email on account")
+        raise HTTPException(400, "No email on account")
 
     try:
         customers = stripe.Customer.list(email=user.email).data
@@ -216,11 +165,11 @@ def create_customer_portal(request: Request):
 
         session = stripe.billing_portal.Session.create(
             customer=customer_id,
-            return_url=f"{FRONTEND_URL}/billing",
+            return_url=FRONTEND_URL + "/billing"
         )
 
         return {"url": session.url}
 
     except Exception as e:
         print("STRIPE PORTAL ERROR:", e)
-        raise HTTPException(status_code=500, detail="Could not open billing portal")
+        raise HTTPException(500, "Could not open billing portal")
