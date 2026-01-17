@@ -5,10 +5,12 @@ import boto3
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Body, Request
 from sqlalchemy.orm import Session
+from jose import jwt
 
 from app.utils.auth import get_current_user
 from app.database.session import SessionLocal
 from app.database.models import Website, User
+from app.routes.stripe_routes import SECRET_KEY
 
 from app.ai.website_ai import generate_ai_structure  # deterministic structure
 
@@ -70,7 +72,7 @@ def generate_restaurant_website_api():
     )
 
 # -------------------------
-# GET WEBSITE (PUBLIC / OWNER PREVIEW)
+# GET WEBSITE (PUBLIC / OWNER)
 # -------------------------
 @router.get("/{username}")
 def get_restaurant_website(
@@ -79,30 +81,39 @@ def get_restaurant_website(
     db: Session = Depends(get_db),
 ):
     website = db.query(Website).filter(Website.username == username).first()
+
     if not website:
         raise HTTPException(status_code=404, detail="Website not found")
 
-    # Detect owner (optional auth)
-    owner_user = None
-    try:
-        owner_user = get_current_user(request)
-    except Exception:
-        pass
-
-    is_owner = owner_user and owner_user.id == website.user_id
-    edit_mode = request.query_params.get("edit") == "1"
+    owner = db.query(User).filter(User.id == website.user_id).first()
 
     # -------------------------
-    # PUBLISHING ENFORCEMENT
+    # OWNER DETECTION (JWT)
+    # -------------------------
+    is_owner = False
+    auth_header = request.headers.get("authorization")
+
+    if auth_header and auth_header.lower().startswith("bearer "):
+        token = auth_header.split(" ")[1]
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+            is_owner = payload.get("user_id") == website.user_id
+        except Exception:
+            pass
+
+    # -------------------------
+    # PUBLIC ACCESS → ENFORCE SUBSCRIPTION
     # -------------------------
     if not is_owner:
-        if website.publish_status != "published":
-            raise HTTPException(
-                status_code=403,
-                detail="This website is not published yet",
-            )
+        if not owner or not owner.subscription_plan:
+            return {
+                "suspended": True,
+                "username": website.username,
+            }
 
-    # Lazy backfill AI structure
+    # -------------------------
+    # LAZY BACKFILL AI STRUCTURE
+    # -------------------------
     if website.ai_structure_json is None:
         try:
             structure = generate_ai_structure(
@@ -120,7 +131,6 @@ def get_restaurant_website(
         "content_json": website.content_json,
         "ai_structure_json": website.ai_structure_json,
         "user_id": website.user_id,
-        "edit_mode": bool(is_owner and edit_mode),
     }
 
 # -------------------------
@@ -134,8 +144,10 @@ def save_menu(
     db: Session = Depends(get_db),
 ):
     website = db.query(Website).filter(Website.username == username).first()
+
     if not website:
         raise HTTPException(status_code=404, detail="Website not found")
+
     if website.user_id != user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
@@ -144,17 +156,22 @@ def save_menu(
 
         if "menu" in payload:
             content["menu"] = payload["menu"]
-        if "hero" in payload:
+
+        if "hero" in payload and isinstance(payload["hero"], dict):
             content["hero"] = {**content.get("hero", {}), **payload["hero"]}
-        if "contact" in payload:
+
+        if "contact" in payload and isinstance(payload["contact"], dict):
             content["contact"] = {**content.get("contact", {}), **payload["contact"]}
-        if "location" in payload:
+
+        if "location" in payload and isinstance(payload["location"], dict):
             content["location"] = {**content.get("location", {}), **payload["location"]}
-        if "hours" in payload:
+
+        if "hours" in payload and isinstance(payload["hours"], dict):
             content["hours"] = {**content.get("hours", {}), **payload["hours"]}
 
         website.content_json = json.dumps(content)
         db.commit()
+
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
@@ -162,7 +179,7 @@ def save_menu(
     return {"success": True}
 
 # -------------------------
-# GENERIC CONTENT SAVE (OWNER)
+# SAVE WEBSITE CONTENT (OWNER ONLY) — GENERIC PATCH
 # -------------------------
 @router.post("/{username}/content")
 def save_content(
@@ -172,14 +189,17 @@ def save_content(
     db: Session = Depends(get_db),
 ):
     website = db.query(Website).filter(Website.username == username).first()
+
     if not website:
         raise HTTPException(status_code=404, detail="Website not found")
+
     if website.user_id != user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
     try:
         content = json.loads(website.content_json) if website.content_json else {}
-        content.update(payload)
+        for k, v in payload.items():
+            content[k] = v
         website.content_json = json.dumps(content)
         db.commit()
     except Exception as e:
@@ -189,7 +209,7 @@ def save_content(
     return {"success": True}
 
 # -------------------------
-# IMAGE UPLOAD (OWNER)
+# UPLOAD IMAGE (OWNER ONLY)
 # -------------------------
 @router.post("/{username}/upload-image")
 def upload_menu_image(
@@ -199,8 +219,10 @@ def upload_menu_image(
     db: Session = Depends(get_db),
 ):
     website = db.query(Website).filter(Website.username == username).first()
+
     if not website:
         raise HTTPException(status_code=404, detail="Website not found")
+
     if website.user_id != user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
@@ -218,3 +240,77 @@ def upload_menu_image(
         raise HTTPException(status_code=500, detail=str(e))
 
     return {"url": f"{R2_PUBLIC_BASE_URL}/{key}"}
+
+# -------------------------
+# SAVE AI CONTENT (OWNER ONLY)
+# -------------------------
+@router.post("/{username}/save")
+def save_ai_content(
+    username: str,
+    payload: dict = Body(...),
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    website = db.query(Website).filter(Website.username == username).first()
+
+    if not website:
+        raise HTTPException(status_code=404, detail="Website not found")
+
+    if website.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    try:
+        website.content_json = json.dumps(payload)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return {"success": True}
+
+# -------------------------
+# REGENERATE SECTION (OWNER ONLY)
+# -------------------------
+@router.post("/{username}/regenerate-section")
+def regenerate_section(
+    username: str,
+    payload: dict = Body(...),
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    website = db.query(Website).filter(Website.username == username).first()
+    if not website:
+        raise HTTPException(status_code=404, detail="Website not found")
+    if website.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    section = _clean_text(payload.get("section")).lower()
+    tone = _clean_text(payload.get("tone")).lower() or "warm"
+    current = payload.get("content")
+
+    try:
+        db_content = json.loads(website.content_json) if website.content_json else {}
+    except Exception:
+        db_content = {}
+
+    if isinstance(current, dict):
+        for k, v in current.items():
+            db_content[k] = v
+
+    template = (website.template or "business").lower()
+
+    from app.routes.restaurant_websites import _regen_prompt, _call_openai_json, _merge_patch
+
+    prompt = _regen_prompt(section, template, tone, db_content)
+    if not prompt:
+        raise HTTPException(status_code=400, detail="Unknown section")
+
+    patch = _call_openai_json(prompt, temperature=0.65, max_tokens=800)
+    if not patch:
+        patch = {section: db_content.get(section) or {}}
+
+    merged = _merge_patch(db_content, patch)
+    website.content_json = json.dumps(merged)
+    db.commit()
+
+    return {"ok": True, "patch": patch}

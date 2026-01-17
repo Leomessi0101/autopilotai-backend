@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 import json
 import re
 import os
-from typing import Optional, Any
+from typing import Optional, Any, Dict
 
 from app.database.session import SessionLocal
 from app.database.models import Website, User
@@ -45,99 +45,114 @@ def _safe_json_loads(s: str) -> Optional[dict]:
         return None
 
 # =========================
-# AI-LITE INFERENCE
+# AI INPUT ENRICHMENT
 # =========================
 
-def infer_ai_input_from_prompt(prompt: str) -> dict:
+def build_ai_brief(prompt: str) -> Dict[str, str]:
+    """
+    Turns a vague user prompt into a strong AI brief.
+    No guessing later — we do it once, cleanly.
+    """
     p = (prompt or "").lower()
 
+    # Business type
     business_type = "business"
     if any(w in p for w in ["restaurant", "pizza", "burger", "cafe", "coffee", "food"]):
         business_type = "restaurant"
 
+    # City extraction
     city = ""
-    city_match = re.search(r"in ([a-zA-Z\s]{2,30})", prompt or "")
+    city_match = re.search(r"in ([a-zA-Z\s]{2,40})", prompt or "")
     if city_match:
         city = city_match.group(1).strip().title()
 
-    goal = "Get started"
+    # Primary goal
+    goal = "Get inquiries"
     if any(w in p for w in ["book", "booking", "appointment"]):
-        goal = "Book now"
-    elif any(w in p for w in ["contact", "call", "lead"]):
-        goal = "Contact us"
+        goal = "Get bookings"
+    elif any(w in p for w in ["call", "contact", "phone"]):
+        goal = "Get calls"
     elif any(w in p for w in ["buy", "order", "sell"]):
-        goal = "Get a quote"
+        goal = "Get quote requests"
 
     return {
         "business_type": business_type,
         "city": city,
-        "primary_goal": goal,
+        "goal": goal,
         "raw_prompt": prompt,
     }
 
 # =========================
-# 🔥 STRICT AI CONTENT GENERATION
+# AI CONTENT GENERATION
 # =========================
 
 def ai_generate_content_with_openai(
-    template: str,
-    ai_input: dict,
+    ai_brief: dict,
     username: str,
+    plan: str,
 ) -> Optional[dict]:
+    """
+    Generates a COMPLETE, publish-ready homepage.
+    Output is strict JSON only.
+    """
 
     if not _openai_client:
         return None
 
-    raw_prompt = _clean_text(ai_input.get("raw_prompt"))
-    if len(raw_prompt) < 10:
-        return None
-
-    city = _clean_text(ai_input.get("city"))
     business_name = username.replace("-", " ").title()
+    city = ai_brief.get("city") or "the local area"
+    goal = ai_brief.get("goal")
+    business_type = ai_brief.get("business_type")
 
     SYSTEM = """
-You generate REAL business websites.
+You are a senior conversion-focused website copywriter.
 
 Rules:
-- No buzzwords
-- No vague language
-- No placeholders
-- No AI mentions
-- Write like this site will be published today
+- Write confident, specific copy
+- Focus on benefits, not features
+- Sound human, local, and trustworthy
+- Assume the website will be published immediately
+- Never ask questions
+- Never use placeholders
+- Return VALID JSON ONLY
 """
 
     USER = f"""
 Business name: {business_name}
-Business type: {template}
+Business type: {business_type}
 City: {city}
+Primary goal: {goal}
+Plan: {plan}
 
-Business description:
-{raw_prompt}
+User description:
+{ai_brief.get("raw_prompt")}
 
-STRICT OUTPUT REQUIREMENTS (JSON ONLY):
+Return STRICT JSON with this structure:
 
 {{
   "hero": {{
     "headline": "",
     "subheadline": "",
-    "cta_text": ""
+    "cta_text": "",
+    "image": null
+  }},
+  "highlight": {{
+    "headline": "",
+    "subheadline": ""
+  }},
+  "about": {{
+    "paragraphs": ["", ""],
+    "image": null
   }},
   "services": {{
+    "title": "",
     "items": [
-      {{ "title": "", "description": "" }},
-      {{ "title": "", "description": "" }},
-      {{ "title": "", "description": "" }}
+      {{ "title": "", "description": "", "image": null }}
     ]
   }},
-  "trust": {{
-    "items": ["", "", ""]
-  }},
-  "process": {{
-    "steps": [
-      {{ "title": "", "description": "" }},
-      {{ "title": "", "description": "" }},
-      {{ "title": "", "description": "" }}
-    ]
+  "testimonial": {{
+    "quote": "",
+    "author": ""
   }},
   "cta": {{
     "headline": "",
@@ -147,15 +162,18 @@ STRICT OUTPUT REQUIREMENTS (JSON ONLY):
   "contact": {{
     "phone": "",
     "email": "",
-    "address": "{city}"
+    "address": "",
+    "city": "{city}"
   }}
 }}
 
-TONE:
-- Clear
-- Local
-- Confident
-- Simple
+Rules:
+- Hero must clearly state the MAIN benefit
+- Services must be outcome-driven
+- CTA must match the primary goal
+- Services: 3–5 items
+- About: 2–3 paragraphs
+- Testimonial must feel realistic
 """
 
     try:
@@ -165,8 +183,8 @@ TONE:
                 {"role": "system", "content": SYSTEM},
                 {"role": "user", "content": USER},
             ],
-            temperature=0.5,
-            max_tokens=900,
+            temperature=0.6,
+            max_tokens=1200,
         )
 
         raw = (resp.choices[0].message.content or "").strip()
@@ -181,50 +199,58 @@ TONE:
         return None
 
 # =========================
-# FALLBACK CONTENT
+# FALLBACK CONTENT (SAFE)
 # =========================
 
-def build_default_content(template: str, ai_input: dict, username: str) -> dict:
-    city = _clean_text(ai_input.get("city"))
+def build_default_content(ai_brief: dict, username: str) -> dict:
     name = username.replace("-", " ").title()
+    city = ai_brief.get("city") or "your area"
 
     return {
         "hero": {
-            "headline": name,
-            "subheadline": f"Professional services in {city}" if city else "Professional services you can trust.",
-            "cta_text": "Get started",
+            "headline": f"{name} — trusted local {ai_brief.get('business_type')}",
+            "subheadline": f"Helping customers in {city} with reliable, professional service.",
+            "cta_text": "Get in touch",
+            "image": None,
+        },
+        "highlight": {
+            "headline": "Why customers choose us",
+            "subheadline": "Clear communication, honest pricing, and results you can trust.",
+        },
+        "about": {
+            "paragraphs": [
+                "We focus on delivering real value and building long-term relationships with our customers.",
+                "Our approach is simple: understand your needs, do the job right, and stand behind our work.",
+            ],
+            "image": None,
         },
         "services": {
+            "title": "Our services",
             "items": [
-                {"title": "Main service", "description": "Reliable and professional service."},
-                {"title": "Fast response", "description": "Quick turnaround and clear communication."},
-                {"title": "Trusted results", "description": "Focused on real outcomes."},
-            ]
+                {"title": "Professional service", "description": "Done right from start to finish.", "image": None},
+                {"title": "Fast response", "description": "Clear communication and quick turnaround.", "image": None},
+                {"title": "Trusted results", "description": "Focused on outcomes that matter.", "image": None},
+            ],
         },
-        "trust": {
-            "items": ["Local business", "Clear pricing", "Trusted quality"]
-        },
-        "process": {
-            "steps": [
-                {"title": "Contact", "description": "Reach out with your needs."},
-                {"title": "Plan", "description": "We agree on next steps."},
-                {"title": "Deliver", "description": "We get the job done."},
-            ]
+        "testimonial": {
+            "quote": "Professional, reliable, and easy to work with.",
+            "author": "Local customer",
         },
         "cta": {
             "headline": "Ready to get started?",
-            "subheadline": "Contact us today.",
-            "button": "Contact",
+            "subheadline": "Contact us today and let’s talk.",
+            "button": "Contact us",
         },
         "contact": {
             "phone": "",
             "email": "",
-            "address": city,
+            "address": "",
+            "city": city,
         },
     }
 
 # =========================
-# CREATE WEBSITE (CANONICAL)
+# CREATE WEBSITE
 # =========================
 
 @router.post("/create")
@@ -233,15 +259,9 @@ def create_website(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """
-    Pricing rules:
-    - free: 1 site, draft only, 1 page
-    - starter: 1 site, published, 1 page
-    - pro: 1 site, published, up to 3 pages
-    """
-
     plan = (user.subscription_plan or "free").lower()
 
+    # One website per user
     if db.query(Website).filter(Website.user_id == user.id).count() >= 1:
         raise HTTPException(status_code=403, detail="Only one website allowed")
 
@@ -254,14 +274,14 @@ def create_website(
     if db.query(Website).filter(Website.username == username).first():
         raise HTTPException(status_code=400, detail="Username already taken")
 
-    ai_input = infer_ai_input_from_prompt(prompt)
-    template = ai_input["business_type"]
+    ai_brief = build_ai_brief(prompt)
+    template = ai_brief["business_type"]
 
     max_pages = 3 if plan == "pro" else 1
 
     structure = generate_ai_structure(
         business_type=template,
-        goal=_clean_text(ai_input.get("primary_goal")) or "conversions",
+        goal=ai_brief["goal"],
         version=1,
     )
 
@@ -272,8 +292,8 @@ def create_website(
     }
 
     content = (
-        ai_generate_content_with_openai(template, ai_input, username)
-        or build_default_content(template, ai_input, username)
+        ai_generate_content_with_openai(ai_brief, username, plan)
+        or build_default_content(ai_brief, username)
     )
 
     site = Website(
@@ -291,7 +311,4 @@ def create_website(
         "ok": True,
         "username": username,
         "redirect": f"/r/{username}?edit=1",
-        "plan": plan,
-        "max_pages": max_pages,
-        "published": plan in ("starter", "pro"),
     }
