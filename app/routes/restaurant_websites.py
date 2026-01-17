@@ -269,8 +269,6 @@ def save_ai_content(
     return {"success": True}
 
 # -------------------------
-# REGENERATE SECTION (OWNER ONLY)
-# -------------------------
 @router.post("/{username}/regenerate-section")
 def regenerate_section(
     username: str,
@@ -279,38 +277,27 @@ def regenerate_section(
     db: Session = Depends(get_db),
 ):
     website = db.query(Website).filter(Website.username == username).first()
+
     if not website:
         raise HTTPException(status_code=404, detail="Website not found")
+
     if website.user_id != user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    section = _clean_text(payload.get("section")).lower()
-    tone = _clean_text(payload.get("tone")).lower() or "warm"
-    current = payload.get("content")
+    section = (payload.get("section") or "").lower()
 
     try:
-        db_content = json.loads(website.content_json) if website.content_json else {}
+        current = json.loads(website.content_json or "{}")
     except Exception:
-        db_content = {}
+        current = {}
 
-    if isinstance(current, dict):
-        for k, v in current.items():
-            db_content[k] = v
+    # 🔒 SAFE FALLBACK: no AI yet, just return existing section
+    if section not in current:
+        return {"ok": True, "patch": {}}
 
-    template = (website.template or "business").lower()
-
-    from app.routes.restaurant_websites import _regen_prompt, _call_openai_json, _merge_patch
-
-    prompt = _regen_prompt(section, template, tone, db_content)
-    if not prompt:
-        raise HTTPException(status_code=400, detail="Unknown section")
-
-    patch = _call_openai_json(prompt, temperature=0.65, max_tokens=800)
-    if not patch:
-        patch = {section: db_content.get(section) or {}}
-
-    merged = _merge_patch(db_content, patch)
-    website.content_json = json.dumps(merged)
-    db.commit()
-
-    return {"ok": True, "patch": patch}
+    return {
+        "ok": True,
+        "patch": {
+            section: current.get(section)
+        },
+    }
