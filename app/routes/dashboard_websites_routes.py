@@ -277,253 +277,291 @@ def infer_ai_input_from_prompt(prompt: str) -> dict:
 # =========================
 
 def build_default_content(template: str, ai_input: dict, username: str) -> dict:
+    """
+    Deterministic fallback if OpenAI is missing/fails.
+    IMPORTANT: Must NOT include placeholders like 'Your Business Name'.
+    """
+    biz_type = (template or ai_input.get("business_type") or "business").lower()
+    city = _clean_text(ai_input.get("city")) or ""
+    goal = _clean_text(ai_input.get("primary_goal")) or "Get started"
+
     name = username.replace("-", " ").title()
-    city = _clean_text(ai_input.get("city"))
-    goal = _clean_text(ai_input.get("primary_goal")) or "Contact us"
 
-    city_line = f" in {city}" if city else ""
-
-    if template == "restaurant":
-        hero_headline = f"{name}{city_line}"
-        hero_sub = "Fresh food, warm atmosphere, and a menu your customers will remember."
-        cta_text = "View menu" if goal.lower().startswith("reserve") is False else goal
-        services_title = "Popular choices"
-        services_items = [
-            {"title": "Signature dishes", "description": "A menu built around flavor, freshness, and consistency.", "image": None},
-            {"title": "Dine-in experience", "description": "Comfortable seating, friendly service, and a relaxed vibe.", "image": None},
-            {"title": "Takeaway & delivery", "description": "Fast, reliable pickup or delivery when you need it.", "image": None},
+    # A little type-specific flavor so every site isn't identical
+    if biz_type == "restaurant":
+        sub = "Fresh food, warm atmosphere, and simple online booking."
+        services = [
+            {"title": "Dine-in", "description": "A comfortable space with great service.", "image": None},
+            {"title": "Takeaway", "description": "Order ahead and pick up fast.", "image": None},
+            {"title": "Catering", "description": "Events, groups, and special occasions.", "image": None},
         ]
-        trust_items = [
-            "Fresh ingredients and consistent quality",
-            "Friendly staff and quick service",
-            "Clear pricing and a welcoming atmosphere",
+        trust = ["Fresh ingredients", "Fast service", "Loved by locals"]
+        cta_head = "Want a table?"
+        cta_sub = "Book in seconds — we’ll confirm quickly."
+        cta_btn = "Book now"
+    elif biz_type == "fitness":
+        sub = "Coaching that builds strength, confidence, and consistency."
+        services = [
+            {"title": "1:1 Coaching", "description": "Personal training tailored to your goals.", "image": None},
+            {"title": "Programs", "description": "Structured plans you can follow weekly.", "image": None},
+            {"title": "Nutrition", "description": "Simple guidance that’s easy to stick to.", "image": None},
         ]
-        process_steps = [
-            {"title": "Choose your favorites", "description": "Browse the menu and pick what you love."},
-            {"title": "Order or reserve", "description": "Reserve a table or place an order in seconds."},
-            {"title": "Enjoy", "description": "Great food, great service — every time."},
+        trust = ["Results-driven", "Friendly coaching", "Clear plan"]
+        cta_head = "Ready to start?"
+        cta_sub = "Send a message — we’ll recommend the best next step."
+        cta_btn = "Get started"
+    elif biz_type == "agency":
+        sub = "Modern marketing that turns attention into customers."
+        services = [
+            {"title": "Paid Ads", "description": "Launch campaigns that convert.", "image": None},
+            {"title": "Content", "description": "Posts & creatives built for growth.", "image": None},
+            {"title": "Landing Pages", "description": "Simple pages that capture leads.", "image": None},
         ]
-        faq_items = [
-            {"q": "Do you take reservations?", "a": "Yes — you can reserve a table through our contact section."},
-            {"q": "Do you offer takeaway or delivery?", "a": "Yes — availability depends on your location and time."},
-            {"q": "Do you have vegetarian options?", "a": "Yes — we offer vegetarian-friendly choices."},
-        ]
-        testimonial = {"quote": "Great food, friendly service, and everything felt easy from start to finish.", "author": "Local customer"}
-        cta = {
-            "headline": "Want to reserve a table?",
-            "subheadline": "Reach out and we’ll confirm quickly.",
-            "button": "Reserve a table",
-        }
+        trust = ["Fast turnaround", "Clear strategy", "Conversion-first"]
+        cta_head = "Want more leads?"
+        cta_sub = "Tell us what you sell — we’ll map the fastest path."
+        cta_btn = "Get a plan"
     else:
-        hero_headline = f"{name}{city_line}"
-        hero_sub = "Clear communication, honest service, and results you can trust."
-        cta_text = goal
-        services_title = "What we do"
-        services_items = [
-            {"title": "Professional service", "description": "Reliable, high-quality work tailored to your needs.", "image": None},
-            {"title": "Clear communication", "description": "You always know what’s happening and what to expect.", "image": None},
-            {"title": "Results that matter", "description": "Focused on outcomes, not unnecessary complexity.", "image": None},
+        sub = "A modern website that turns visitors into customers."
+        services = [
+            {"title": "Consultation", "description": "Clear advice tailored to your needs.", "image": None},
+            {"title": "Delivery", "description": "Fast execution and reliable results.", "image": None},
+            {"title": "Support", "description": "We’re here when you need us.", "image": None},
         ]
-        trust_items = [
-            "Fast response and clear next steps",
-            "Transparent pricing and no surprises",
-            "High-quality work and attention to detail",
-        ]
-        process_steps = [
-            {"title": "Tell us what you need", "description": "A quick message is enough to get started."},
-            {"title": "Get a clear plan", "description": "We outline the next steps and confirm details."},
-            {"title": "We deliver", "description": "High-quality results with clear communication."},
-        ]
-        faq_items = [
-            {"q": "How fast do you respond?", "a": "Typically the same day — often within a few hours."},
-            {"q": "Do you offer fixed pricing?", "a": "Yes — for many requests we can provide a clear quote up front."},
-            {"q": "How do I get started?", "a": "Send a message using the contact section and we’ll guide you."},
-        ]
-        testimonial = {"quote": "Everything was smooth, professional, and easy from start to finish.", "author": "Customer"}
-        cta = {
-            "headline": "Ready to take the next step?",
-            "subheadline": "Send a message and we’ll get back to you quickly.",
-            "button": goal,
-        }
+        trust = ["Clear pricing", "Fast response", "Trusted quality"]
+        cta_head = "Ready to take the next step?"
+        cta_sub = "Send a message — we respond quickly."
+        cta_btn = goal or "Get started"
 
-    defaults = {
+    return {
+        "business_name": name,
         "hero": {
-            "headline": hero_headline,
-            "subheadline": hero_sub,
-            "cta_text": cta_text,
+            "headline": name,
+            "subheadline": sub + (f" Serving {city}." if city else ""),
+            "cta_text": goal or cta_btn,
             "image": None,
         },
         "highlight": {
             "headline": "Make a strong first impression.",
-            "subheadline": "Warm, trustworthy design — plus copy your customers actually understand.",
+            "subheadline": "Warm, trustworthy design — plus real copy customers understand.",
         },
         "about": {
             "paragraphs": [
-                "We keep things simple: clear communication, consistent quality, and a great customer experience.",
-                "If you want a website that looks premium and drives action, you’re in the right place.",
+                "We focus on clarity, quality, and a great customer experience.",
+                "Everything here is editable — change the wording, images, and sections anytime.",
             ],
             "image": None,
         },
         "services": {
-            "title": services_title,
-            "items": services_items,
+            "title": "Services",
+            "items": services,
         },
-        "trust": {
-            "items": trust_items,
-        },
+        "trust": {"items": trust},
         "process": {
-            "steps": process_steps,
+            "steps": [
+                {"title": "Reach out", "description": "Send a message with what you need."},
+                {"title": "Get a plan", "description": "We reply with a simple next step."},
+                {"title": "Get results", "description": "We deliver quickly — and you can edit anytime."},
+            ]
         },
-        "testimonial": testimonial,
+        "testimonial": {
+            "quote": "“Professional, fast, and easy to work with.”",
+            "author": "Happy customer",
+        },
         "faq": {
-            "items": faq_items,
+            "items": [
+                {"q": "How fast can I get started?", "a": "Usually the same day. Send a message and we’ll take it from there."},
+                {"q": "Can I change anything later?", "a": "Yes — you can edit everything and it autosaves."},
+                {"q": "Do I need images?", "a": "No. But adding real photos increases trust and conversions."},
+            ]
         },
-        "cta": cta,
-        "gallery": {
-            "images": [],
-        },
-        "contact": {
-            "phone": "",
-            "email": "",
-            "address": "",
-            "city": city,
-        },
+        "gallery": {"images": []},
+        "cta": {"headline": cta_head, "subheadline": cta_sub, "button": cta_btn},
+        "contact": {"phone": "", "email": "", "address": ""},
+        "location": {"city": city},
+        "_builder": {"tone": "warm", "sections": None, "hidden": []},
     }
-    return defaults
+
 
 
 # =========================
 # OPENAI GENERATION (FULL BUILDER COVERAGE)
 # =========================
 
-def ai_generate_content_with_openai(
-    template: str,
-    ai_input: dict,
-    username: str,
-) -> Optional[dict]:
+def ai_generate_content_with_openai(template: str, ai_input: dict, username: str) -> Optional[dict]:
     """
-    Must return FULL schema coverage for builder sections:
-    hero, highlight, about, services, trust, process, testimonial, faq, cta, gallery, contact
+    Returns a FULL content_json object that matches what your frontend renderer expects.
+    If OpenAI fails or is not configured, return None (so caller can fallback).
     """
     if not _openai_client:
         return None
 
-    prompt_text = _clean_text(ai_input.get("raw_prompt"))
-    if len(prompt_text) < 10:
-        return None
+    biz_type = (template or ai_input.get("business_type") or "business").lower()
+    raw_prompt = _clean_text(ai_input.get("raw_prompt")) or ""
+    city = _clean_text(ai_input.get("city")) or ""
+    inferred_goal = _clean_text(ai_input.get("primary_goal")) or "Get started"
 
-    city = _clean_text(ai_input.get("city"))
-    business_name = username.replace("-", " ").title()
-    goal = _clean_text(ai_input.get("primary_goal")) or "Contact us"
+    # Make a decent default business name from username if model doesn't provide one
+    fallback_name = username.replace("-", " ").title()
 
-    SYSTEM = """
-You are a senior website copywriter.
+    system = (
+        "You generate website copy as strict JSON only.\n"
+        "Return ONLY valid JSON. No markdown. No commentary.\n"
+        "Keep copy realistic, specific, and short.\n"
+        "Avoid placeholders like 'Your Business Name'.\n"
+        "If info is missing, creatively infer plausible details from the prompt.\n"
+    )
 
-Rules:
-- Output STRICT JSON only (no markdown, no commentary).
-- DO NOT use placeholders like "Your Business Name", "Short description".
-- Be specific to the business description.
-- Write like this website is ready to publish.
-- Tone should feel warm, modern, trustworthy.
-- No fake stats or awards.
-"""
+    user = f"""
+Business prompt:
+{raw_prompt}
 
-    USER = f"""
-Business name: {business_name}
-Business type: {template}
-City (if relevant): {city}
-Primary goal CTA: {goal}
+Business type: {biz_type}
+City (if mentioned): {city}
+Primary goal CTA: {inferred_goal}
 
-User description:
-{prompt_text}
-
-Return STRICT JSON with ALL fields present and filled:
-
+Return JSON with EXACT keys (match this schema):
 {{
+  "business_name": "...",
   "hero": {{
-    "headline": "Outcome + who + city (if relevant)",
-    "subheadline": "1–2 sentences, specific",
-    "cta_text": "{goal}",
-    "image": null
+    "headline": "...",
+    "subheadline": "...",
+    "cta_text": "..."
   }},
   "highlight": {{
-    "headline": "short strong line",
-    "subheadline": "supporting line"
+    "headline": "...",
+    "subheadline": "..."
   }},
   "about": {{
-    "paragraphs": ["2–3 short paragraphs"],
+    "paragraphs": ["...", "..."],
     "image": null
   }},
   "services": {{
     "title": "Services",
     "items": [
-      {{ "title": "Service 1", "description": "1 sentence, outcome-based", "image": null }},
-      {{ "title": "Service 2", "description": "1 sentence, outcome-based", "image": null }},
-      {{ "title": "Service 3", "description": "1 sentence, outcome-based", "image": null }}
+      {{"title": "...", "description": "...", "image": null}},
+      {{"title": "...", "description": "...", "image": null}},
+      {{"title": "...", "description": "...", "image": null}}
     ]
   }},
   "trust": {{
-    "items": ["reason 1", "reason 2", "reason 3"]
+    "items": ["...", "...", "..."]
   }},
   "process": {{
     "steps": [
-      {{ "title": "Step 1", "description": "short" }},
-      {{ "title": "Step 2", "description": "short" }},
-      {{ "title": "Step 3", "description": "short" }}
+      {{"title": "...", "description": "..."}},
+      {{"title": "...", "description": "..."}},
+      {{"title": "...", "description": "..."}}
     ]
   }},
   "testimonial": {{
-    "quote": "Realistic short testimonial (no stats)",
-    "author": "Name or 'Customer'"
+    "quote": "“...”",
+    "author": "..."
   }},
   "faq": {{
     "items": [
-      {{ "q": "Question 1?", "a": "Answer 1." }},
-      {{ "q": "Question 2?", "a": "Answer 2." }},
-      {{ "q": "Question 3?", "a": "Answer 3." }}
+      {{"q": "...", "a": "..."}},
+      {{"q": "...", "a": "..."}},
+      {{"q": "...", "a": "..."}}
     ]
-  }},
-  "cta": {{
-    "headline": "CTA headline",
-    "subheadline": "CTA supporting line",
-    "button": "{goal}"
   }},
   "gallery": {{
     "images": []
   }},
+  "cta": {{
+    "headline": "...",
+    "subheadline": "...",
+    "button": "..."
+  }},
   "contact": {{
     "phone": "",
     "email": "",
-    "address": "",
+    "address": ""
+  }},
+  "location": {{
     "city": "{city}"
+  }},
+  "_builder": {{
+    "tone": "warm",
+    "sections": null,
+    "hidden": []
   }}
 }}
 
-Important:
-- Make service titles match the business.
-- Make FAQ relevant to the business.
-- Trust items should be believable.
+Rules:
+- business_name must be a real-looking name (NOT "Your Business Name"). If unsure, use "{fallback_name}".
+- hero.headline should usually be the business_name or a strong value prop.
+- hero.subheadline should describe WHAT they do in plain language.
+- services must be specific to the prompt.
+- If city exists, use it naturally in copy (don’t spam it).
 """
 
     try:
+        # Use responses that work with your OpenAI client import
+        # (your file already sets _openai_client = OpenAI(...))
         resp = _openai_client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=os.getenv("OPENAI_WEBSITE_MODEL", "gpt-4o-mini"),
+            temperature=0.75,
             messages=[
-                {"role": "system", "content": SYSTEM},
-                {"role": "user", "content": USER},
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
             ],
-            temperature=0.65,
-            max_tokens=1400,
         )
 
-        raw = (resp.choices[0].message.content or "").strip()
-        data = _safe_json_loads(raw)
+        text = (resp.choices[0].message.content or "").strip()
+        if not text:
+            return None
+
+        data = json.loads(text)
+
+        # Hard safety: ensure required keys exist (so frontend doesn't fallback)
         if not isinstance(data, dict):
             return None
-        return data
-    except Exception:
-        return None
 
+        # Minimal normalization so "services" always works with your renderer
+        if "services" in data and isinstance(data["services"], dict):
+            items = data["services"].get("items")
+            if not isinstance(items, list):
+                data["services"]["items"] = []
+            else:
+                # Ensure each item has title/description/image keys
+                fixed_items = []
+                for it in items[:9]:
+                    if not isinstance(it, dict):
+                        continue
+                    fixed_items.append({
+                        "title": _clean_text(it.get("title")) or "Service",
+                        "description": _clean_text(it.get("description")) or "Short description of this service.",
+                        "image": it.get("image") if isinstance(it.get("image"), str) else None,
+                    })
+                data["services"]["items"] = fixed_items
+
+        # Default business_name if missing (prevents "Your Business Name" fallback)
+        if not _clean_text(data.get("business_name")):
+            data["business_name"] = fallback_name
+
+        # Default hero bits if missing
+        data.setdefault("hero", {})
+        if not _clean_text(data["hero"].get("headline")):
+            data["hero"]["headline"] = data["business_name"]
+        if not _clean_text(data["hero"].get("subheadline")):
+            data["hero"]["subheadline"] = "A professional service you can trust."
+        if not _clean_text(data["hero"].get("cta_text")):
+            data["hero"]["cta_text"] = inferred_goal or "Get started"
+        if "image" not in data["hero"]:
+            data["hero"]["image"] = None
+
+        # Ensure builder meta exists so tone UI can be meaningful later
+        data.setdefault("_builder", {})
+        data["_builder"].setdefault("tone", "warm")
+        data["_builder"].setdefault("sections", None)
+        data["_builder"].setdefault("hidden", [])
+
+        return data
+
+    except Exception as e:
+        print("OpenAI content generation failed:", str(e))
+        return None
 
 # =========================
 # CREATE WEBSITE (CANONICAL)
