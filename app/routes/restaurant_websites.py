@@ -70,7 +70,7 @@ def generate_restaurant_website_api():
     )
 
 # -------------------------
-# GET WEBSITE (PUBLIC, READ-ONLY)
+# GET WEBSITE (PUBLIC / OWNER PREVIEW)
 # -------------------------
 @router.get("/{username}")
 def get_restaurant_website(
@@ -79,22 +79,28 @@ def get_restaurant_website(
     db: Session = Depends(get_db),
 ):
     website = db.query(Website).filter(Website.username == username).first()
-
     if not website:
         raise HTTPException(status_code=404, detail="Website not found")
 
-    owner = db.query(User).filter(User.id == website.user_id).first()
+    # Detect owner (optional auth)
+    owner_user = None
+    try:
+        owner_user = get_current_user(request)
+    except Exception:
+        pass
 
-    # Detect edit mode (owner only)
+    is_owner = owner_user and owner_user.id == website.user_id
     edit_mode = request.query_params.get("edit") == "1"
 
-    if not edit_mode:
-        # PUBLIC ACCESS → enforce subscription
-        if not owner or owner.subscription_plan is None:
-            return {
-                "suspended": True,
-                "username": website.username,
-            }
+    # -------------------------
+    # PUBLISHING ENFORCEMENT
+    # -------------------------
+    if not is_owner:
+        if website.publish_status != "published":
+            raise HTTPException(
+                status_code=403,
+                detail="This website is not published yet",
+            )
 
     # Lazy backfill AI structure
     if website.ai_structure_json is None:
@@ -114,6 +120,7 @@ def get_restaurant_website(
         "content_json": website.content_json,
         "ai_structure_json": website.ai_structure_json,
         "user_id": website.user_id,
+        "edit_mode": bool(is_owner and edit_mode),
     }
 
 # -------------------------
@@ -127,10 +134,8 @@ def save_menu(
     db: Session = Depends(get_db),
 ):
     website = db.query(Website).filter(Website.username == username).first()
-
     if not website:
         raise HTTPException(status_code=404, detail="Website not found")
-
     if website.user_id != user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
@@ -139,22 +144,17 @@ def save_menu(
 
         if "menu" in payload:
             content["menu"] = payload["menu"]
-
-        if "hero" in payload and isinstance(payload["hero"], dict):
+        if "hero" in payload:
             content["hero"] = {**content.get("hero", {}), **payload["hero"]}
-
-        if "contact" in payload and isinstance(payload["contact"], dict):
+        if "contact" in payload:
             content["contact"] = {**content.get("contact", {}), **payload["contact"]}
-
-        if "location" in payload and isinstance(payload["location"], dict):
+        if "location" in payload:
             content["location"] = {**content.get("location", {}), **payload["location"]}
-
-        if "hours" in payload and isinstance(payload["hours"], dict):
+        if "hours" in payload:
             content["hours"] = {**content.get("hours", {}), **payload["hours"]}
 
         website.content_json = json.dumps(content)
         db.commit()
-
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
@@ -162,7 +162,7 @@ def save_menu(
     return {"success": True}
 
 # -------------------------
-# SAVE WEBSITE CONTENT (OWNER ONLY) — GENERIC PATCH
+# GENERIC CONTENT SAVE (OWNER)
 # -------------------------
 @router.post("/{username}/content")
 def save_content(
@@ -172,17 +172,14 @@ def save_content(
     db: Session = Depends(get_db),
 ):
     website = db.query(Website).filter(Website.username == username).first()
-
     if not website:
         raise HTTPException(status_code=404, detail="Website not found")
-
     if website.user_id != user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
     try:
         content = json.loads(website.content_json) if website.content_json else {}
-        for k, v in payload.items():
-            content[k] = v
+        content.update(payload)
         website.content_json = json.dumps(content)
         db.commit()
     except Exception as e:
@@ -192,7 +189,7 @@ def save_content(
     return {"success": True}
 
 # -------------------------
-# UPLOAD IMAGE (OWNER ONLY)
+# IMAGE UPLOAD (OWNER)
 # -------------------------
 @router.post("/{username}/upload-image")
 def upload_menu_image(
@@ -202,10 +199,8 @@ def upload_menu_image(
     db: Session = Depends(get_db),
 ):
     website = db.query(Website).filter(Website.username == username).first()
-
     if not website:
         raise HTTPException(status_code=404, detail="Website not found")
-
     if website.user_id != user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
@@ -223,81 +218,3 @@ def upload_menu_image(
         raise HTTPException(status_code=500, detail=str(e))
 
     return {"url": f"{R2_PUBLIC_BASE_URL}/{key}"}
-
-# -------------------------
-# SAVE AI CONTENT (OWNER ONLY)
-# -------------------------
-@router.post("/{username}/save")
-def save_ai_content(
-    username: str,
-    payload: dict = Body(...),
-    user=Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    website = db.query(Website).filter(Website.username == username).first()
-
-    if not website:
-        raise HTTPException(status_code=404, detail="Website not found")
-
-    if website.user_id != user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
-    try:
-        website.content_json = json.dumps(payload)
-        db.commit()
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-
-    return {"success": True}
-
-# -------------------------
-# REGENERATE SECTION (OWNER ONLY)
-# -------------------------
-@router.post("/{username}/regenerate-section")
-def regenerate_section(
-    username: str,
-    payload: dict = Body(...),
-    user=Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    website = db.query(Website).filter(Website.username == username).first()
-    if not website:
-        raise HTTPException(status_code=404, detail="Website not found")
-    if website.user_id != user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
-    section = _clean_text(payload.get("section")).lower()
-    tone = _clean_text(payload.get("tone")).lower() or "warm"
-    current = payload.get("content")
-
-    try:
-        db_content = json.loads(website.content_json) if website.content_json else {}
-    except Exception:
-        db_content = {}
-
-    if isinstance(current, dict):
-        for k, v in current.items():
-            db_content[k] = v
-
-    template = (website.template or "business").lower()
-
-    from app.ai.website_ai import generate_ai_structure  # safe local import
-
-    prompt = None
-    if _openai_client:
-        from app.routes.restaurant_websites import _regen_prompt, _call_openai_json, _merge_patch
-        prompt = _regen_prompt(section, template, tone, db_content)
-
-    if not prompt:
-        raise HTTPException(status_code=400, detail="Unknown section")
-
-    patch = _call_openai_json(prompt, temperature=0.65, max_tokens=800)
-    if not patch:
-        patch = {section: db_content.get(section) or {}}
-
-    merged = _merge_patch(db_content, patch)
-    website.content_json = json.dumps(merged)
-    db.commit()
-
-    return {"ok": True, "patch": patch}
