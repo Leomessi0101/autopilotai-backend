@@ -675,18 +675,9 @@ def create_website(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """
-    Pricing rules:
-    - free: 1 site, draft only, 1 page
-    - starter: 1 site, published, 1 page
-    - pro: 1 site, published, up to 3 pages
-    """
-
     plan = (user.subscription_plan or "free").lower()
 
-    # -------------------------
-    # HARD LIMIT: 1 SITE / USER
-    # -------------------------
+    # 1 site per user
     if db.query(Website).filter(Website.user_id == user.id).count() >= 1:
         raise HTTPException(status_code=403, detail="Only one website allowed")
 
@@ -700,19 +691,13 @@ def create_website(
         raise HTTPException(status_code=400, detail="Username already taken")
 
     # -------------------------
-    # INFER AI INPUT
+    # AI INPUT
     # -------------------------
     ai_input = infer_ai_input_from_prompt(prompt)
     template = ai_input.get("business_type", "business")
 
-    # -------------------------
-    # PLAN → PAGE LIMITS
-    # -------------------------
     max_pages = 3 if plan == "pro" else 1
 
-    # -------------------------
-    # AI STRUCTURE (LAYOUT)
-    # -------------------------
     structure = generate_ai_structure(
         business_type=template,
         goal=_clean_text(ai_input.get("primary_goal")) or "conversions",
@@ -725,38 +710,34 @@ def create_website(
         "can_publish": plan in ("starter", "pro"),
     }
 
-    # =====================================================
-    # 🔥 CONTENT GENERATION (THIS WAS THE BROKEN PART)
-    # =====================================================
-
-    # 1️⃣ ALWAYS build strong defaults FIRST (full schema)
+    # -------------------------
+    # 🔥 AI CONTENT (NO SILENT FAIL)
+    # -------------------------
     defaults = build_default_content(
         template=template,
         ai_input=ai_input,
         username=username,
     )
 
-    # 2️⃣ TRY OpenAI (may return partial JSON or None)
     ai_content = ai_generate_content_with_openai(
         template=template,
         ai_input=ai_input,
         username=username,
     )
 
-    # 3️⃣ MERGE: defaults → AI (AI WINS, defaults fill gaps)
+    if ai_content is None:
+        raise HTTPException(
+            status_code=500,
+            detail="AI content generation failed (OpenAI not called)",
+        )
+
     content = _normalize_full_content(
-        ai=ai_content or {},
+        content=ai_content,
         defaults=defaults,
     )
 
-    # -------------------------
-    # PUBLISH STATUS
-    # -------------------------
     publish_status = "published" if plan in ("starter", "pro") else "draft"
 
-    # -------------------------
-    # SAVE WEBSITE
-    # -------------------------
     site = Website(
         user_id=user.id,
         username=username,
