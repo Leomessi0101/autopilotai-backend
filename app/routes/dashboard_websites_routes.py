@@ -656,17 +656,10 @@ def create_website(
     db: Session = Depends(get_db),
 ):
     """
-    Pricing rules:
-    - free: 1 site, draft only, 1 page
-    - starter: 1 site, published, 1 page
-    - pro: 1 site, published, up to 3 pages
+    Behavior:
+    - User can only have ONE website
+    - Calling /create again REGENERATES content
     """
-
-    plan = (user.subscription_plan or "free").lower()
-
-    # 1 website per user (hard limit)
-    if db.query(Website).filter(Website.user_id == user.id).count() >= 1:
-        raise HTTPException(status_code=403, detail="Only one website allowed")
 
     username = (payload.get("username") or "").strip().lower()
     prompt = (payload.get("prompt") or "").strip()
@@ -674,18 +667,11 @@ def create_website(
     if not username:
         raise HTTPException(status_code=400, detail="Missing username")
 
-    if db.query(Website).filter(Website.username == username).first():
-        raise HTTPException(status_code=400, detail="Username already taken")
-
-    # -------------------------
-    # AI INPUT
-    # -------------------------
     ai_input = infer_ai_input_from_prompt(prompt)
     template = ai_input["business_type"]
 
-    # -------------------------
-    # PLAN → PAGE LIMITS
-    # -------------------------
+    # plan logic
+    plan = (user.subscription_plan or "free").lower()
     max_pages = 3 if plan == "pro" else 1
 
     structure = generate_ai_structure(
@@ -694,118 +680,50 @@ def create_website(
         version=1,
     )
 
-    # deterministic "seed" from prompt+username so every site differs even without OpenAI
-    seed_src = f"{username}::{prompt}".strip().lower()
-    seed = abs(hash(seed_src)) % 10_000_000
-
-    # add simple theme variation so two sites don't look identical
-    accents = ["indigo", "emerald", "orange", "neutral"]
-    palettes = ["light", "dark"]
-    hero_variants = ["centered_text", "image_background", "split_image"]
-
-    structure.setdefault("theme", {})
-    structure["theme"]["accent"] = accents[seed % len(accents)]
-    structure["theme"]["palette"] = palettes[(seed // 7) % len(palettes)]
-    structure.setdefault("hero", {})
-    structure["hero"]["variant"] = hero_variants[(seed // 13) % len(hero_variants)]
-
     structure["plan"] = {
         "name": plan,
         "max_pages": max_pages,
         "can_publish": plan in ("starter", "pro"),
     }
 
-    # -------------------------
-    # CONTENT GENERATION
-    # -------------------------
-    defaults = build_default_content(template, ai_input, username)
-
-    ai_used = False
-    ai_content = None
-
-    # IMPORTANT: log whether OpenAI is configured at all
-    if not _openai_client:
-        print("OPENAI: client is NOT configured (missing OPENAI_API_KEY or import failed)")
-    else:
-        try:
-            ai_content = ai_generate_content_with_openai(
-                template=template,
-                ai_input=ai_input,
-                username=username,
-            )
-            if isinstance(ai_content, dict) and len(ai_content.keys()) > 0:
-                ai_used = True
-            else:
-                print("OPENAI: returned empty/invalid dict -> falling back to defaults")
-        except Exception as e:
-            print("OPENAI: generation exception -> falling back to defaults:", str(e))
-            ai_content = None
-
-    # Merge and guarantee full schema
-    content = _normalize_full_content(
-        ai=ai_content or {},
-        defaults=defaults,
+    # --- AI CONTENT ---
+    content = ai_generate_content_with_openai(
+        business_type=template,
+        ai_input=ai_input,
+        username=username,
     )
 
-    # HARD DEBUG PROOF (so you can verify instantly on the page / DB)
-    # This guarantees every prompt changes the page, even without OpenAI.
-    content["_debug"] = {
-        "seed": seed,
-        "ai_used": ai_used,
-        "raw_prompt": prompt,
-        "business_type": template,
-        "city": ai_input.get("city") or "",
-        "primary_goal": ai_input.get("primary_goal") or "",
-    }
+    if not content:
+        content = build_default_content(template, ai_input, username)
 
-    # Also inject small deterministic uniqueness into copy if we are NOT using OpenAI,
-    # so it never looks like the same template clone.
-    if not ai_used:
-        city = _clean_text(ai_input.get("city")) or ""
-        goal = _clean_text(ai_input.get("primary_goal")) or "Get started"
-        # vary highlight/testimonial a bit by seed
-        alt_highlights = [
-            ("Clear, premium first impression.", "Short, confident copy customers actually read."),
-            ("Turn visitors into customers.", "A clean layout that makes your offer obvious."),
-            ("Look trustworthy in 10 seconds.", "Simple design + strong words that convert."),
-            ("Make your business feel legit.", "Real structure, real sections, easy editing."),
-        ]
-        h1, h2 = alt_highlights[seed % len(alt_highlights)]
-        content.setdefault("highlight", {})
-        content["highlight"]["headline"] = h1
-        content["highlight"]["subheadline"] = h2
+    # 🔥 FIND EXISTING SITE
+    site = db.query(Website).filter(Website.user_id == user.id).first()
 
-        quotes = [
-            ("“Fast, professional, and exactly what we needed.”", "New client"),
-            ("“The process was simple and the result looks premium.”", "Customer"),
-            ("“We got more calls within the first week.”", "Local business"),
-            ("“Clean website, easy edits, no hassle.”", "Owner"),
-        ]
-        q, a = quotes[(seed // 3) % len(quotes)]
-        content.setdefault("testimonial", {})
-        content["testimonial"]["quote"] = q
-        content["testimonial"]["author"] = a
+    if site:
+        # 🔥 OVERWRITE CONTENT (THIS IS THE FIX)
+        site.username = username
+        site.template = template
+        site.content_json = json.dumps(content)
+        site.ai_structure_json = json.dumps(structure)
+        site.publish_status = "published" if plan in ("starter", "pro") else "draft"
 
-        # nudge hero subheadline to include prompt flavor
-        if isinstance(content.get("hero"), dict):
-            base = content["hero"].get("subheadline") or ""
-            if city and city.lower() not in str(base).lower():
-                content["hero"]["subheadline"] = f"{_clean_text(base)} Serving {city}.".strip()
-            if goal and "cta_text" in content["hero"]:
-                content["hero"]["cta_text"] = goal
+        db.commit()
 
-    # -------------------------
-    # SAVE WEBSITE
-    # -------------------------
-    publish_status = "published" if plan in ("starter", "pro") else "draft"
+        return {
+            "ok": True,
+            "username": site.username,
+            "redirect": f"/r/{site.username}?edit=1",
+            "regenerated": True,
+        }
 
+    # --- FIRST TIME CREATE ---
     site = Website(
         user_id=user.id,
         username=username,
         template=template,
         content_json=json.dumps(content),
         ai_structure_json=json.dumps(structure),
-        publish_status=publish_status,
+        publish_status="published" if plan in ("starter", "pro") else "draft",
     )
 
     db.add(site)
@@ -815,9 +733,5 @@ def create_website(
         "ok": True,
         "username": username,
         "redirect": f"/r/{username}?edit=1",
-        "plan": plan,
-        "max_pages": max_pages,
-        "published": plan in ("starter", "pro"),
-        "ai_used": ai_used,
-        "seed": seed,
+        "created": True,
     }
