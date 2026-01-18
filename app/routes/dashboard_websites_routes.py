@@ -74,165 +74,185 @@ def _merge_defaults(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str,
 
 def _normalize_full_content(content: Dict[str, Any], defaults: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Forces all expected sections to exist and be non-placeholder-ish.
-    If AI returns partial JSON, we patch missing parts from defaults.
+    Merge AI content with defaults WITHOUT overwriting real AI copy.
+    Defaults are used ONLY when AI content is missing or empty.
     """
     content = _ensure_dict(content)
+    defaults = _ensure_dict(defaults)
 
-    # Always ensure top-level keys exist
-    for key in [
-        "hero", "highlight", "about", "services", "trust",
-        "process", "testimonial", "faq", "cta", "gallery", "contact"
-    ]:
-        if key not in content or content[key] is None:
-            content[key] = defaults.get(key)
+    # Helper: non-empty string
+    def has_text(v):
+        return isinstance(v, str) and v.strip() != ""
 
+    # -------------------------
     # HERO
+    # -------------------------
     hero = _ensure_dict(content.get("hero"))
     hero_defaults = _ensure_dict(defaults.get("hero"))
-    hero = _merge_defaults(hero_defaults, hero)
 
-    # Force non-empty headline/subheadline/cta_text
-    if not _is_nonempty_str(hero.get("headline")):
+    if not has_text(hero.get("headline")):
         hero["headline"] = hero_defaults.get("headline", "")
-    if not _is_nonempty_str(hero.get("subheadline")):
+    if not has_text(hero.get("subheadline")):
         hero["subheadline"] = hero_defaults.get("subheadline", "")
-    if not _is_nonempty_str(hero.get("cta_text")):
-        hero["cta_text"] = hero_defaults.get("cta_text", "Contact us")
-    if "image" not in hero:
-        hero["image"] = None
+    if not has_text(hero.get("cta_text")):
+        hero["cta_text"] = hero_defaults.get("cta_text", "Get started")
+    hero["image"] = hero.get("image", None)
+
     content["hero"] = hero
 
+    # -------------------------
     # HIGHLIGHT
+    # -------------------------
     highlight = _ensure_dict(content.get("highlight"))
     highlight_defaults = _ensure_dict(defaults.get("highlight"))
-    highlight = _merge_defaults(highlight_defaults, highlight)
-    if not _is_nonempty_str(highlight.get("headline")):
+
+    if not has_text(highlight.get("headline")):
         highlight["headline"] = highlight_defaults.get("headline", "")
-    if not _is_nonempty_str(highlight.get("subheadline")):
+    if not has_text(highlight.get("subheadline")):
         highlight["subheadline"] = highlight_defaults.get("subheadline", "")
+
     content["highlight"] = highlight
 
-    # ABOUT
+    # -------------------------
+    # ABOUT  ✅ CRITICAL FIX
+    # -------------------------
     about = _ensure_dict(content.get("about"))
     about_defaults = _ensure_dict(defaults.get("about"))
-    about = _merge_defaults(about_defaults, about)
-    paragraphs = _ensure_list(about.get("paragraphs"))
-    if len([p for p in paragraphs if _is_nonempty_str(p)]) < 2:
-        about["paragraphs"] = about_defaults.get("paragraphs", ["", ""])
-    if "image" not in about:
-        about["image"] = None
+
+    paragraphs = about.get("paragraphs")
+    if not isinstance(paragraphs, list) or len([p for p in paragraphs if has_text(p)]) == 0:
+        about["paragraphs"] = about_defaults.get("paragraphs", [])
+    else:
+        about["paragraphs"] = paragraphs
+
+    about["image"] = about.get("image", None)
     content["about"] = about
 
+    # -------------------------
     # SERVICES
+    # -------------------------
     services = _ensure_dict(content.get("services"))
     services_defaults = _ensure_dict(defaults.get("services"))
-    services = _merge_defaults(services_defaults, services)
-    if not _is_nonempty_str(services.get("title")):
+
+    if not has_text(services.get("title")):
         services["title"] = services_defaults.get("title", "Services")
-    items = _ensure_list(services.get("items"))
-    # Ensure 3 items minimum
-    if len(items) < 3:
+
+    items = services.get("items")
+    if not isinstance(items, list) or len(items) == 0:
         services["items"] = services_defaults.get("items", [])
     else:
-        # ensure each item has title/description/image
-        normalized_items = []
-        for it in items[:5]:
+        fixed = []
+        for it in items[:6]:
             it = _ensure_dict(it)
-            if not _is_nonempty_str(it.get("title")):
-                it["title"] = "Service"
-            if not _is_nonempty_str(it.get("description")):
-                it["description"] = "Clear, reliable service tailored to your needs."
-            if "image" not in it:
-                it["image"] = None
-            normalized_items.append(it)
-        services["items"] = normalized_items
+            fixed.append({
+                "title": it.get("title") if has_text(it.get("title")) else "Service",
+                "description": it.get("description") if has_text(it.get("description")) else "Clear description of this service.",
+                "image": it.get("image", None),
+            })
+        services["items"] = fixed
+
     content["services"] = services
 
+    # -------------------------
     # TRUST
+    # -------------------------
     trust = _ensure_dict(content.get("trust"))
     trust_defaults = _ensure_dict(defaults.get("trust"))
-    trust = _merge_defaults(trust_defaults, trust)
-    trust_items = _ensure_list(trust.get("items"))
-    if len([t for t in trust_items if _is_nonempty_str(t)]) < 3:
+
+    items = trust.get("items")
+    if not isinstance(items, list) or len([i for i in items if has_text(i)]) == 0:
         trust["items"] = trust_defaults.get("items", [])
+    else:
+        trust["items"] = items
+
     content["trust"] = trust
 
+    # -------------------------
     # PROCESS
+    # -------------------------
     process = _ensure_dict(content.get("process"))
     process_defaults = _ensure_dict(defaults.get("process"))
-    process = _merge_defaults(process_defaults, process)
-    steps = _ensure_list(process.get("steps"))
-    if len(steps) < 3:
+
+    steps = process.get("steps")
+    if not isinstance(steps, list) or len(steps) == 0:
         process["steps"] = process_defaults.get("steps", [])
     else:
-        norm_steps = []
-        for st in steps[:5]:
+        fixed_steps = []
+        for st in steps[:6]:
             st = _ensure_dict(st)
-            if not _is_nonempty_str(st.get("title")):
-                st["title"] = "Step"
-            if not _is_nonempty_str(st.get("description")):
-                st["description"] = "Short, clear explanation of what happens in this step."
-            norm_steps.append(st)
-        process["steps"] = norm_steps
+            fixed_steps.append({
+                "title": st.get("title") if has_text(st.get("title")) else "Step",
+                "description": st.get("description") if has_text(st.get("description")) else "Short explanation of this step.",
+            })
+        process["steps"] = fixed_steps
+
     content["process"] = process
 
+    # -------------------------
     # TESTIMONIAL
+    # -------------------------
     testimonial = _ensure_dict(content.get("testimonial"))
     testimonial_defaults = _ensure_dict(defaults.get("testimonial"))
-    testimonial = _merge_defaults(testimonial_defaults, testimonial)
-    if not _is_nonempty_str(testimonial.get("quote")):
+
+    if not has_text(testimonial.get("quote")):
         testimonial["quote"] = testimonial_defaults.get("quote", "")
-    if not _is_nonempty_str(testimonial.get("author")):
+    if not has_text(testimonial.get("author")):
         testimonial["author"] = testimonial_defaults.get("author", "Customer")
+
     content["testimonial"] = testimonial
 
+    # -------------------------
     # FAQ
+    # -------------------------
     faq = _ensure_dict(content.get("faq"))
     faq_defaults = _ensure_dict(defaults.get("faq"))
-    faq = _merge_defaults(faq_defaults, faq)
-    faq_items = _ensure_list(faq.get("items"))
-    if len(faq_items) < 3:
+
+    items = faq.get("items")
+    if not isinstance(items, list) or len(items) == 0:
         faq["items"] = faq_defaults.get("items", [])
     else:
-        norm_faq = []
-        for qa in faq_items[:6]:
+        fixed_faq = []
+        for qa in items[:8]:
             qa = _ensure_dict(qa)
-            if not _is_nonempty_str(qa.get("q")):
-                qa["q"] = "Question?"
-            if not _is_nonempty_str(qa.get("a")):
-                qa["a"] = "Clear, helpful answer."
-            norm_faq.append(qa)
-        faq["items"] = norm_faq
+            fixed_faq.append({
+                "q": qa.get("q") if has_text(qa.get("q")) else "Question?",
+                "a": qa.get("a") if has_text(qa.get("a")) else "Clear helpful answer.",
+            })
+        faq["items"] = fixed_faq
+
     content["faq"] = faq
 
+    # -------------------------
     # CTA
+    # -------------------------
     cta = _ensure_dict(content.get("cta"))
     cta_defaults = _ensure_dict(defaults.get("cta"))
-    cta = _merge_defaults(cta_defaults, cta)
-    if not _is_nonempty_str(cta.get("headline")):
+
+    if not has_text(cta.get("headline")):
         cta["headline"] = cta_defaults.get("headline", "")
-    if not _is_nonempty_str(cta.get("subheadline")):
+    if not has_text(cta.get("subheadline")):
         cta["subheadline"] = cta_defaults.get("subheadline", "")
-    if not _is_nonempty_str(cta.get("button")):
-        cta["button"] = cta_defaults.get("button", "Contact us")
+    if not has_text(cta.get("button")):
+        cta["button"] = cta_defaults.get("button", "Get started")
+
     content["cta"] = cta
 
+    # -------------------------
     # GALLERY
+    # -------------------------
     gallery = _ensure_dict(content.get("gallery"))
-    gallery_defaults = _ensure_dict(defaults.get("gallery"))
-    gallery = _merge_defaults(gallery_defaults, gallery)
-    if "images" not in gallery or not isinstance(gallery.get("images"), list):
-        gallery["images"] = []
+    gallery["images"] = gallery.get("images", [])
     content["gallery"] = gallery
 
-    # CONTACT (user fills, but structure must exist)
+    # -------------------------
+    # CONTACT
+    # -------------------------
     contact = _ensure_dict(content.get("contact"))
     contact_defaults = _ensure_dict(defaults.get("contact"))
-    contact = _merge_defaults(contact_defaults, contact)
-    for k in ["phone", "email", "address", "city"]:
-        if k not in contact:
-            contact[k] = contact_defaults.get(k, "")
+
+    for k in ["phone", "email", "address"]:
+        contact[k] = contact.get(k) or contact_defaults.get(k, "")
+
     content["contact"] = contact
 
     return content
