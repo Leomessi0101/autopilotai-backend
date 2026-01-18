@@ -656,10 +656,19 @@ def create_website(
     db: Session = Depends(get_db),
 ):
     """
-    Behavior:
-    - User can only have ONE website
-    - Calling /create again REGENERATES content
+    Pricing rules:
+    - free: 1 site, draft only, 1 page
+    - starter: 1 site, published, 1 page
+    - pro: 1 site, published, up to 3 pages
     """
+
+    plan = (user.subscription_plan or "free").lower()
+
+    # -------------------------
+    # HARD LIMIT: 1 SITE / USER
+    # -------------------------
+    if db.query(Website).filter(Website.user_id == user.id).count() >= 1:
+        raise HTTPException(status_code=403, detail="Only one website allowed")
 
     username = (payload.get("username") or "").strip().lower()
     prompt = (payload.get("prompt") or "").strip()
@@ -667,13 +676,23 @@ def create_website(
     if not username:
         raise HTTPException(status_code=400, detail="Missing username")
 
-    ai_input = infer_ai_input_from_prompt(prompt)
-    template = ai_input["business_type"]
+    if db.query(Website).filter(Website.username == username).first():
+        raise HTTPException(status_code=400, detail="Username already taken")
 
-    # plan logic
-    plan = (user.subscription_plan or "free").lower()
+    # -------------------------
+    # INFER AI INPUT
+    # -------------------------
+    ai_input = infer_ai_input_from_prompt(prompt)
+    template = ai_input.get("business_type", "business")
+
+    # -------------------------
+    # PLAN → PAGE LIMITS
+    # -------------------------
     max_pages = 3 if plan == "pro" else 1
 
+    # -------------------------
+    # AI STRUCTURE (LAYOUT)
+    # -------------------------
     structure = generate_ai_structure(
         business_type=template,
         goal=_clean_text(ai_input.get("primary_goal")) or "conversions",
@@ -686,44 +705,45 @@ def create_website(
         "can_publish": plan in ("starter", "pro"),
     }
 
-    # --- AI CONTENT ---
-    content = ai_generate_content_with_openai(
-        business_type=template,
+    # =====================================================
+    # 🔥 CONTENT GENERATION (THIS WAS THE BROKEN PART)
+    # =====================================================
+
+    # 1️⃣ ALWAYS build strong defaults FIRST (full schema)
+    defaults = build_default_content(
+        template=template,
         ai_input=ai_input,
         username=username,
     )
 
-    if not content:
-        content = build_default_content(template, ai_input, username)
+    # 2️⃣ TRY OpenAI (may return partial JSON or None)
+    ai_content = ai_generate_content_with_openai(
+        template=template,
+        ai_input=ai_input,
+        username=username,
+    )
 
-    # 🔥 FIND EXISTING SITE
-    site = db.query(Website).filter(Website.user_id == user.id).first()
+    # 3️⃣ MERGE: defaults → AI (AI WINS, defaults fill gaps)
+    content = _normalize_full_content(
+        ai=ai_content or {},
+        defaults=defaults,
+    )
 
-    if site:
-        # 🔥 OVERWRITE CONTENT (THIS IS THE FIX)
-        site.username = username
-        site.template = template
-        site.content_json = json.dumps(content)
-        site.ai_structure_json = json.dumps(structure)
-        site.publish_status = "published" if plan in ("starter", "pro") else "draft"
+    # -------------------------
+    # PUBLISH STATUS
+    # -------------------------
+    publish_status = "published" if plan in ("starter", "pro") else "draft"
 
-        db.commit()
-
-        return {
-            "ok": True,
-            "username": site.username,
-            "redirect": f"/r/{site.username}?edit=1",
-            "regenerated": True,
-        }
-
-    # --- FIRST TIME CREATE ---
+    # -------------------------
+    # SAVE WEBSITE
+    # -------------------------
     site = Website(
         user_id=user.id,
         username=username,
         template=template,
         content_json=json.dumps(content),
         ai_structure_json=json.dumps(structure),
-        publish_status="published" if plan in ("starter", "pro") else "draft",
+        publish_status=publish_status,
     )
 
     db.add(site)
@@ -733,5 +753,7 @@ def create_website(
         "ok": True,
         "username": username,
         "redirect": f"/r/{username}?edit=1",
-        "created": True,
+        "plan": plan,
+        "max_pages": max_pages,
+        "published": plan in ("starter", "pro"),
     }
