@@ -72,190 +72,144 @@ def _merge_defaults(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str,
     return out
 
 
-def _normalize_full_content(content: Dict[str, Any], defaults: Dict[str, Any]) -> Dict[str, Any]:
+def _normalize_full_content(ai: dict, defaults: dict) -> dict:
     """
-    Merge AI content with defaults WITHOUT overwriting real AI copy.
-    Defaults are used ONLY when AI content is missing or empty.
+    Merge defaults -> ai (ai wins), but force modern schema and remove placeholders.
     """
-    content = _ensure_dict(content)
-    defaults = _ensure_dict(defaults)
+    base = defaults if isinstance(defaults, dict) else {}
+    patch = ai if isinstance(ai, dict) else {}
 
-    # Helper: non-empty string
-    def has_text(v):
-        return isinstance(v, str) and v.strip() != ""
+    # shallow merge for top-level
+    out = {**base, **patch}
 
-    # -------------------------
+    # Ensure business_name
+    if not _clean_text(out.get("business_name")):
+        out["business_name"] = _clean_text(base.get("business_name")) or "Business"
+
     # HERO
-    # -------------------------
-    hero = _ensure_dict(content.get("hero"))
-    hero_defaults = _ensure_dict(defaults.get("hero"))
+    out.setdefault("hero", {})
+    if not isinstance(out["hero"], dict):
+        out["hero"] = {}
+    out["hero"].setdefault("headline", out["business_name"])
+    out["hero"].setdefault("subheadline", base.get("hero", {}).get("subheadline", "A modern website that turns visitors into customers."))
+    out["hero"].setdefault("cta_text", base.get("hero", {}).get("cta_text", "Get started"))
+    if "image" not in out["hero"]:
+        out["hero"]["image"] = None
 
-    if not has_text(hero.get("headline")):
-        hero["headline"] = hero_defaults.get("headline", "")
-    if not has_text(hero.get("subheadline")):
-        hero["subheadline"] = hero_defaults.get("subheadline", "")
-    if not has_text(hero.get("cta_text")):
-        hero["cta_text"] = hero_defaults.get("cta_text", "Get started")
-    hero["image"] = hero.get("image", None)
+    # Kill classic placeholders if they slip in
+    if _clean_text(out["hero"].get("headline")).lower() in ["your business name", "your business"]:
+        out["hero"]["headline"] = out["business_name"]
+    if _clean_text(out["hero"].get("subheadline")).lower() in ["short description of what you do", "short description of what you do."]:
+        out["hero"]["subheadline"] = base.get("hero", {}).get("subheadline", "A modern website that turns visitors into customers.")
 
-    content["hero"] = hero
+    # ABOUT (modern paragraphs array)
+    out.setdefault("about", {})
+    if not isinstance(out["about"], dict):
+        out["about"] = {}
+    paragraphs = out["about"].get("paragraphs")
+    if not isinstance(paragraphs, list) or len([p for p in paragraphs if _clean_text(p)]) < 2:
+        out["about"]["paragraphs"] = base.get("about", {}).get("paragraphs", [
+            f"At {out['business_name']}, we help customers with fast, reliable service.",
+            "We focus on clarity, quality, and a great customer experience.",
+        ])
+    if "image" not in out["about"]:
+        out["about"]["image"] = None
 
-    # -------------------------
     # HIGHLIGHT
-    # -------------------------
-    highlight = _ensure_dict(content.get("highlight"))
-    highlight_defaults = _ensure_dict(defaults.get("highlight"))
+    out.setdefault("highlight", {})
+    if not isinstance(out["highlight"], dict):
+        out["highlight"] = {}
+    out["highlight"].setdefault("headline", base.get("highlight", {}).get("headline", "Make a strong first impression."))
+    out["highlight"].setdefault("subheadline", base.get("highlight", {}).get("subheadline", "Clear messaging + a premium layout that drives action."))
 
-    if not has_text(highlight.get("headline")):
-        highlight["headline"] = highlight_defaults.get("headline", "")
-    if not has_text(highlight.get("subheadline")):
-        highlight["subheadline"] = highlight_defaults.get("subheadline", "")
-
-    content["highlight"] = highlight
-
-    # -------------------------
-    # ABOUT  ✅ CRITICAL FIX
-    # -------------------------
-    about = _ensure_dict(content.get("about"))
-    about_defaults = _ensure_dict(defaults.get("about"))
-
-    paragraphs = about.get("paragraphs")
-    if not isinstance(paragraphs, list) or len([p for p in paragraphs if has_text(p)]) == 0:
-        about["paragraphs"] = about_defaults.get("paragraphs", [])
-    else:
-        about["paragraphs"] = paragraphs
-
-    about["image"] = about.get("image", None)
-    content["about"] = about
-
-    # -------------------------
     # SERVICES
-    # -------------------------
-    services = _ensure_dict(content.get("services"))
-    services_defaults = _ensure_dict(defaults.get("services"))
+    out.setdefault("services", {})
+    if not isinstance(out["services"], dict):
+        out["services"] = {}
+    out["services"].setdefault("title", base.get("services", {}).get("title", "Services"))
+    items = out["services"].get("items")
+    if not isinstance(items, list) or len(items) < 3:
+        out["services"]["items"] = base.get("services", {}).get("items", [])
+    # normalize service items
+    fixed = []
+    for it in (out["services"].get("items") or [])[:9]:
+        if not isinstance(it, dict):
+            continue
+        fixed.append({
+            "title": _clean_text(it.get("title")) or "Service",
+            "description": _clean_text(it.get("description")) or "Describe your service clearly and simply.",
+            "image": it.get("image") if isinstance(it.get("image"), str) else None,
+        })
+    out["services"]["items"] = fixed if fixed else base.get("services", {}).get("items", [])
 
-    if not has_text(services.get("title")):
-        services["title"] = services_defaults.get("title", "Services")
-
-    items = services.get("items")
-    if not isinstance(items, list) or len(items) == 0:
-        services["items"] = services_defaults.get("items", [])
-    else:
-        fixed = []
-        for it in items[:6]:
-            it = _ensure_dict(it)
-            fixed.append({
-                "title": it.get("title") if has_text(it.get("title")) else "Service",
-                "description": it.get("description") if has_text(it.get("description")) else "Clear description of this service.",
-                "image": it.get("image", None),
-            })
-        services["items"] = fixed
-
-    content["services"] = services
-
-    # -------------------------
     # TRUST
-    # -------------------------
-    trust = _ensure_dict(content.get("trust"))
-    trust_defaults = _ensure_dict(defaults.get("trust"))
+    out.setdefault("trust", {})
+    if not isinstance(out["trust"], dict):
+        out["trust"] = {}
+    trust_items = out["trust"].get("items")
+    if not isinstance(trust_items, list) or len([x for x in trust_items if _clean_text(x)]) < 3:
+        out["trust"]["items"] = base.get("trust", {}).get("items", ["Clear pricing", "Fast response", "Trusted quality"])
 
-    items = trust.get("items")
-    if not isinstance(items, list) or len([i for i in items if has_text(i)]) == 0:
-        trust["items"] = trust_defaults.get("items", [])
-    else:
-        trust["items"] = items
-
-    content["trust"] = trust
-
-    # -------------------------
     # PROCESS
-    # -------------------------
-    process = _ensure_dict(content.get("process"))
-    process_defaults = _ensure_dict(defaults.get("process"))
+    out.setdefault("process", {})
+    if not isinstance(out["process"], dict):
+        out["process"] = {}
+    steps = out["process"].get("steps")
+    if not isinstance(steps, list) or len(steps) < 3:
+        out["process"]["steps"] = base.get("process", {}).get("steps", [])
 
-    steps = process.get("steps")
-    if not isinstance(steps, list) or len(steps) == 0:
-        process["steps"] = process_defaults.get("steps", [])
-    else:
-        fixed_steps = []
-        for st in steps[:6]:
-            st = _ensure_dict(st)
-            fixed_steps.append({
-                "title": st.get("title") if has_text(st.get("title")) else "Step",
-                "description": st.get("description") if has_text(st.get("description")) else "Short explanation of this step.",
-            })
-        process["steps"] = fixed_steps
-
-    content["process"] = process
-
-    # -------------------------
     # TESTIMONIAL
-    # -------------------------
-    testimonial = _ensure_dict(content.get("testimonial"))
-    testimonial_defaults = _ensure_dict(defaults.get("testimonial"))
+    out.setdefault("testimonial", {})
+    if not isinstance(out["testimonial"], dict):
+        out["testimonial"] = {}
+    out["testimonial"].setdefault("quote", base.get("testimonial", {}).get("quote", "“Professional, fast, and easy to work with.”"))
+    out["testimonial"].setdefault("author", base.get("testimonial", {}).get("author", "Happy customer"))
 
-    if not has_text(testimonial.get("quote")):
-        testimonial["quote"] = testimonial_defaults.get("quote", "")
-    if not has_text(testimonial.get("author")):
-        testimonial["author"] = testimonial_defaults.get("author", "Customer")
-
-    content["testimonial"] = testimonial
-
-    # -------------------------
     # FAQ
-    # -------------------------
-    faq = _ensure_dict(content.get("faq"))
-    faq_defaults = _ensure_dict(defaults.get("faq"))
+    out.setdefault("faq", {})
+    if not isinstance(out["faq"], dict):
+        out["faq"] = {}
+    faq_items = out["faq"].get("items")
+    if not isinstance(faq_items, list) or len(faq_items) < 3:
+        out["faq"]["items"] = base.get("faq", {}).get("items", [])
 
-    items = faq.get("items")
-    if not isinstance(items, list) or len(items) == 0:
-        faq["items"] = faq_defaults.get("items", [])
-    else:
-        fixed_faq = []
-        for qa in items[:8]:
-            qa = _ensure_dict(qa)
-            fixed_faq.append({
-                "q": qa.get("q") if has_text(qa.get("q")) else "Question?",
-                "a": qa.get("a") if has_text(qa.get("a")) else "Clear helpful answer.",
-            })
-        faq["items"] = fixed_faq
-
-    content["faq"] = faq
-
-    # -------------------------
     # CTA
-    # -------------------------
-    cta = _ensure_dict(content.get("cta"))
-    cta_defaults = _ensure_dict(defaults.get("cta"))
+    out.setdefault("cta", {})
+    if not isinstance(out["cta"], dict):
+        out["cta"] = {}
+    out["cta"].setdefault("headline", base.get("cta", {}).get("headline", "Ready to take the next step?"))
+    out["cta"].setdefault("subheadline", base.get("cta", {}).get("subheadline", "Send a message — we respond quickly."))
+    out["cta"].setdefault("button", base.get("cta", {}).get("button", out["hero"].get("cta_text", "Get started")))
 
-    if not has_text(cta.get("headline")):
-        cta["headline"] = cta_defaults.get("headline", "")
-    if not has_text(cta.get("subheadline")):
-        cta["subheadline"] = cta_defaults.get("subheadline", "")
-    if not has_text(cta.get("button")):
-        cta["button"] = cta_defaults.get("button", "Get started")
+    # Gallery
+    out.setdefault("gallery", {})
+    if not isinstance(out["gallery"], dict):
+        out["gallery"] = {}
+    if not isinstance(out["gallery"].get("images"), list):
+        out["gallery"]["images"] = []
 
-    content["cta"] = cta
+    # Contact + location
+    out.setdefault("contact", {})
+    if not isinstance(out["contact"], dict):
+        out["contact"] = {}
+    out["contact"].setdefault("phone", "")
+    out["contact"].setdefault("email", "")
+    out["contact"].setdefault("address", "")
 
-    # -------------------------
-    # GALLERY
-    # -------------------------
-    gallery = _ensure_dict(content.get("gallery"))
-    gallery["images"] = gallery.get("images", [])
-    content["gallery"] = gallery
+    out.setdefault("location", {})
+    if not isinstance(out["location"], dict):
+        out["location"] = {}
+    out["location"].setdefault("city", _clean_text(base.get("location", {}).get("city")))
 
-    # -------------------------
-    # CONTACT
-    # -------------------------
-    contact = _ensure_dict(content.get("contact"))
-    contact_defaults = _ensure_dict(defaults.get("contact"))
+    # Builder meta
+    out.setdefault("_builder", {})
+    if not isinstance(out["_builder"], dict):
+        out["_builder"] = {}
+    out["_builder"].setdefault("tone", "warm")
+    out["_builder"].setdefault("sections", None)
+    out["_builder"].setdefault("hidden", [])
 
-    for k in ["phone", "email", "address"]:
-        contact[k] = contact.get(k) or contact_defaults.get(k, "")
-
-    content["contact"] = contact
-
-    return content
+    return out
 
 
 # =========================
@@ -379,88 +333,65 @@ def _normalize_full_content(ai: dict, defaults: dict) -> dict:
 
 def build_default_content(template: str, ai_input: dict, username: str) -> dict:
     """
-    Deterministic fallback if OpenAI is missing/fails.
-    IMPORTANT: Must NOT include placeholders like 'Your Business Name'.
+    Returns a FULL, AIWebsiteRenderer-compatible content object (modern schema).
+    Never returns placeholders like 'Your Business Name'.
     """
-    biz_type = (template or ai_input.get("business_type") or "business").lower()
+    raw_prompt = _clean_text(ai_input.get("raw_prompt")) or ""
     city = _clean_text(ai_input.get("city")) or ""
     goal = _clean_text(ai_input.get("primary_goal")) or "Get started"
 
-    name = username.replace("-", " ").title()
+    business_name = username.replace("-", " ").title()
+    if raw_prompt:
+        # light attempt to derive a nicer name from prompt (optional)
+        # keep it safe; never produce generic placeholders
+        pass
 
-    # A little type-specific flavor so every site isn't identical
-    if biz_type == "restaurant":
-        sub = "Fresh food, warm atmosphere, and simple online booking."
-        services = [
-            {"title": "Dine-in", "description": "A comfortable space with great service.", "image": None},
-            {"title": "Takeaway", "description": "Order ahead and pick up fast.", "image": None},
-            {"title": "Catering", "description": "Events, groups, and special occasions.", "image": None},
-        ]
-        trust = ["Fresh ingredients", "Fast service", "Loved by locals"]
-        cta_head = "Want a table?"
-        cta_sub = "Book in seconds — we’ll confirm quickly."
-        cta_btn = "Book now"
-    elif biz_type == "fitness":
-        sub = "Coaching that builds strength, confidence, and consistency."
-        services = [
-            {"title": "1:1 Coaching", "description": "Personal training tailored to your goals.", "image": None},
-            {"title": "Programs", "description": "Structured plans you can follow weekly.", "image": None},
-            {"title": "Nutrition", "description": "Simple guidance that’s easy to stick to.", "image": None},
-        ]
-        trust = ["Results-driven", "Friendly coaching", "Clear plan"]
-        cta_head = "Ready to start?"
-        cta_sub = "Send a message — we’ll recommend the best next step."
-        cta_btn = "Get started"
-    elif biz_type == "agency":
-        sub = "Modern marketing that turns attention into customers."
-        services = [
-            {"title": "Paid Ads", "description": "Launch campaigns that convert.", "image": None},
-            {"title": "Content", "description": "Posts & creatives built for growth.", "image": None},
-            {"title": "Landing Pages", "description": "Simple pages that capture leads.", "image": None},
-        ]
-        trust = ["Fast turnaround", "Clear strategy", "Conversion-first"]
-        cta_head = "Want more leads?"
-        cta_sub = "Tell us what you sell — we’ll map the fastest path."
-        cta_btn = "Get a plan"
-    else:
-        sub = "A modern website that turns visitors into customers."
-        services = [
-            {"title": "Consultation", "description": "Clear advice tailored to your needs.", "image": None},
-            {"title": "Delivery", "description": "Fast execution and reliable results.", "image": None},
-            {"title": "Support", "description": "We’re here when you need us.", "image": None},
-        ]
-        trust = ["Clear pricing", "Fast response", "Trusted quality"]
-        cta_head = "Ready to take the next step?"
-        cta_sub = "Send a message — we respond quickly."
-        cta_btn = goal or "Get started"
+    # Simple “what you do” seed
+    what = ""
+    if raw_prompt:
+        what = raw_prompt.strip()
+        if len(what) > 120:
+            what = what[:120].rstrip() + "…"
+
+    headline = business_name
+    subheadline = (
+        (f"{what}." if what else "A modern website that turns visitors into customers.")
+        + (f" Serving {city}." if city else "")
+    ).strip()
 
     return {
-        "business_name": name,
+        "business_name": business_name,
         "hero": {
-            "headline": name,
-            "subheadline": sub + (f" Serving {city}." if city else ""),
-            "cta_text": goal or cta_btn,
+            "headline": headline,
+            "subheadline": subheadline,
+            "cta_text": goal,
             "image": None,
         },
         "highlight": {
             "headline": "Make a strong first impression.",
-            "subheadline": "Warm, trustworthy design — plus real copy customers understand.",
+            "subheadline": "Clear messaging + a premium layout that drives action.",
         },
         "about": {
             "paragraphs": [
+                f"At {business_name}, we help customers with fast, reliable service.",
                 "We focus on clarity, quality, and a great customer experience.",
-                "Everything here is editable — change the wording, images, and sections anytime.",
             ],
             "image": None,
         },
         "services": {
             "title": "Services",
-            "items": services,
+            "items": [
+                {"title": "Primary service", "description": "Describe your main offer clearly and simply.", "image": None},
+                {"title": "Second service", "description": "Another high-value service your customers want.", "image": None},
+                {"title": "Support", "description": "Fast response and clear communication.", "image": None},
+            ],
         },
-        "trust": {"items": trust},
+        "trust": {
+            "items": ["Clear pricing", "Fast response", "Trusted quality"],
+        },
         "process": {
             "steps": [
-                {"title": "Reach out", "description": "Send a message with what you need."},
+                {"title": "Reach out", "description": "Send a quick message with what you need."},
                 {"title": "Get a plan", "description": "We reply with a simple next step."},
                 {"title": "Get results", "description": "We deliver quickly — and you can edit anytime."},
             ]
@@ -477,10 +408,18 @@ def build_default_content(template: str, ai_input: dict, username: str) -> dict:
             ]
         },
         "gallery": {"images": []},
-        "cta": {"headline": cta_head, "subheadline": cta_sub, "button": cta_btn},
+        "cta": {
+            "headline": "Ready to take the next step?",
+            "subheadline": "Send a message — we respond quickly.",
+            "button": goal,
+        },
         "contact": {"phone": "", "email": "", "address": ""},
         "location": {"city": city},
-        "_builder": {"tone": "warm", "sections": None, "hidden": []},
+        "_builder": {
+            "tone": "warm",
+            "sections": None,
+            "hidden": [],
+        },
     }
 
 
@@ -690,11 +629,8 @@ def create_website(
     if db.query(Website).filter(Website.username == username).first():
         raise HTTPException(status_code=400, detail="Username already taken")
 
-    # -------------------------
-    # AI INPUT
-    # -------------------------
     ai_input = infer_ai_input_from_prompt(prompt)
-    template = ai_input.get("business_type", "business")
+    template = (ai_input.get("business_type") or "business").lower()
 
     max_pages = 3 if plan == "pro" else 1
 
@@ -710,31 +646,14 @@ def create_website(
         "can_publish": plan in ("starter", "pro"),
     }
 
-    # -------------------------
-    # 🔥 AI CONTENT (NO SILENT FAIL)
-    # -------------------------
-    defaults = build_default_content(
-        template=template,
-        ai_input=ai_input,
-        username=username,
-    )
+    # ✅ Defaults in modern schema
+    defaults = build_default_content(template=template, ai_input=ai_input, username=username)
 
-    ai_content = ai_generate_content_with_openai(
-        template=template,
-        ai_input=ai_input,
-        username=username,
-    )
+    # ✅ Try OpenAI (your function)
+    ai_content = ai_generate_content_with_openai(template=template, ai_input=ai_input, username=username) or {}
 
-    if ai_content is None:
-        raise HTTPException(
-            status_code=500,
-            detail="AI content generation failed (OpenAI not called)",
-        )
-
-    content = _normalize_full_content(
-        content=ai_content,
-        defaults=defaults,
-    )
+    # ✅ Merge + force modern schema (NO placeholders)
+    content = _normalize_full_content(ai=ai_content, defaults=defaults)
 
     publish_status = "published" if plan in ("starter", "pro") else "draft"
 
@@ -750,6 +669,7 @@ def create_website(
     db.add(site)
     db.commit()
 
+    # IMPORTANT: return content/structure for debugging (you can remove later)
     return {
         "ok": True,
         "username": username,
@@ -757,4 +677,7 @@ def create_website(
         "plan": plan,
         "max_pages": max_pages,
         "published": plan in ("starter", "pro"),
+        "debug_has_ai": bool(ai_content),
+        "debug_business_name": content.get("business_name"),
+        "debug_hero_headline": (content.get("hero") or {}).get("headline"),
     }
