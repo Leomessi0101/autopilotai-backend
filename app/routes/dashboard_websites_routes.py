@@ -614,6 +614,8 @@ def create_website(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    print("=== [AUTOPILOTAI] /api/dashboard/websites/create HIT ===")
+
     plan = (user.subscription_plan or "free").lower()
 
     # 1 site per user
@@ -628,6 +630,14 @@ def create_website(
 
     if db.query(Website).filter(Website.username == username).first():
         raise HTTPException(status_code=400, detail="Username already taken")
+
+    # --- HARD REQUIRE: AI must be configured ---
+    if not _openai_client:
+        print("=== [AUTOPILOTAI] OPENAI CLIENT NOT CONFIGURED (missing import or OPENAI_API_KEY) ===")
+        raise HTTPException(
+            status_code=500,
+            detail="OpenAI not configured on server (OPENAI_API_KEY missing or OpenAI client failed to init).",
+        )
 
     ai_input = infer_ai_input_from_prompt(prompt)
     template = (ai_input.get("business_type") or "business").lower()
@@ -646,14 +656,46 @@ def create_website(
         "can_publish": plan in ("starter", "pro"),
     }
 
-    # ✅ Defaults in modern schema
+    # Defaults (modern schema)
     defaults = build_default_content(template=template, ai_input=ai_input, username=username)
 
-    # ✅ Try OpenAI (your function)
-    ai_content = ai_generate_content_with_openai(template=template, ai_input=ai_input, username=username) or {}
+    # --- MUST CALL AI ---
+    print("=== [AUTOPILOTAI] CALLING OPENAI FOR WEBSITE CONTENT ===")
+    ai_content = ai_generate_content_with_openai(template=template, ai_input=ai_input, username=username)
 
-    # ✅ Merge + force modern schema (NO placeholders)
+    if not isinstance(ai_content, dict) or len(ai_content.keys()) == 0:
+        print("=== [AUTOPILOTAI] OPENAI RETURNED EMPTY/INVALID JSON ===")
+        raise HTTPException(status_code=500, detail="AI generation failed: empty/invalid JSON response.")
+
+    # Merge + normalize
     content = _normalize_full_content(ai=ai_content, defaults=defaults)
+
+    # --- HARD BLOCK: prevent classic placeholders from ever being saved ---
+    def _contains_placeholders(obj: Any) -> bool:
+        bad = {
+            "your business name",
+            "short description of what you do",
+            "write a short introduction about your business here.",
+            "service one",
+            "service two",
+            "service three",
+        }
+
+        def walk(x: Any) -> bool:
+            if isinstance(x, dict):
+                return any(walk(v) for v in x.values())
+            if isinstance(x, list):
+                return any(walk(v) for v in x)
+            if isinstance(x, str):
+                s = x.strip().lower()
+                return s in bad
+            return False
+
+        return walk(obj)
+
+    if _contains_placeholders(content):
+        print("=== [AUTOPILOTAI] PLACEHOLDERS DETECTED - BLOCKING SAVE ===")
+        raise HTTPException(status_code=500, detail="AI output still contains placeholders; blocking save.")
 
     publish_status = "published" if plan in ("starter", "pro") else "draft"
 
@@ -669,7 +711,8 @@ def create_website(
     db.add(site)
     db.commit()
 
-    # IMPORTANT: return content/structure for debugging (you can remove later)
+    print("=== [AUTOPILOTAI] WEBSITE CREATED OK ===", username)
+
     return {
         "ok": True,
         "username": username,
@@ -677,7 +720,7 @@ def create_website(
         "plan": plan,
         "max_pages": max_pages,
         "published": plan in ("starter", "pro"),
-        "debug_has_ai": bool(ai_content),
+        "debug_has_ai": True,
         "debug_business_name": content.get("business_name"),
         "debug_hero_headline": (content.get("hero") or {}).get("headline"),
     }
