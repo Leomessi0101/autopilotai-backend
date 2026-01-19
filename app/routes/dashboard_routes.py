@@ -116,12 +116,6 @@ def update_settings(payload: SettingsUpdate, user: User = Depends(get_current_us
         db.close()
 
 
-@router.post("/dashboard/websites/create")
-def create_website():
-    raise HTTPException(
-        status_code=410,
-        detail="This endpoint is deprecated. Use /api/dashboard/websites/create",
-    )
 
 # -------------------------
 # Tasks
