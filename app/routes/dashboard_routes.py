@@ -117,103 +117,11 @@ def update_settings(payload: SettingsUpdate, user: User = Depends(get_current_us
 
 
 @router.post("/dashboard/websites/create")
-def create_website(
-    payload: CreateWebsiteRequest,
-    user: User = Depends(get_current_user),
-):
-    # --------------------------------------------------
-    # 1) PAID USERS ONLY
-    # --------------------------------------------------
-    if (user.subscription_plan or "free") == "free":
-        raise HTTPException(
-            status_code=403,
-            detail="Website builder is available for paid plans only",
-        )
-
-    db = SessionLocal()
-    try:
-        # --------------------------------------------------
-        # 2) MAX 1 WEBSITE PER USER
-        # --------------------------------------------------
-        existing_count = (
-            db.query(Website)
-            .filter(Website.user_id == user.id)
-            .count()
-        )
-
-        if existing_count >= 1:
-            raise HTTPException(
-                status_code=403,
-                detail="Your plan allows only one website",
-            )
-
-        username = payload.username.strip().lower()
-        _validate_username(username)
-
-        # --------------------------------------------------
-        # 3) UNIQUE USERNAME
-        # --------------------------------------------------
-        existing = db.query(Website).filter(Website.username == username).first()
-        if existing:
-            raise HTTPException(
-                status_code=400,
-                detail="Username already taken",
-            )
-
-        # --------------------------------------------------
-        # 4) INITIAL BUSINESS TEMPLATE CONTENT
-        # (clean, explicit, future-proof)
-        # --------------------------------------------------
-        initial_content = {
-            "template": "business",
-            "template_version": 1,
-            "theme": "light",
-            "hero": {
-                "headline": "Your Business Name",
-                "subheadline": "Short description of what you do",
-                "image": None,
-            },
-            "about": {
-                "title": "About Us",
-                "text": "Write a short introduction about your business here.",
-            },
-            "services": {
-                "title": "Our Services",
-                "items": [
-                    {
-                        "title": "Service One",
-                        "description": "Describe your service here.",
-                    }
-                ],
-            },
-            "contact": {
-                "phone": "",
-                "email": "",
-            },
-        }
-
-        # --------------------------------------------------
-        # 5) CREATE WEBSITE ROW
-        # --------------------------------------------------
-        site = Website(
-            user_id=user.id,
-            username=username,
-            template="business",
-            content_json=json.dumps(initial_content),
-        )
-
-        db.add(site)
-        db.commit()
-        db.refresh(site)
-
-        return {
-            "ok": True,
-            "username": username,
-            "redirect": f"/r/{username}?edit=1",
-        }
-
-    finally:
-        db.close()
+def create_website():
+    raise HTTPException(
+        status_code=410,
+        detail="This endpoint is deprecated. Use /api/dashboard/websites/create",
+    )
 
 # -------------------------
 # Tasks
