@@ -238,8 +238,15 @@ def generate_ai_structure(business_type: str, goal: str, version: int = 1):
         "hero": {
             "variant": rng.choice(HERO_VARIANTS),
         },
+
         "sections": ordered_sections,
-        "theme": rng.choice(THEMES),
+
+        # 🔥 FIX: theme must be an OBJECT (frontend expects this)
+        "theme": {
+            "palette": rng.choice(["dark", "light"]),
+            "accent": rng.choice(["indigo", "emerald", "orange", "neutral"]),
+        },
+
         "footer": rng.choice(FOOTER_VARIANTS),
     }
 
