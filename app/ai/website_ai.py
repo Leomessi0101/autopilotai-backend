@@ -152,7 +152,11 @@ def stable_seed(*values: str) -> int:
 def generate_ai_structure(business_type: str, goal: str, version: int = 1):
     """
     Generates an intelligent page structure.
-    AI decides WHICH sections matter, not just random layouts.
+    AI decides:
+    - which sections exist
+    - how many sections are needed
+    - visual theme + accent
+    Deterministic: same input => same output
     """
 
     rng = random.Random(stable_seed(business_type, goal, str(version)))
@@ -160,17 +164,17 @@ def generate_ai_structure(business_type: str, goal: str, version: int = 1):
     bt = (business_type or "business").lower()
     g = (goal or "").lower()
 
-    # -------------------------
-    # CORE SECTIONS (ALWAYS)
-    # -------------------------
-    sections: list[str] = [
-        "hero",
-        "cta",
-    ]
+    # -------------------------------------------------
+    # CORE SECTIONS (ALWAYS PRESENT)
+    # -------------------------------------------------
+    sections: list[str] = ["hero"]
 
-    # -------------------------
-    # GOAL-DRIVEN SECTIONS
-    # -------------------------
+    # CTA should exist, but may move to footer visually
+    sections.append("cta")
+
+    # -------------------------------------------------
+    # GOAL-DRIVEN SECTIONS (HIGH PRIORITY)
+    # -------------------------------------------------
     if any(w in g for w in ["lead", "contact", "quote", "call"]):
         sections += ["trust", "contact"]
 
@@ -180,9 +184,9 @@ def generate_ai_structure(business_type: str, goal: str, version: int = 1):
     if any(w in g for w in ["sell", "order", "buy", "pricing"]):
         sections += ["services", "faq"]
 
-    # -------------------------
-    # BUSINESS-TYPE SECTIONS
-    # -------------------------
+    # -------------------------------------------------
+    # BUSINESS-TYPE SECTIONS (CONTEXT)
+    # -------------------------------------------------
     if bt in ["restaurant", "cafe", "coffee", "food"]:
         sections += ["services", "gallery", "location"]
 
@@ -199,9 +203,9 @@ def generate_ai_structure(business_type: str, goal: str, version: int = 1):
         # generic business
         sections += ["about", "services"]
 
-    # -------------------------
-    # OPTIONAL SECTIONS (AI TASTE)
-    # -------------------------
+    # -------------------------------------------------
+    # OPTIONAL SECTIONS (AI JUDGMENT, NOT RANDOM)
+    # -------------------------------------------------
     optional_pool = [
         "testimonial",
         "faq",
@@ -210,43 +214,71 @@ def generate_ai_structure(business_type: str, goal: str, version: int = 1):
         "gallery",
     ]
 
-    rng.shuffle(optional_pool)
+    # Score optional sections by relevance
+    scored: list[tuple[str, int]] = []
 
     for sec in optional_pool:
-        if sec not in sections and rng.random() < 0.45:
+        score = 0
+
+        if sec == "testimonial" and "trust" in sections:
+            score += 2
+
+        if sec == "faq" and any(w in g for w in ["sell", "pricing", "order"]):
+            score += 2
+
+        if sec == "process" and any(w in g for w in ["book", "contact", "lead"]):
+            score += 2
+
+        if sec == "gallery" and bt in ["restaurant", "food", "creative"]:
+            score += 2
+
+        if sec == "highlight":
+            score += 1  # generic value booster
+
+        if score > 0:
+            scored.append((sec, score))
+
+    # Sort by relevance, stable + deterministic
+    scored.sort(key=lambda x: (-x[1], x[0]))
+
+    # Add at most 2 optional sections
+    for sec, _ in scored[:2]:
+        if sec not in sections:
             sections.append(sec)
 
-    # -------------------------
+    # -------------------------------------------------
     # CLEANUP + ORDER
-    # -------------------------
-    # Remove duplicates but preserve order
+    # -------------------------------------------------
     seen = set()
-    ordered_sections = []
+    ordered_sections: list[str] = []
     for s in sections:
         if s not in seen:
             seen.add(s)
             ordered_sections.append(s)
 
-    # Cap total sections (prevents bloated pages)
+    # Hard cap (prevents bloated AI pages)
     MAX_SECTIONS = 7
     ordered_sections = ordered_sections[:MAX_SECTIONS]
 
-    # -------------------------
+    # -------------------------------------------------
+    # VISUAL THEME (CRITICAL FIX)
+    # -------------------------------------------------
+    theme = {
+        "palette": rng.choice(["dark", "dark-soft", "midnight"]),
+        "accent": rng.choice(["indigo", "emerald", "cyan", "violet"]),
+        "radius": "lg",
+        "density": "comfortable",
+    }
+
+    # -------------------------------------------------
     # FINAL STRUCTURE
-    # -------------------------
+    # -------------------------------------------------
     return {
         "hero": {
             "variant": rng.choice(HERO_VARIANTS),
         },
-
         "sections": ordered_sections,
-
-        # 🔥 FIX: theme must be an OBJECT (frontend expects this)
-        "theme": {
-            "palette": rng.choice(["dark", "light"]),
-            "accent": rng.choice(["indigo", "emerald", "orange", "neutral"]),
-        },
-
+        "theme": theme,
         "footer": rng.choice(FOOTER_VARIANTS),
     }
 
