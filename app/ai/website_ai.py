@@ -150,14 +150,95 @@ def stable_seed(*values: str) -> int:
 
 
 def generate_ai_structure(business_type: str, goal: str, version: int = 1):
+    """
+    Generates an intelligent page structure.
+    AI decides WHICH sections matter, not just random layouts.
+    """
+
     rng = random.Random(stable_seed(business_type, goal, str(version)))
 
-    # If section set missing, fallback to business
-    section_choices = SECTION_SETS.get(business_type) or SECTION_SETS["business"]
+    bt = (business_type or "business").lower()
+    g = (goal or "").lower()
 
+    # -------------------------
+    # CORE SECTIONS (ALWAYS)
+    # -------------------------
+    sections: list[str] = [
+        "hero",
+        "cta",
+    ]
+
+    # -------------------------
+    # GOAL-DRIVEN SECTIONS
+    # -------------------------
+    if any(w in g for w in ["lead", "contact", "quote", "call"]):
+        sections += ["trust", "contact"]
+
+    if any(w in g for w in ["book", "booking", "appointment", "reserve"]):
+        sections += ["process", "contact"]
+
+    if any(w in g for w in ["sell", "order", "buy", "pricing"]):
+        sections += ["services", "faq"]
+
+    # -------------------------
+    # BUSINESS-TYPE SECTIONS
+    # -------------------------
+    if bt in ["restaurant", "cafe", "coffee", "food"]:
+        sections += ["services", "gallery", "location"]
+
+    elif bt in ["agency", "consultant", "coach"]:
+        sections += ["about", "process", "testimonial"]
+
+    elif bt in ["local service", "service", "plumbing", "cleaning", "electrician"]:
+        sections += ["services", "trust", "faq"]
+
+    elif bt in ["nonprofit", "charity", "community"]:
+        sections += ["about", "highlight", "trust"]
+
+    else:
+        # generic business
+        sections += ["about", "services"]
+
+    # -------------------------
+    # OPTIONAL SECTIONS (AI TASTE)
+    # -------------------------
+    optional_pool = [
+        "testimonial",
+        "faq",
+        "process",
+        "highlight",
+        "gallery",
+    ]
+
+    rng.shuffle(optional_pool)
+
+    for sec in optional_pool:
+        if sec not in sections and rng.random() < 0.45:
+            sections.append(sec)
+
+    # -------------------------
+    # CLEANUP + ORDER
+    # -------------------------
+    # Remove duplicates but preserve order
+    seen = set()
+    ordered_sections = []
+    for s in sections:
+        if s not in seen:
+            seen.add(s)
+            ordered_sections.append(s)
+
+    # Cap total sections (prevents bloated pages)
+    MAX_SECTIONS = 7
+    ordered_sections = ordered_sections[:MAX_SECTIONS]
+
+    # -------------------------
+    # FINAL STRUCTURE
+    # -------------------------
     return {
-        "hero": {"variant": rng.choice(HERO_VARIANTS)},
-        "sections": rng.choice(section_choices),
+        "hero": {
+            "variant": rng.choice(HERO_VARIANTS),
+        },
+        "sections": ordered_sections,
         "theme": rng.choice(THEMES),
         "footer": rng.choice(FOOTER_VARIANTS),
     }

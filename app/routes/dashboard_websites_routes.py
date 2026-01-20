@@ -428,10 +428,15 @@ def build_default_content(template: str, ai_input: dict, username: str) -> dict:
 # OPENAI GENERATION (FULL BUILDER COVERAGE)
 # =========================
 
-def ai_generate_content_with_openai(template: str, ai_input: dict, username: str) -> Optional[dict]:
+def ai_generate_content_with_openai(
+    template: str,
+    ai_input: dict,
+    username: str,
+    allowed_sections: list[str] | None = None,
+) -> Optional[dict]:
     """
-    Returns a FULL content_json object that matches what your frontend renderer expects.
-    If OpenAI fails or is not configured, return None (so caller can fallback).
+    Generates AI website content ONLY for the allowed sections.
+    If allowed_sections is None, falls back to full generation.
     """
     if not _openai_client:
         return None
@@ -441,17 +446,112 @@ def ai_generate_content_with_openai(template: str, ai_input: dict, username: str
     city = _clean_text(ai_input.get("city")) or ""
     inferred_goal = _clean_text(ai_input.get("primary_goal")) or "Get started"
 
-    # Make a decent default business name from username if model doesn't provide one
+    allowed = set(allowed_sections or [])
+
     fallback_name = username.replace("-", " ").title()
 
+    # -------------------------
+    # SYSTEM PROMPT
+    # -------------------------
     system = (
         "You generate website copy as strict JSON only.\n"
         "Return ONLY valid JSON. No markdown. No commentary.\n"
-        "Keep copy realistic, specific, and short.\n"
+        "Generate content ONLY for the sections explicitly requested.\n"
+        "Do NOT invent extra sections.\n"
+        "Keep copy realistic, specific, and concise.\n"
         "Avoid placeholders like 'Your Business Name'.\n"
-        "If info is missing, creatively infer plausible details from the prompt.\n"
     )
 
+    # -------------------------
+    # DYNAMIC SCHEMA (BASED ON SECTIONS)
+    # -------------------------
+    section_schema = {}
+
+    if "hero" in allowed:
+        section_schema["hero"] = {
+            "headline": "...",
+            "subheadline": "...",
+            "cta_text": "...",
+        }
+
+    if "highlight" in allowed:
+        section_schema["highlight"] = {
+            "headline": "...",
+            "subheadline": "...",
+        }
+
+    if "about" in allowed:
+        section_schema["about"] = {
+            "paragraphs": ["...", "..."],
+            "image": None,
+        }
+
+    if "services" in allowed:
+        section_schema["services"] = {
+            "title": "Services",
+            "items": [
+                {"title": "...", "description": "...", "image": None},
+                {"title": "...", "description": "...", "image": None},
+                {"title": "...", "description": "...", "image": None},
+            ],
+        }
+
+    if "trust" in allowed:
+        section_schema["trust"] = {
+            "items": ["...", "...", "..."],
+        }
+
+    if "process" in allowed:
+        section_schema["process"] = {
+            "steps": [
+                {"title": "...", "description": "..."},
+                {"title": "...", "description": "..."},
+                {"title": "...", "description": "..."},
+            ],
+        }
+
+    if "testimonial" in allowed:
+        section_schema["testimonial"] = {
+            "quote": "“...”",
+            "author": "...",
+        }
+
+    if "faq" in allowed:
+        section_schema["faq"] = {
+            "items": [
+                {"q": "...", "a": "..."},
+                {"q": "...", "a": "..."},
+                {"q": "...", "a": "..."},
+            ],
+        }
+
+    if "gallery" in allowed:
+        section_schema["gallery"] = {
+            "images": [],
+        }
+
+    if "cta" in allowed:
+        section_schema["cta"] = {
+            "headline": "...",
+            "subheadline": "...",
+            "button": "...",
+        }
+
+    if "contact" in allowed:
+        section_schema["contact"] = {
+            "phone": "",
+            "email": "",
+            "address": "",
+        }
+
+    if "location" in allowed:
+        section_schema["location"] = {
+            "city": city,
+        }
+
+    # -------------------------
+    # USER PROMPT
+    # -------------------------
     user = f"""
 Business prompt:
 {raw_prompt}
@@ -460,88 +560,26 @@ Business type: {biz_type}
 City (if mentioned): {city}
 Primary goal CTA: {inferred_goal}
 
-Return JSON with EXACT keys (match this schema):
+Allowed sections:
+{sorted(list(allowed))}
+
+Return JSON with EXACT keys:
 {{
   "business_name": "...",
-  "hero": {{
-    "headline": "...",
-    "subheadline": "...",
-    "cta_text": "..."
-  }},
-  "highlight": {{
-    "headline": "...",
-    "subheadline": "..."
-  }},
-  "about": {{
-    "paragraphs": ["...", "..."],
-    "image": null
-  }},
-  "services": {{
-    "title": "Services",
-    "items": [
-      {{"title": "...", "description": "...", "image": null}},
-      {{"title": "...", "description": "...", "image": null}},
-      {{"title": "...", "description": "...", "image": null}}
-    ]
-  }},
-  "trust": {{
-    "items": ["...", "...", "..."]
-  }},
-  "process": {{
-    "steps": [
-      {{"title": "...", "description": "..."}},
-      {{"title": "...", "description": "..."}},
-      {{"title": "...", "description": "..."}}
-    ]
-  }},
-  "testimonial": {{
-    "quote": "“...”",
-    "author": "..."
-  }},
-  "faq": {{
-    "items": [
-      {{"q": "...", "a": "..."}},
-      {{"q": "...", "a": "..."}},
-      {{"q": "...", "a": "..."}}
-    ]
-  }},
-  "gallery": {{
-    "images": []
-  }},
-  "cta": {{
-    "headline": "...",
-    "subheadline": "...",
-    "button": "..."
-  }},
-  "contact": {{
-    "phone": "",
-    "email": "",
-    "address": ""
-  }},
-  "location": {{
-    "city": "{city}"
-  }},
-  "_builder": {{
-    "tone": "warm",
-    "sections": null,
-    "hidden": []
-  }}
+  {json.dumps(section_schema, indent=2)}
 }}
 
 Rules:
-- business_name must be a real-looking name (NOT "Your Business Name"). If unsure, use "{fallback_name}".
-- hero.headline should usually be the business_name or a strong value prop.
-- hero.subheadline should describe WHAT they do in plain language.
-- services must be specific to the prompt.
-- If city exists, use it naturally in copy (don’t spam it).
+- Generate ONLY the allowed sections.
+- business_name must be real (use "{fallback_name}" if unsure).
+- Be specific to the business prompt.
+- Do NOT include sections not listed above.
 """
 
     try:
-        # Use responses that work with your OpenAI client import
-        # (your file already sets _openai_client = OpenAI(...))
         resp = _openai_client.chat.completions.create(
             model=os.getenv("OPENAI_WEBSITE_MODEL", "gpt-4o-mini"),
-            temperature=0.75,
+            temperature=0.7,
             messages=[
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
@@ -553,51 +591,28 @@ Rules:
             return None
 
         data = json.loads(text)
-
-        # Hard safety: ensure required keys exist (so frontend doesn't fallback)
         if not isinstance(data, dict):
             return None
 
-        # Minimal normalization so "services" always works with your renderer
-        if "services" in data and isinstance(data["services"], dict):
-            items = data["services"].get("items")
-            if not isinstance(items, list):
-                data["services"]["items"] = []
-            else:
-                # Ensure each item has title/description/image keys
-                fixed_items = []
-                for it in items[:9]:
-                    if not isinstance(it, dict):
-                        continue
-                    fixed_items.append({
-                        "title": _clean_text(it.get("title")) or "Service",
-                        "description": _clean_text(it.get("description")) or "Short description of this service.",
-                        "image": it.get("image") if isinstance(it.get("image"), str) else None,
-                    })
-                data["services"]["items"] = fixed_items
+        # -------------------------
+        # HARD FILTER: REMOVE UNALLOWED SECTIONS
+        # -------------------------
+        cleaned = {
+            k: v
+            for k, v in data.items()
+            if k == "business_name" or k in allowed
+        }
 
-        # Default business_name if missing (prevents "Your Business Name" fallback)
-        if not _clean_text(data.get("business_name")):
-            data["business_name"] = fallback_name
+        if not _clean_text(cleaned.get("business_name")):
+            cleaned["business_name"] = fallback_name
 
-        # Default hero bits if missing
-        data.setdefault("hero", {})
-        if not _clean_text(data["hero"].get("headline")):
-            data["hero"]["headline"] = data["business_name"]
-        if not _clean_text(data["hero"].get("subheadline")):
-            data["hero"]["subheadline"] = "A professional service you can trust."
-        if not _clean_text(data["hero"].get("cta_text")):
-            data["hero"]["cta_text"] = inferred_goal or "Get started"
-        if "image" not in data["hero"]:
-            data["hero"]["image"] = None
+        cleaned["_builder"] = {
+            "tone": "warm",
+            "sections": list(allowed),
+            "hidden": [],
+        }
 
-        # Ensure builder meta exists so tone UI can be meaningful later
-        data.setdefault("_builder", {})
-        data["_builder"].setdefault("tone", "warm")
-        data["_builder"].setdefault("sections", None)
-        data["_builder"].setdefault("hidden", [])
-
-        return data
+        return cleaned
 
     except Exception as e:
         print("OpenAI content generation failed:", str(e))
@@ -661,8 +676,12 @@ def create_website(
 
     # --- MUST CALL AI ---
     print("=== [AUTOPILOTAI] CALLING OPENAI FOR WEBSITE CONTENT ===")
-    ai_content = ai_generate_content_with_openai(template=template, ai_input=ai_input, username=username)
-
+    ai_content = ai_generate_content_with_openai(
+        template,
+        ai_input,
+        username,
+        allowed_sections=structure.get("sections", []),
+    )
     if not isinstance(ai_content, dict) or len(ai_content.keys()) == 0:
         print("=== [AUTOPILOTAI] OPENAI RETURNED EMPTY/INVALID JSON ===")
         raise HTTPException(status_code=500, detail="AI generation failed: empty/invalid JSON response.")
