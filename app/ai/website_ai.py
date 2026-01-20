@@ -256,9 +256,12 @@ def generate_ai_structure(business_type: str, goal: str, version: int = 1):
             seen.add(s)
             ordered_sections.append(s)
 
-    # Hard cap (prevents bloated AI pages)
-    MAX_SECTIONS = 7
-    ordered_sections = ordered_sections[:MAX_SECTIONS]
+    # Soft cap, not hard — allows variety
+    MIN_SECTIONS = rng.randint(4, 6)
+    MAX_SECTIONS = rng.randint(8, 12)
+
+    ordered_sections = ordered_sections[:rng.randint(MIN_SECTIONS, MAX_SECTIONS)]
+
 
     # -------------------------------------------------
     # VISUAL THEME (CRITICAL FIX)
