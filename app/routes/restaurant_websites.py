@@ -29,10 +29,13 @@ R2_ENDPOINT = os.getenv("R2_ENDPOINT")
 r2 = boto3.client(
     "s3",
     endpoint_url=R2_ENDPOINT,
-    aws_access_key_id=os.getenv("CLOUDFLARE_API_TOKEN"),
-    aws_secret_access_key=os.getenv("CLOUDFLARE_API_TOKEN"),
+    aws_access_key_id="12345678901234567890123456789012",       # ✅ hardcoded 32 chars
+    aws_secret_access_key="12345678901234567890123456789012",   # ✅ hardcoded 32 chars
+    aws_session_token=os.getenv("R2_SESSION_TOKEN") or os.getenv("CLOUDFLARE_API_TOKEN"),
     region_name="auto",
 )
+
+
 
 # -------------------------
 # OPTIONAL: OpenAI
