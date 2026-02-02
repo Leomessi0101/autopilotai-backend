@@ -2,7 +2,7 @@ import random
 import hashlib
 import re
 import json
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Tuple, Optional
 
 from app.ai.openai_client import chat_completion  # adjust if your helper is elsewhere
 
@@ -13,18 +13,29 @@ from app.ai.openai_client import chat_completion  # adjust if your helper is els
 
 HERO_VARIANTS = ["split_image", "centered_text", "image_background", "minimal"]
 
+# More hero variety helps “not-template” feel immediately
+HERO_VARIANTS_BY_TEMPLATE = {
+    "restaurant": ["image_background", "split_image", "centered_text"],
+    "business": ["split_image", "centered_text", "minimal"],
+}
+
 SECTION_SETS = {
     "restaurant": [
-        ["about", "services", "testimonial", "cta"],
-        ["services", "process", "testimonial", "cta"],
-        ["trust", "services", "testimonial", "cta"],
-        ["about", "trust", "services", "cta"],
+        ["about", "services", "gallery", "testimonial", "cta"],
+        ["services", "gallery", "process", "cta"],
+        ["trust", "services", "gallery", "testimonial", "cta"],
+        ["about", "trust", "services", "faq", "cta"],
+        ["highlight", "services", "gallery", "cta"],
+        ["about", "services", "process", "faq", "cta"],
     ],
     "business": [
         ["about", "services", "cta"],
         ["services", "process", "testimonial", "cta"],
         ["trust", "services", "cta"],
         ["about", "trust", "services", "testimonial", "cta"],
+        ["highlight", "services", "cta"],
+        ["about", "process", "services", "cta"],
+        ["services", "faq", "cta"],
     ],
 }
 
@@ -34,6 +45,9 @@ THEMES = [
     {"palette": "dark", "accent": "indigo"},
     {"palette": "dark", "accent": "emerald"},
     {"palette": "light", "accent": "neutral"},
+    {"palette": "dark", "accent": "cyan"},
+    {"palette": "midnight", "accent": "violet"},
+    {"palette": "dark-soft", "accent": "amber"},
 ]
 
 FOOTER_VARIANTS = [{"variant": "minimal"}, {"variant": "standard"}]
@@ -137,150 +151,146 @@ def infer_intent(ai_input: Dict[str, Any]) -> Dict[str, Any]:
         "primary_goal": goal,
         "business_name": name,
         "raw_prompt": prompt,
+        "prompt": prompt,  # keep both keys around safely
     }
 
 
 # ======================================================
-# DETERMINISTIC STRUCTURE
+# STRUCTURE GENERATION (NOW: HIGH VARIETY)
 # ======================================================
 
 def stable_seed(*values: str) -> int:
-    raw = "|".join(values)
+    raw = "|".join([v or "" for v in values])
     return int(hashlib.sha256(raw.encode()).hexdigest()[:8], 16)
 
 
-def generate_ai_structure(business_type: str, goal: str, version: int = 1):
-    """
-    Generates an intelligent page structure.
-    AI decides:
-    - which sections exist
-    - how many sections are needed
-    - visual theme + accent
-    Deterministic: same input => same output
-    """
-
-    rng = random.Random(stable_seed(business_type, goal, str(version)))
-
-    bt = (business_type or "business").lower()
+def _goal_flags(goal: str) -> Dict[str, bool]:
     g = (goal or "").lower()
-
-    # -------------------------------------------------
-    # CORE SECTIONS (ALWAYS PRESENT)
-    # -------------------------------------------------
-    sections: list[str] = ["hero"]
-
-    # CTA should exist, but may move to footer visually
-    sections.append("cta")
-
-    # -------------------------------------------------
-    # GOAL-DRIVEN SECTIONS (HIGH PRIORITY)
-    # -------------------------------------------------
-    if any(w in g for w in ["lead", "contact", "quote", "call"]):
-        sections += ["trust", "contact"]
-
-    if any(w in g for w in ["book", "booking", "appointment", "reserve"]):
-        sections += ["process", "contact"]
-
-    if any(w in g for w in ["sell", "order", "buy", "pricing"]):
-        sections += ["services", "faq"]
-
-    # -------------------------------------------------
-    # BUSINESS-TYPE SECTIONS (CONTEXT)
-    # -------------------------------------------------
-    if bt in ["restaurant", "cafe", "coffee", "food"]:
-        sections += ["services", "gallery", "location"]
-
-    elif bt in ["agency", "consultant", "coach"]:
-        sections += ["about", "process", "testimonial"]
-
-    elif bt in ["local service", "service", "plumbing", "cleaning", "electrician"]:
-        sections += ["services", "trust", "faq"]
-
-    elif bt in ["nonprofit", "charity", "community"]:
-        sections += ["about", "highlight", "trust"]
-
-    else:
-        # generic business
-        sections += ["about", "services"]
-
-    # -------------------------------------------------
-    # OPTIONAL SECTIONS (AI JUDGMENT, NOT RANDOM)
-    # -------------------------------------------------
-    optional_pool = [
-        "testimonial",
-        "faq",
-        "process",
-        "highlight",
-        "gallery",
-    ]
-
-    # Score optional sections by relevance
-    scored: list[tuple[str, int]] = []
-
-    for sec in optional_pool:
-        score = 0
-
-        if sec == "testimonial" and "trust" in sections:
-            score += 2
-
-        if sec == "faq" and any(w in g for w in ["sell", "pricing", "order"]):
-            score += 2
-
-        if sec == "process" and any(w in g for w in ["book", "contact", "lead"]):
-            score += 2
-
-        if sec == "gallery" and bt in ["restaurant", "food", "creative"]:
-            score += 2
-
-        if sec == "highlight":
-            score += 1  # generic value booster
-
-        if score > 0:
-            scored.append((sec, score))
-
-    # Sort by relevance, stable + deterministic
-    scored.sort(key=lambda x: (-x[1], x[0]))
-
-    # Add at most 2 optional sections
-    for sec, _ in scored[:2]:
-        if sec not in sections:
-            sections.append(sec)
-
-    # -------------------------------------------------
-    # CLEANUP + ORDER
-    # -------------------------------------------------
-    seen = set()
-    ordered_sections: list[str] = []
-    for s in sections:
-        if s not in seen:
-            seen.add(s)
-            ordered_sections.append(s)
-
-    # Soft cap, not hard — allows variety
-    MIN_SECTIONS = rng.randint(4, 6)
-    MAX_SECTIONS = rng.randint(8, 12)
-
-    ordered_sections = ordered_sections[:rng.randint(MIN_SECTIONS, MAX_SECTIONS)]
-
-
-    # -------------------------------------------------
-    # VISUAL THEME (CRITICAL FIX)
-    # -------------------------------------------------
-    theme = {
-        "palette": rng.choice(["dark", "dark-soft", "midnight"]),
-        "accent": rng.choice(["indigo", "emerald", "cyan", "violet"]),
-        "radius": "lg",
-        "density": "comfortable",
+    return {
+        "lead": any(w in g for w in ["lead", "contact", "quote", "call", "message"]),
+        "book": any(w in g for w in ["book", "booking", "appointment", "reserve"]),
+        "sell": any(w in g for w in ["sell", "order", "buy", "pricing", "price"]),
     }
 
-    # -------------------------------------------------
-    # FINAL STRUCTURE
-    # -------------------------------------------------
+
+def _ensure_unique_keep_order(items: List[str]) -> List[str]:
+    seen = set()
+    out = []
+    for x in items:
+        if x not in seen:
+            seen.add(x)
+            out.append(x)
+    return out
+
+
+def generate_ai_structure(
+    business_type: str,
+    goal: str,
+    version: int = 1,
+    prompt: str = "",
+):
+    """
+    Generates a varied page structure.
+
+    IMPORTANT:
+    - Backward compatible: old calls still work.
+    - If `prompt` is provided, structure becomes stable-per-prompt (same prompt => same structure).
+    - If prompt is NOT provided, structure still varies per call (so it no longer feels like the same template).
+    """
+
+    bt = (business_type or "business").lower().strip()
+    if bt not in ("restaurant", "business"):
+        # keep it safe — collapse unknown into business
+        bt = "business"
+
+    flags = _goal_flags(goal)
+
+    # Seed logic:
+    # - If prompt exists => deterministic per prompt
+    # - If prompt missing => random per call (fixes "always same template" immediately)
+    if (prompt or "").strip():
+        rng = random.Random(stable_seed(bt, (goal or ""), (prompt or ""), str(version)))
+    else:
+        rng = random.Random()
+        rng.seed(random.SystemRandom().randint(0, 2**31 - 1))
+
+    # Pick a base section set (this is the big variety boost)
+    base_sets = SECTION_SETS.get(bt, SECTION_SETS["business"])
+    base = list(rng.choice(base_sets))
+
+    # Goal-driven additions
+    additions: List[str] = []
+    if flags["lead"]:
+        additions += ["trust", "contact"]
+    if flags["book"]:
+        additions += ["process", "contact"]
+    if flags["sell"]:
+        additions += ["faq", "trust"]
+
+    # Restaurant context additions
+    if bt == "restaurant":
+        additions += ["gallery", "location"]
+    else:
+        additions += ["about"] if "about" not in base else []
+
+    sections = _ensure_unique_keep_order(base + additions)
+
+    # Ensure hero is not duplicated in sections list (your renderer treats hero separately)
+    sections = [s for s in sections if s != "hero"]
+
+    # Ensure CTA exists and is last-ish
+    if "cta" not in sections:
+        sections.append("cta")
+
+    # If contact exists, push it near the end (better conversion UX)
+    if "contact" in sections:
+        sections = [s for s in sections if s != "contact"]
+        sections.append("contact")
+
+    # Add some ordering variety in the middle (not hero/cta/contact)
+    fixed_tail = []
+    if sections and sections[-1] == "contact":
+        fixed_tail = ["contact"]
+        sections = sections[:-1]
+
+    if sections and sections[-1] == "cta":
+        # keep cta at end before contact
+        cta_tail = ["cta"]
+        sections = sections[:-1]
+    else:
+        cta_tail = []
+
+    # shuffle middle lightly
+    mid = sections[:]
+    rng.shuffle(mid)
+    sections = mid + cta_tail + fixed_tail
+
+    # Cap length but keep variety
+    # restaurants usually benefit from more sections
+    if bt == "restaurant":
+        min_s, max_s = 5, 9
+    else:
+        min_s, max_s = 4, 8
+
+    target_len = rng.randint(min_s, max_s)
+    sections = sections[:target_len]
+
+    # Theme variety
+    t = dict(rng.choice(THEMES))
+    theme = {
+        "palette": t.get("palette", "dark"),
+        "accent": t.get("accent", "indigo"),
+        "radius": rng.choice(["md", "lg", "xl"]),
+        "density": rng.choice(["compact", "comfortable"]),
+    }
+
+    # Hero variant by template preference
+    hero_choices = HERO_VARIANTS_BY_TEMPLATE.get(bt, HERO_VARIANTS)
+    hero_variant = rng.choice(hero_choices)
+
     return {
-        "hero": {
-            "variant": rng.choice(HERO_VARIANTS),
-        },
-        "sections": ordered_sections,
+        "hero": {"variant": hero_variant},
+        "sections": sections,
         "theme": theme,
         "footer": rng.choice(FOOTER_VARIANTS),
     }
@@ -304,9 +314,6 @@ Rules:
 - Output STRICT JSON only. No markdown. No commentary.
 """
 
-# We intentionally include extra keys the renderer can choose to use:
-# - trust, process, faq, highlight, audience
-# - image_slots + optional per-section image objects (null if unused)
 CONTENT_USER_PROMPT = """
 Business description (free text):
 {prompt}
@@ -413,14 +420,9 @@ Important:
 
 
 def _coerce_content_minimums(intent: Dict[str, Any], content: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Ensure no critical keys are missing / wrong type.
-    Keeps older/newer model output safe.
-    """
     bn = (content.get("business_name") or "").strip() or (intent.get("business_name") or "").strip() or "Your Business"
     goal = (intent.get("primary_goal") or "Get started").strip()
 
-    # Basic structure
     content.setdefault("business_name", bn)
     content.setdefault("tagline", "")
 
@@ -462,7 +464,6 @@ def _coerce_content_minimums(intent: Dict[str, Any], content: Dict[str, Any]) ->
             for s in (intent.get("services") or GENERIC_SERVICES)
         ]
     else:
-        # ensure service items have image key
         for it in content["services"]["items"]:
             if isinstance(it, dict) and "image" not in it:
                 it["image"] = None
@@ -494,7 +495,6 @@ def _coerce_content_minimums(intent: Dict[str, Any], content: Dict[str, Any]) ->
     content["cta"].setdefault("subheadline", "Send a message and we’ll respond quickly with the next step.")
     content["cta"].setdefault("button", goal)
 
-    # Contact MUST be empty strings
     content.setdefault("contact", {})
     content["contact"]["phone"] = ""
     content["contact"]["email"] = ""
@@ -503,7 +503,6 @@ def _coerce_content_minimums(intent: Dict[str, Any], content: Dict[str, Any]) ->
     content.setdefault("footer", {})
     content["footer"].setdefault("tagline", f"{bn} — built for results.")
 
-    # Image slots
     slots = content.get("image_slots")
     if not isinstance(slots, list) or len(slots) == 0:
         content["image_slots"] = [
@@ -533,7 +532,6 @@ def _coerce_content_minimums(intent: Dict[str, Any], content: Dict[str, Any]) ->
             },
         ]
 
-    # Todos
     todos = content.get("ai_todos")
     if not isinstance(todos, list):
         todos = []
@@ -567,7 +565,6 @@ def generate_publishable_content(intent: Dict[str, Any]) -> Dict[str, Any]:
         parsed = json.loads(response)
         return _coerce_content_minimums(intent, parsed)
     except Exception:
-        # Fallback (never blank, still warm)
         bn = (intent.get("business_name") or "Your Business").strip() or "Your Business"
         goal = (intent.get("primary_goal") or "Get started").strip() or "Get started"
 
@@ -681,6 +678,7 @@ def generate_ai_plan(ai_input: Dict[str, Any], version: int = 1) -> Dict[str, An
         business_type=intent["template"],
         goal=intent["primary_goal"],
         version=version,
+        prompt=intent.get("raw_prompt") or intent.get("prompt") or "",
     )
 
     content = generate_publishable_content(intent)
