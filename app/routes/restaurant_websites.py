@@ -16,6 +16,9 @@ from app.ai.website_ai import generate_ai_structure  # deterministic structure
 
 router = APIRouter(prefix="/api/restaurants", tags=["Restaurant Websites"])
 
+# ✅ domains router (used by Next.js middleware)
+domains_router = APIRouter(prefix="/api/domains", tags=["Domains"])
+
 # -------------------------
 # R2 CONFIG
 # -------------------------
@@ -60,6 +63,44 @@ def _clean_text(v):
     if v is None:
         return ""
     return str(v).strip()
+
+def _normalize_host(host: str) -> str:
+    h = (host or "").strip().lower()
+    if ":" in h:
+        h = h.split(":", 1)[0]
+    if h.startswith("www."):
+        h = h[4:]
+    return h
+
+# -------------------------
+# ✅ RESOLVE DOMAIN -> USERNAME (for middleware.ts)
+# -------------------------
+@domains_router.get("/resolve")
+def resolve_domain(
+    host: str,
+    db: Session = Depends(get_db),
+):
+    """
+    Returns: { "username": "<username>" }
+    Used by Next.js middleware to rewrite custom domains to /r/[username].
+
+    Only returns results for domains that are VERIFIED.
+    """
+    normalized = _normalize_host(host)
+    if not normalized:
+        raise HTTPException(status_code=400, detail="Missing host")
+
+    website = (
+        db.query(Website)
+        .filter(Website.custom_domain == normalized)
+        .filter(Website.domain_verified == True)  # noqa: E712
+        .first()
+    )
+
+    if not website:
+        raise HTTPException(status_code=404, detail="Domain not found")
+
+    return {"username": website.username}
 
 # -------------------------
 # DISABLED: LEGACY GENERATE

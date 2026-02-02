@@ -4,6 +4,8 @@ import json
 import re
 import os
 from typing import Optional, Any, Dict, List
+import hashlib
+import base64
 
 from app.database.session import SessionLocal
 from app.database.models import Website, User
@@ -71,145 +73,6 @@ def _merge_defaults(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str,
             out[k] = v
     return out
 
-
-def _normalize_full_content(ai: dict, defaults: dict) -> dict:
-    """
-    Merge defaults -> ai (ai wins), but force modern schema and remove placeholders.
-    """
-    base = defaults if isinstance(defaults, dict) else {}
-    patch = ai if isinstance(ai, dict) else {}
-
-    # shallow merge for top-level
-    out = {**base, **patch}
-
-    # Ensure business_name
-    if not _clean_text(out.get("business_name")):
-        out["business_name"] = _clean_text(base.get("business_name")) or "Business"
-
-    # HERO
-    out.setdefault("hero", {})
-    if not isinstance(out["hero"], dict):
-        out["hero"] = {}
-    out["hero"].setdefault("headline", out["business_name"])
-    out["hero"].setdefault("subheadline", base.get("hero", {}).get("subheadline", "A modern website that turns visitors into customers."))
-    out["hero"].setdefault("cta_text", base.get("hero", {}).get("cta_text", "Get started"))
-    if "image" not in out["hero"]:
-        out["hero"]["image"] = None
-
-    # Kill classic placeholders if they slip in
-    if _clean_text(out["hero"].get("headline")).lower() in ["your business name", "your business"]:
-        out["hero"]["headline"] = out["business_name"]
-    if _clean_text(out["hero"].get("subheadline")).lower() in ["short description of what you do", "short description of what you do."]:
-        out["hero"]["subheadline"] = base.get("hero", {}).get("subheadline", "A modern website that turns visitors into customers.")
-
-    # ABOUT (modern paragraphs array)
-    out.setdefault("about", {})
-    if not isinstance(out["about"], dict):
-        out["about"] = {}
-    paragraphs = out["about"].get("paragraphs")
-    if not isinstance(paragraphs, list) or len([p for p in paragraphs if _clean_text(p)]) < 2:
-        out["about"]["paragraphs"] = base.get("about", {}).get("paragraphs", [
-            f"At {out['business_name']}, we help customers with fast, reliable service.",
-            "We focus on clarity, quality, and a great customer experience.",
-        ])
-    if "image" not in out["about"]:
-        out["about"]["image"] = None
-
-    # HIGHLIGHT
-    out.setdefault("highlight", {})
-    if not isinstance(out["highlight"], dict):
-        out["highlight"] = {}
-    out["highlight"].setdefault("headline", base.get("highlight", {}).get("headline", "Make a strong first impression."))
-    out["highlight"].setdefault("subheadline", base.get("highlight", {}).get("subheadline", "Clear messaging + a premium layout that drives action."))
-
-    # SERVICES
-    out.setdefault("services", {})
-    if not isinstance(out["services"], dict):
-        out["services"] = {}
-    out["services"].setdefault("title", base.get("services", {}).get("title", "Services"))
-    items = out["services"].get("items")
-    if not isinstance(items, list) or len(items) < 3:
-        out["services"]["items"] = base.get("services", {}).get("items", [])
-    # normalize service items
-    fixed = []
-    for it in (out["services"].get("items") or [])[:9]:
-        if not isinstance(it, dict):
-            continue
-        fixed.append({
-            "title": _clean_text(it.get("title")) or "Service",
-            "description": _clean_text(it.get("description")) or "Describe your service clearly and simply.",
-            "image": it.get("image") if isinstance(it.get("image"), str) else None,
-        })
-    out["services"]["items"] = fixed if fixed else base.get("services", {}).get("items", [])
-
-    # TRUST
-    out.setdefault("trust", {})
-    if not isinstance(out["trust"], dict):
-        out["trust"] = {}
-    trust_items = out["trust"].get("items")
-    if not isinstance(trust_items, list) or len([x for x in trust_items if _clean_text(x)]) < 3:
-        out["trust"]["items"] = base.get("trust", {}).get("items", ["Clear pricing", "Fast response", "Trusted quality"])
-
-    # PROCESS
-    out.setdefault("process", {})
-    if not isinstance(out["process"], dict):
-        out["process"] = {}
-    steps = out["process"].get("steps")
-    if not isinstance(steps, list) or len(steps) < 3:
-        out["process"]["steps"] = base.get("process", {}).get("steps", [])
-
-    # TESTIMONIAL
-    out.setdefault("testimonial", {})
-    if not isinstance(out["testimonial"], dict):
-        out["testimonial"] = {}
-    out["testimonial"].setdefault("quote", base.get("testimonial", {}).get("quote", "“Professional, fast, and easy to work with.”"))
-    out["testimonial"].setdefault("author", base.get("testimonial", {}).get("author", "Happy customer"))
-
-    # FAQ
-    out.setdefault("faq", {})
-    if not isinstance(out["faq"], dict):
-        out["faq"] = {}
-    faq_items = out["faq"].get("items")
-    if not isinstance(faq_items, list) or len(faq_items) < 3:
-        out["faq"]["items"] = base.get("faq", {}).get("items", [])
-
-    # CTA
-    out.setdefault("cta", {})
-    if not isinstance(out["cta"], dict):
-        out["cta"] = {}
-    out["cta"].setdefault("headline", base.get("cta", {}).get("headline", "Ready to take the next step?"))
-    out["cta"].setdefault("subheadline", base.get("cta", {}).get("subheadline", "Send a message — we respond quickly."))
-    out["cta"].setdefault("button", base.get("cta", {}).get("button", out["hero"].get("cta_text", "Get started")))
-
-    # Gallery
-    out.setdefault("gallery", {})
-    if not isinstance(out["gallery"], dict):
-        out["gallery"] = {}
-    if not isinstance(out["gallery"].get("images"), list):
-        out["gallery"]["images"] = []
-
-    # Contact + location
-    out.setdefault("contact", {})
-    if not isinstance(out["contact"], dict):
-        out["contact"] = {}
-    out["contact"].setdefault("phone", "")
-    out["contact"].setdefault("email", "")
-    out["contact"].setdefault("address", "")
-
-    out.setdefault("location", {})
-    if not isinstance(out["location"], dict):
-        out["location"] = {}
-    out["location"].setdefault("city", _clean_text(base.get("location", {}).get("city")))
-
-    # Builder meta
-    out.setdefault("_builder", {})
-    if not isinstance(out["_builder"], dict):
-        out["_builder"] = {}
-    out["_builder"].setdefault("tone", "warm")
-    out["_builder"].setdefault("sections", None)
-    out["_builder"].setdefault("hidden", [])
-
-    return out
 
 
 # =========================
@@ -743,3 +606,134 @@ def create_website(
         "debug_business_name": content.get("business_name"),
         "debug_hero_headline": (content.get("hero") or {}).get("headline"),
     }
+
+# =========================
+# CUSTOM DOMAIN (CONNECT + VERIFY)
+# =========================
+
+def _normalize_host(host: str) -> str:
+    h = (host or "").strip().lower()
+    if ":" in h:
+        h = h.split(":", 1)[0]
+    if h.startswith("www."):
+        h = h[4:]
+    return h
+
+def _domain_token_for_site(site: Website) -> str:
+    """
+    Deterministic token (no DB column needed).
+    User adds TXT record:
+      autopilotai-verify=<token>
+    """
+    raw = f"autopilotai:{site.id}:{site.user_id}:{site.username}"
+    digest = hashlib.sha256(raw.encode("utf-8")).digest()
+    return base64.urlsafe_b64encode(digest).decode("utf-8").rstrip("=")[:32]
+
+@router.get("/{username}/domain/status")
+def domain_status(
+    username: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    site = db.query(Website).filter(Website.username == username).first()
+    if not site:
+        raise HTTPException(status_code=404, detail="Website not found")
+    if site.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    token = _domain_token_for_site(site)
+    return {
+        "ok": True,
+        "custom_domain": site.custom_domain,
+        "domain_verified": bool(site.domain_verified),
+        "txt_name": "@",
+        "txt_value": f"autopilotai-verify={token}",
+    }
+
+@router.post("/{username}/domain/set")
+def set_custom_domain(
+    username: str,
+    payload: dict = Body(...),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    site = db.query(Website).filter(Website.username == username).first()
+    if not site:
+        raise HTTPException(status_code=404, detail="Website not found")
+    if site.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    domain = _normalize_host(payload.get("domain") or "")
+    if not domain:
+        raise HTTPException(status_code=400, detail="Missing domain")
+
+    existing = db.query(Website).filter(Website.custom_domain == domain).first()
+    if existing and existing.id != site.id:
+        raise HTTPException(status_code=400, detail="Domain already in use")
+
+    site.custom_domain = domain
+    site.domain_verified = False
+    db.commit()
+
+    token = _domain_token_for_site(site)
+    return {
+        "ok": True,
+        "custom_domain": site.custom_domain,
+        "domain_verified": bool(site.domain_verified),
+        "txt_name": "@",
+        "txt_value": f"autopilotai-verify={token}",
+        "next": "Add TXT record, then call /verify",
+    }
+
+@router.post("/{username}/domain/verify")
+def verify_custom_domain(
+    username: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    site = db.query(Website).filter(Website.username == username).first()
+    if not site:
+        raise HTTPException(status_code=404, detail="Website not found")
+    if site.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    if not site.custom_domain:
+        raise HTTPException(status_code=400, detail="No custom_domain set")
+
+    token = _domain_token_for_site(site)
+    expected = f"autopilotai-verify={token}"
+
+    try:
+        import dns.resolver  # type: ignore
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail="dnspython missing. Install with: pip install dnspython",
+        )
+
+    try:
+        answers = dns.resolver.resolve(site.custom_domain, "TXT")
+        values = []
+        for rdata in answers:
+            parts = []
+            for s in getattr(rdata, "strings", []):
+                try:
+                    parts.append(s.decode("utf-8"))
+                except Exception:
+                    pass
+            txt = "".join(parts).strip()
+            if txt:
+                values.append(txt)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"TXT lookup failed: {str(e)}")
+
+    if expected not in values:
+        raise HTTPException(
+            status_code=400,
+            detail=f"TXT not found. Expected: {expected}",
+        )
+
+    site.domain_verified = True
+    db.commit()
+
+    return {"ok": True, "custom_domain": site.custom_domain, "domain_verified": True}

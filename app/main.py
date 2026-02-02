@@ -29,6 +29,7 @@ from app.routes.work_routes import router as work_router
 from app.ai import image_routes
 from app.ai.growth_pack_routes import router as growth_pack_router
 from app.routes.restaurant_websites import router as restaurant_websites_router
+from app.routes.restaurant_websites import domains_router  # ✅ NEW
 from app.routes import websites_routes
 from app.routes import dashboard_websites_routes
 
@@ -66,6 +67,9 @@ app.include_router(dashboard_websites_routes.router)
 
 # public website renderers AFTER
 app.include_router(restaurant_websites_router)
+
+# ✅ domains resolver (for custom domain routing)
+app.include_router(domains_router)
 
 # AI Routes
 app.include_router(content_router, prefix="/api/content")
