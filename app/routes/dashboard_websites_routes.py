@@ -80,33 +80,59 @@ def _merge_defaults(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str,
 # =========================
 
 def infer_ai_input_from_prompt(prompt: str) -> dict:
-    p = (prompt or "").lower()
+    p_raw = (prompt or "").strip()
+    p = p_raw.lower()
 
+    # -------------------------
+    # business type
+    # -------------------------
     business_type = "business"
-    if any(w in p for w in ["restaurant", "pizza", "burger", "cafe", "coffee", "food"]):
+    is_restaurant = any(w in p for w in [
+        "restaurant", "pizza", "burger", "sushi", "cafe", "coffee", "food", "takeaway", "delivery", "dine", "halal"
+    ])
+    if is_restaurant:
         business_type = "restaurant"
 
+    # -------------------------
+    # city extraction (SAFE)
+    # Only accept Capitalized city names after "in ..."
+    # Example: "in Stockholm", "in New York"
+    # If it looks like normal sentence text (lowercase), ignore.
+    # -------------------------
     city = ""
-    city_match = re.search(r"in ([a-zA-Z\s]{2,30})", prompt or "")
+    city_match = re.search(r"\bin\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b", p_raw)
     if city_match:
-        city = city_match.group(1).strip().title()
+        city = city_match.group(1).strip()
 
-    goal = "Contact us"
-    if any(w in p for w in ["book", "booking", "appointment"]):
-        goal = "Book an appointment"
-    elif any(w in p for w in ["contact", "call", "lead"]):
-        goal = "Contact us"
-    elif any(w in p for w in ["buy", "order", "sell", "quote", "pricing"]):
-        goal = "Get a free quote"
-    elif business_type == "restaurant":
-        goal = "Reserve a table"
+    # -------------------------
+    # goal / CTA
+    # -------------------------
+    # For restaurants: never "free quote"
+    if business_type == "restaurant":
+        if any(w in p for w in ["book", "booking", "reserve", "reservation"]):
+            goal = "Reserve a table"
+        elif any(w in p for w in ["order", "delivery", "takeaway", "take away"]):
+            goal = "Order now"
+        else:
+            goal = "View menu"
+    else:
+        # business sites
+        if any(w in p for w in ["book", "booking", "appointment"]):
+            goal = "Book an appointment"
+        elif any(w in p for w in ["contact", "call", "lead", "message"]):
+            goal = "Contact us"
+        elif any(w in p for w in ["buy", "order", "sell", "pricing"]):
+            goal = "Get pricing"
+        else:
+            goal = "Contact us"
 
     return {
         "business_type": business_type,
         "city": city,
         "primary_goal": goal,
-        "raw_prompt": prompt,
+        "raw_prompt": p_raw,
     }
+
 
 def _is_empty_value(v) -> bool:
     if v is None:
