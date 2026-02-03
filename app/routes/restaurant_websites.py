@@ -155,27 +155,6 @@ def get_restaurant_website(
                 "username": website.username,
             }
 
-    # -------------------------
-    # LAZY BACKFILL AI STRUCTURE
-    # -------------------------
-    if website.ai_structure_json is None:
-        try:
-            structure = generate_ai_structure(
-                business_type=website.template or "business",
-                goal="conversions",
-            )
-            website.ai_structure_json = json.dumps(structure)
-            db.commit()
-        except Exception:
-            pass
-
-    return {
-        "username": website.username,
-        "template": website.template,
-        "content_json": website.content_json,
-        "ai_structure_json": website.ai_structure_json,
-        "user_id": website.user_id,
-    }
 
 # -------------------------
 # SAVE WEBSITE CONTENT (OWNER ONLY)
