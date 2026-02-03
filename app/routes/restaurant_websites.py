@@ -270,20 +270,65 @@ def upload_menu_image(
     if website.user_id != user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    ext = file.filename.split(".")[-1]
-    key = f"menu-items/{username}/{uuid.uuid4()}.{ext}"
+    worker_url = (os.getenv("R2_UPLOAD_WORKER_URL") or "").strip().rstrip("/")
+    upload_token = (os.getenv("R2_UPLOAD_WORKER_TOKEN") or "").strip()
+
+    if not worker_url or not upload_token:
+        raise HTTPException(
+            status_code=500,
+            detail="Upload worker not configured (missing R2_UPLOAD_WORKER_URL or R2_UPLOAD_WORKER_TOKEN)",
+        )
 
     try:
-        r2.upload_fileobj(
-            file.file,
-            R2_BUCKET,
-            key,
-            ExtraArgs={"ContentType": file.content_type},
+        import requests
+    except Exception:
+        raise HTTPException(status_code=500, detail="requests not installed on server")
+
+    # read file bytes
+    try:
+        data = file.file.read()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to read file: {str(e)}")
+
+    # base64 encode for worker JSON
+    import base64
+    file_b64 = base64.b64encode(data).decode("utf-8")
+
+    payload = {
+        "username": username,
+        "filename": file.filename or "upload.bin",
+        "contentType": file.content_type or "application/octet-stream",
+        "fileBase64": file_b64,
+    }
+
+    try:
+        resp = requests.post(
+            f"{worker_url}/upload",
+            json=payload,
+            headers={"Authorization": f"Bearer {upload_token}"},
+            timeout=60,
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Upload worker request failed: {str(e)}")
 
-    return {"url": f"{R2_PUBLIC_BASE_URL}/{key}"}
+    if resp.status_code != 200:
+        # surface worker error
+        try:
+            detail = resp.json()
+        except Exception:
+            detail = resp.text
+        raise HTTPException(status_code=500, detail={"worker_status": resp.status_code, "worker_error": detail})
+
+    try:
+        out = resp.json()
+    except Exception:
+        raise HTTPException(status_code=500, detail="Worker returned invalid JSON")
+
+    url = out.get("url")
+    if not url:
+        raise HTTPException(status_code=500, detail="Worker response missing url")
+
+    return {"url": url}
 
 # -------------------------
 # SAVE AI CONTENT (OWNER ONLY)
