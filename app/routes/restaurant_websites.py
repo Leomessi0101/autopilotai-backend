@@ -1,7 +1,5 @@
 import json
 import os
-import uuid
-import boto3
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Body, Request
 from sqlalchemy.orm import Session
@@ -10,41 +8,23 @@ from jose import jwt
 from app.utils.auth import get_current_user
 from app.database.session import SessionLocal
 from app.database.models import Website, User
-from app.routes.stripe_routes import SECRET_KEY
 
-from app.ai.website_ai import generate_ai_structure  # deterministic structure
 
 router = APIRouter(prefix="/api/restaurants", tags=["Restaurant Websites"])
 
 # ✅ domains router (used by Next.js middleware)
 domains_router = APIRouter(prefix="/api/domains", tags=["Domains"])
 
-# -------------------------
-# R2 CONFIG
-# -------------------------
-R2_BUCKET = os.getenv("R2_BUCKET_NAME")
-R2_PUBLIC_BASE_URL = os.getenv("R2_PUBLIC_BASE_URL")
-R2_ENDPOINT = os.getenv("R2_ENDPOINT")
-
-r2 = boto3.client(
-    "s3",
-    endpoint_url=R2_ENDPOINT,
-    aws_access_key_id="12345678901234567890123456789012",       # ✅ hardcoded 32 chars
-    aws_secret_access_key="12345678901234567890123456789012",   # ✅ hardcoded 32 chars
-    aws_session_token=os.getenv("R2_SESSION_TOKEN") or os.getenv("CLOUDFLARE_API_TOKEN"),
-    region_name="auto",
-)
-
-
 
 # -------------------------
-# OPTIONAL: OpenAI
+# OPTIONAL: OpenAI (unused here, safe to keep)
 # -------------------------
 try:
     from openai import OpenAI
     _openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 except Exception:
     _openai_client = None
+
 
 # -------------------------
 # DB DEPENDENCY
@@ -56,16 +36,13 @@ def get_db():
     finally:
         db.close()
 
+
 def _safe_json_loads(s: str):
     try:
         return json.loads(s)
     except Exception:
         return None
 
-def _clean_text(v):
-    if v is None:
-        return ""
-    return str(v).strip()
 
 def _normalize_host(host: str) -> str:
     h = (host or "").strip().lower()
@@ -74,6 +51,16 @@ def _normalize_host(host: str) -> str:
     if h.startswith("www."):
         h = h[4:]
     return h
+
+
+def _get_jwt_secret() -> str:
+    """
+    Keep this consistent with whatever you use to sign tokens.
+    Your get_current_user() already works, so this is ONLY for
+    public GET owner-detection (optional).
+    """
+    return os.getenv("JWT_SECRET") or os.getenv("SECRET_KEY") or os.getenv("JWT_SECRET_KEY") or "supersecretkey"
+
 
 # -------------------------
 # ✅ RESOLVE DOMAIN -> USERNAME (for middleware.ts)
@@ -105,6 +92,7 @@ def resolve_domain(
 
     return {"username": website.username}
 
+
 # -------------------------
 # DISABLED: LEGACY GENERATE
 # -------------------------
@@ -114,6 +102,7 @@ def generate_restaurant_website_api():
         status_code=410,
         detail="Website generation has moved. Use the dashboard flow.",
     )
+
 
 # -------------------------
 # GET WEBSITE (PUBLIC / OWNER)
@@ -125,35 +114,49 @@ def get_restaurant_website(
     db: Session = Depends(get_db),
 ):
     website = db.query(Website).filter(Website.username == username).first()
-
     if not website:
         raise HTTPException(status_code=404, detail="Website not found")
 
     owner = db.query(User).filter(User.id == website.user_id).first()
 
     # -------------------------
-    # OWNER DETECTION (JWT)
+    # OWNER DETECTION (JWT, optional)
     # -------------------------
     is_owner = False
-    auth_header = request.headers.get("authorization")
+    auth_header = request.headers.get("authorization") or request.headers.get("Authorization")
 
     if auth_header and auth_header.lower().startswith("bearer "):
-        token = auth_header.split(" ")[1]
+        token = auth_header.split(" ", 1)[1].strip()
         try:
-            payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+            payload = jwt.decode(token, _get_jwt_secret(), algorithms=["HS256"])
             is_owner = payload.get("user_id") == website.user_id
         except Exception:
-            pass
+            is_owner = False
 
     # -------------------------
     # PUBLIC ACCESS → ENFORCE SUBSCRIPTION
+    # If viewer is NOT owner and owner has no plan -> suspend public view
     # -------------------------
     if not is_owner:
-        if not owner or not owner.subscription_plan:
+        if not owner or not getattr(owner, "subscription_plan", None):
             return {
                 "suspended": True,
                 "username": website.username,
             }
+
+    # -------------------------
+    # ✅ ALWAYS RETURN WEBSITE DATA (THIS WAS MISSING BEFORE)
+    # -------------------------
+    return {
+        "suspended": False,
+        "username": website.username,
+        "template": website.template,
+        "user_id": website.user_id,
+        "ai_structure_json": website.ai_structure_json,
+        "content_json": website.content_json,
+        "custom_domain": website.custom_domain,
+        "domain_verified": getattr(website, "domain_verified", None),
+    }
 
 
 # -------------------------
@@ -167,15 +170,13 @@ def save_menu(
     db: Session = Depends(get_db),
 ):
     website = db.query(Website).filter(Website.username == username).first()
-
     if not website:
         raise HTTPException(status_code=404, detail="Website not found")
-
     if website.user_id != user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
     try:
-        content = json.loads(website.content_json)
+        content = _safe_json_loads(website.content_json or "") or {}
 
         if "menu" in payload:
             content["menu"] = payload["menu"]
@@ -201,6 +202,7 @@ def save_menu(
 
     return {"success": True}
 
+
 # -------------------------
 # SAVE WEBSITE CONTENT (OWNER ONLY) — GENERIC PATCH
 # -------------------------
@@ -212,15 +214,13 @@ def save_content(
     db: Session = Depends(get_db),
 ):
     website = db.query(Website).filter(Website.username == username).first()
-
     if not website:
         raise HTTPException(status_code=404, detail="Website not found")
-
     if website.user_id != user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
     try:
-        content = json.loads(website.content_json) if website.content_json else {}
+        content = _safe_json_loads(website.content_json or "") or {}
         for k, v in payload.items():
             content[k] = v
         website.content_json = json.dumps(content)
@@ -231,8 +231,9 @@ def save_content(
 
     return {"success": True}
 
+
 # -------------------------
-# UPLOAD IMAGE (OWNER ONLY)
+# UPLOAD IMAGE (OWNER ONLY) — uses Cloudflare Worker
 # -------------------------
 @router.post("/{username}/upload-image")
 def upload_menu_image(
@@ -242,10 +243,8 @@ def upload_menu_image(
     db: Session = Depends(get_db),
 ):
     website = db.query(Website).filter(Website.username == username).first()
-
     if not website:
         raise HTTPException(status_code=404, detail="Website not found")
-
     if website.user_id != user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
@@ -291,7 +290,6 @@ def upload_menu_image(
         raise HTTPException(status_code=500, detail=f"Upload worker request failed: {str(e)}")
 
     if resp.status_code != 200:
-        # surface worker error
         try:
             detail = resp.json()
         except Exception:
@@ -309,6 +307,7 @@ def upload_menu_image(
 
     return {"url": url}
 
+
 # -------------------------
 # SAVE AI CONTENT (OWNER ONLY)
 # -------------------------
@@ -320,10 +319,8 @@ def save_ai_content(
     db: Session = Depends(get_db),
 ):
     website = db.query(Website).filter(Website.username == username).first()
-
     if not website:
         raise HTTPException(status_code=404, detail="Website not found")
-
     if website.user_id != user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
@@ -336,6 +333,9 @@ def save_ai_content(
 
     return {"success": True}
 
+
+# -------------------------
+# REGENERATE SECTION (OWNER ONLY) — stub / safe
 # -------------------------
 @router.post("/{username}/regenerate-section")
 def regenerate_section(
@@ -345,10 +345,8 @@ def regenerate_section(
     db: Session = Depends(get_db),
 ):
     website = db.query(Website).filter(Website.username == username).first()
-
     if not website:
         raise HTTPException(status_code=404, detail="Website not found")
-
     if website.user_id != user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
@@ -359,13 +357,7 @@ def regenerate_section(
     except Exception:
         current = {}
 
-    # 🔒 SAFE FALLBACK: no AI yet, just return existing section
     if section not in current:
         return {"ok": True, "patch": {}}
 
-    return {
-        "ok": True,
-        "patch": {
-            section: current.get(section)
-        },
-    }
+    return {"ok": True, "patch": {section: current.get(section)}}
