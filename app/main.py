@@ -61,6 +61,7 @@ app.include_router(dashboard_router, prefix="/api")
 app.include_router(work_router, prefix="/api")
 app.include_router(image_routes.router, prefix="/api")
 app.include_router(growth_pack_router, prefix="/api")
+app.include_router(websites_routes.router)
 
 # 🔥 dashboard website builder FIRST
 app.include_router(dashboard_websites_routes.router)
