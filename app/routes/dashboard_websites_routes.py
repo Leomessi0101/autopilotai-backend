@@ -10,7 +10,7 @@ from app.database.session import SessionLocal
 from app.database.models import Website, User
 from app.utils.auth import get_current_user
 
-from app.ai.website_ai import generate_ai_plan
+from app.ai.website_ai import generate_ai_plan, rewrite_content, generate_style_variations
 
 # =========================
 # OPTIONAL: OpenAI
@@ -142,6 +142,89 @@ def create_website(
         "debug_business_name": content.get("business_name"),
         "debug_sections": list(content.get("sections", {}).keys()),
     }
+
+
+# =========================
+# CONTENT REWRITER
+# =========================
+
+@router.post("/{username}/rewrite")
+def rewrite_content_endpoint(
+    username: str,
+    payload: dict = Body(...),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Generates alternative versions of text content.
+    """
+    site = db.query(Website).filter(Website.username == username).first()
+    if not site:
+        raise HTTPException(status_code=404, detail="Website not found")
+    if site.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    text = payload.get("text", "")
+    tone = payload.get("tone", "professional")
+
+    if not text:
+        raise HTTPException(status_code=400, detail="Missing text")
+
+    try:
+        alternatives = rewrite_content(
+            original_text=text,
+            tone=tone,
+            business_context=site.template or "business",
+        )
+        
+        return {
+            "ok": True,
+            "alternatives": alternatives,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =========================
+# STYLE VARIATIONS
+# =========================
+
+@router.post("/{username}/style-variations")
+def get_style_variations(
+    username: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Generates 3 different style variations of the current website.
+    """
+    site = db.query(Website).filter(Website.username == username).first()
+    if not site:
+        raise HTTPException(status_code=404, detail="Website not found")
+    if site.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    try:
+        content = json.loads(site.content_json)
+        structure = json.loads(site.ai_structure_json)
+        
+        business_name = content.get("business_name", username.replace("-", " ").title())
+        prompt = "Generate variations"  # We don't have the original prompt
+        
+        variations = generate_style_variations(
+            business_name=business_name,
+            prompt=prompt,
+            template=site.template or "business",
+            sections=structure.get("sections", []),
+        )
+        
+        return {
+            "ok": True,
+            "variations": variations,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 # =========================
 # CUSTOM DOMAIN (CONNECT + VERIFY)
