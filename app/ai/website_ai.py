@@ -4,40 +4,12 @@ import re
 import json
 from typing import Dict, Any, List, Tuple, Optional
 
-from app.ai.openai_client import chat_completion  # adjust if your helper is elsewhere
+from app.ai.openai_client import chat_completion
 
 
 # ======================================================
-# ALLOWED FRONTEND SCHEMA (MUST MATCH aiStructure.ts)
+# STRUCTURE GENERATION (ENHANCED)
 # ======================================================
-
-HERO_VARIANTS = ["split_image", "centered_text", "image_background", "minimal"]
-
-# More hero variety helps “not-template” feel immediately
-HERO_VARIANTS_BY_TEMPLATE = {
-    "restaurant": ["image_background", "split_image", "centered_text"],
-    "business": ["split_image", "centered_text", "minimal"],
-}
-
-SECTION_SETS = {
-    "restaurant": [
-        ["about", "services", "gallery", "testimonial", "cta"],
-        ["services", "gallery", "process", "cta"],
-        ["trust", "services", "gallery", "testimonial", "cta"],
-        ["about", "trust", "services", "faq", "cta"],
-        ["highlight", "services", "gallery", "cta"],
-        ["about", "services", "process", "faq", "cta"],
-    ],
-    "business": [
-        ["about", "services", "cta"],
-        ["services", "process", "testimonial", "cta"],
-        ["trust", "services", "cta"],
-        ["about", "trust", "services", "testimonial", "cta"],
-        ["highlight", "services", "cta"],
-        ["about", "process", "services", "cta"],
-        ["services", "faq", "cta"],
-    ],
-}
 
 THEMES = [
     {"palette": "light", "accent": "indigo"},
@@ -50,127 +22,15 @@ THEMES = [
     {"palette": "dark-soft", "accent": "amber"},
 ]
 
-FOOTER_VARIANTS = [{"variant": "minimal"}, {"variant": "standard"}]
-
-
-# ======================================================
-# INTENT DETECTION (CHEAP + DETERMINISTIC)
-# ======================================================
-
-_RE_WORD = re.compile(r"[a-z0-9]+", re.I)
-
-RESTAURANT_KEYWORDS = [
-    "restaurant", "cafe", "pizza", "burger", "sushi", "thai", "italian", "menu", "dine-in", "takeaway", "delivery"
+SECTION_POOL = [
+    "hero", "highlight", "about", "services", "trust", "process", 
+    "testimonial", "faq", "gallery", "cta", "contact", "location"
 ]
 
-BUSINESS_BUCKETS: List[Tuple[str, List[str], str, List[str]]] = [
-    (
-        "car",
-        ["car", "auto", "detailing", "dealership", "wrap", "tint", "ceramic", "polish", "used cars", "financing"],
-        "Book a service",
-        ["Interior & exterior detailing", "Paint correction & protection", "Quick turnaround"],
-    ),
-    (
-        "gym",
-        ["gym", "fitness", "training", "bjj", "boxing", "muay thai", "mma", "pt", "personal trainer"],
-        "Book a trial",
-        ["Beginner-friendly classes", "Personal coaching", "Flexible memberships"],
-    ),
-    (
-        "agency",
-        ["agency", "marketing", "ads", "seo", "branding", "content", "creative", "funnels"],
-        "Get a free audit",
-        ["Growth strategy", "Ads & creatives", "Landing pages that convert"],
-    ),
-    (
-        "construction",
-        ["construction", "builder", "renovation", "remodel", "plumbing", "electric", "roof", "handyman"],
-        "Request a quote",
-        ["On-site estimate", "Clear pricing", "Reliable workmanship"],
-    ),
-    (
-        "beauty",
-        ["salon", "barber", "hair", "nails", "spa", "massage", "lashes", "skincare"],
-        "Book now",
-        ["High-quality treatments", "Friendly atmosphere", "Easy booking"],
-    ),
-    (
-        "professional",
-        ["law", "lawyer", "attorney", "accounting", "tax", "consulting", "broker", "real estate"],
-        "Schedule a consultation",
-        ["Expert guidance", "Clear next steps", "Fast response"],
-    ),
-    (
-        "tech",
-        ["saas", "software", "app", "platform", "ai", "automation", "tool", "startup"],
-        "Start free trial",
-        ["Product overview", "Simple onboarding", "Fast support"],
-    ),
-]
-
-GENERIC_SERVICES = ["Professional service", "Fast response", "Trusted quality"]
-
-
-def _words(text: str) -> List[str]:
-    return [w.lower() for w in _RE_WORD.findall(text or "")]
-
-
-def infer_intent(ai_input: Dict[str, Any]) -> Dict[str, Any]:
-    prompt = (ai_input.get("prompt") or "").strip()
-    combined = prompt.lower()
-    w = _words(prompt)
-
-    template = "restaurant" if any(k in combined for k in RESTAURANT_KEYWORDS) else "business"
-
-    industry = "generic"
-    services = GENERIC_SERVICES[:]
-    goal = "Get started"
-
-    # pick first matching bucket (deterministic)
-    for bucket, keywords, default_goal, default_services in BUSINESS_BUCKETS:
-        if any(k in combined for k in keywords):
-            industry = bucket
-            goal = default_goal
-            services = default_services[:]
-            break
-
-    name = (ai_input.get("business_name") or "").strip()
-    if not name and w:
-        name = " ".join(word.title() for word in w[:2])
-
-    if template == "restaurant":
-        if not services or services == GENERIC_SERVICES:
-            services = ["Signature dishes", "Fresh ingredients", "Takeaway & dine-in"]
-        if not goal:
-            goal = "Reserve a table"
-
-    return {
-        "template": template,
-        "industry": industry,
-        "services": services,
-        "primary_goal": goal,
-        "business_name": name,
-        "raw_prompt": prompt,
-        "prompt": prompt,  # keep both keys around safely
-    }
-
-
-# ======================================================
-# STRUCTURE GENERATION (NOW: HIGH VARIETY)
-# ======================================================
 
 def stable_seed(*values: str) -> int:
     raw = "|".join([v or "" for v in values])
     return int(hashlib.sha256(raw.encode()).hexdigest()[:8], 16)
-
-
-def _goal_flags(goal: str) -> Dict[str, bool]:
-    g = (goal or "").lower()
-    return {
-        "lead": any(w in g for w in ["lead", "contact", "quote", "call", "message"]),
-        "book": any(w in g for w in ["book", "booking", "appointment", "reserve"]),
-        "sell": any(w in g for w in ["sell", "order", "buy", "pricing", "price"]),
-    }
 
 
 def _ensure_unique_keep_order(items: List[str]) -> List[str]:
@@ -190,90 +50,45 @@ def generate_ai_structure(
     prompt: str = "",
 ):
     """
-    Generates a varied page structure.
-
-    IMPORTANT:
-    - Backward compatible: old calls still work.
-    - If `prompt` is provided, structure becomes stable-per-prompt (same prompt => same structure).
-    - If prompt is NOT provided, structure still varies per call (so it no longer feels like the same template).
+    Generates varied structure with HTML generation instructions.
     """
-
     bt = (business_type or "business").lower().strip()
     if bt not in ("restaurant", "business"):
-        # keep it safe — collapse unknown into business
         bt = "business"
 
-    flags = _goal_flags(goal)
-
-    # Seed logic:
-    # - If prompt exists => deterministic per prompt
-    # - If prompt missing => random per call (fixes "always same template" immediately)
+    # Deterministic if prompt exists, random otherwise
     if (prompt or "").strip():
         rng = random.Random(stable_seed(bt, (goal or ""), (prompt or ""), str(version)))
     else:
         rng = random.Random()
         rng.seed(random.SystemRandom().randint(0, 2**31 - 1))
 
-    # Pick a base section set (this is the big variety boost)
-    base_sets = SECTION_SETS.get(bt, SECTION_SETS["business"])
-    base = list(rng.choice(base_sets))
-
-    # Goal-driven additions
-    additions: List[str] = []
-    if flags["lead"]:
-        additions += ["trust", "contact"]
-    if flags["book"]:
-        additions += ["process", "contact"]
-    if flags["sell"]:
-        additions += ["faq", "trust"]
-
-    # Restaurant context additions
+    # Pick sections (variety)
     if bt == "restaurant":
-        additions += ["gallery", "location"]
+        base_count = rng.randint(6, 9)
+        preferred = ["hero", "about", "services", "gallery", "testimonial", "cta", "contact"]
     else:
-        additions += ["about"] if "about" not in base else []
+        base_count = rng.randint(5, 8)
+        preferred = ["hero", "about", "services", "trust", "process", "cta", "contact"]
 
-    sections = _ensure_unique_keep_order(base + additions)
-
-    # Ensure hero is not duplicated in sections list (your renderer treats hero separately)
-    sections = [s for s in sections if s != "hero"]
-
-    # Ensure CTA exists and is last-ish
-    if "cta" not in sections:
-        sections.append("cta")
-
-    # If contact exists, push it near the end (better conversion UX)
+    # Add some random sections for variety
+    available = [s for s in SECTION_POOL if s not in preferred]
+    extra = rng.sample(available, min(2, len(available)))
+    
+    sections = _ensure_unique_keep_order(preferred + extra)[:base_count]
+    
+    # Ensure hero first, cta/contact last
+    if "hero" in sections:
+        sections = ["hero"] + [s for s in sections if s != "hero"]
     if "contact" in sections:
-        sections = [s for s in sections if s != "contact"]
-        sections.append("contact")
-
-    # Add some ordering variety in the middle (not hero/cta/contact)
-    fixed_tail = []
-    if sections and sections[-1] == "contact":
-        fixed_tail = ["contact"]
-        sections = sections[:-1]
-
-    if sections and sections[-1] == "cta":
-        # keep cta at end before contact
-        cta_tail = ["cta"]
-        sections = sections[:-1]
-    else:
-        cta_tail = []
-
-    # shuffle middle lightly
-    mid = sections[:]
-    rng.shuffle(mid)
-    sections = mid + cta_tail + fixed_tail
-
-    # Cap length but keep variety
-    # restaurants usually benefit from more sections
-    if bt == "restaurant":
-        min_s, max_s = 5, 9
-    else:
-        min_s, max_s = 4, 8
-
-    target_len = rng.randint(min_s, max_s)
-    sections = sections[:target_len]
+        sections = [s for s in sections if s != "contact"] + ["contact"]
+    if "cta" in sections and "cta" != sections[-1]:
+        sections = [s for s in sections if s != "cta"]
+        # Insert CTA before contact
+        if sections[-1] == "contact":
+            sections.insert(-1, "cta")
+        else:
+            sections.append("cta")
 
     # Theme variety
     t = dict(rng.choice(THEMES))
@@ -281,411 +96,239 @@ def generate_ai_structure(
         "palette": t.get("palette", "dark"),
         "accent": t.get("accent", "indigo"),
         "radius": rng.choice(["md", "lg", "xl"]),
-        "density": rng.choice(["compact", "comfortable"]),
+        "density": rng.choice(["compact", "comfortable", "spacious"]),
+        "style": rng.choice(["modern", "minimal", "bold", "warm"]),
     }
-
-    # Hero variant by template preference
-    hero_choices = HERO_VARIANTS_BY_TEMPLATE.get(bt, HERO_VARIANTS)
-    hero_variant = rng.choice(hero_choices)
 
     return {
-        "hero": {"variant": hero_variant},
         "sections": sections,
         "theme": theme,
-        "footer": rng.choice(FOOTER_VARIANTS),
+        "html_mode": True,  # Flag to indicate HTML generation
     }
 
 
 # ======================================================
-# 🚀 REAL AI CONTENT GENERATION (WARM + FULL PAGE)
+# AI HTML GENERATION PROMPT
 # ======================================================
 
-CONTENT_SYSTEM_PROMPT = """
-You are an expert conversion-focused website copywriter and creative director.
+HTML_SYSTEM_PROMPT = """You are an expert web designer and developer specializing in creating beautiful, unique landing pages.
 
-Generate a READY-TO-PUBLISH website content JSON.
-Rules:
-- Do NOT ask questions.
-- Do NOT use placeholders (no "Add your...", no brackets).
-- Make confident assumptions based on the business description.
-- Write warm, human, industry-specific copy.
-- Keep it simple, clear, and believable.
-- Avoid hype. Sound like a real business.
-- Output STRICT JSON only. No markdown. No commentary.
+You generate complete HTML sections using Tailwind CSS classes. Each website should feel COMPLETELY DIFFERENT from others.
+
+KEY RULES:
+1. Return ONLY valid JSON (no markdown, no commentary)
+2. Generate complete HTML with Tailwind classes for each section
+3. Make each layout UNIQUE - vary spacing, grids, flex directions, alignments
+4. Use the theme palette and accent color provided
+5. Be creative with layouts - asymmetric grids, different card styles, varied typography
+6. Ensure mobile responsiveness with Tailwind's responsive classes
+7. Never use placeholder text - generate real, business-specific copy
+8. Include proper semantic HTML tags
+9. Make it look PREMIUM and MODERN
+10. Each section should have a distinct visual style
+
+LAYOUT VARIETY TECHNIQUES:
+- Vary grid columns: grid-cols-1, grid-cols-2, grid-cols-3, md:grid-cols-2, lg:grid-cols-3
+- Mix alignments: items-start, items-center, items-end
+- Different card styles: rounded-lg, rounded-2xl, rounded-3xl
+- Varied spacing: gap-4, gap-6, gap-8, gap-10, gap-12
+- Asymmetric layouts: split 2/3 and 1/3, or 1/2 and 1/2
+- Different text alignments: text-left, text-center
+- Varied padding: p-6, p-8, p-10, p-12
+- Background variations: bg-white/5, bg-black/20, gradient backgrounds
 """
 
-CONTENT_USER_PROMPT = """
-Business description (free text):
-{prompt}
+HTML_USER_PROMPT = """Business: {business_name}
+Description: {prompt}
+Type: {template}
+Theme Palette: {palette}
+Accent Color: {accent}
+Style: {style}
+Density: {density}
 
-Business name:
-{business_name}
+Sections to generate: {sections}
 
-Template:
-{template}
-
-Industry bucket:
-{industry}
-
-Primary goal (CTA intent):
-{goal}
-
-Return STRICT JSON ONLY with this exact shape:
-
+Generate a JSON object with this EXACT structure:
 {{
-  "business_name": "",
-  "tagline": "",
-  "hero": {{
-    "headline": "",
-    "subheadline": "",
-    "cta_text": "",
-    "image": null
-  }},
-  "highlight": {{
-    "headline": "",
-    "subheadline": ""
-  }},
-  "about": {{
-    "title": "",
-    "paragraphs": []
-  }},
-  "trust": {{
-    "title": "",
-    "items": []
-  }},
-  "services": {{
-    "title": "",
-    "items": [
-      {{
-        "title": "",
-        "description": "",
-        "image": null
+  "business_name": "actual business name",
+  "sections": {{
+    "hero": {{
+      "html": "<section>...complete HTML with Tailwind classes...</section>",
+      "data": {{
+        "headline": "...",
+        "subheadline": "...",
+        "cta_text": "..."
       }}
-    ]
-  }},
-  "process": {{
-    "title": "",
-    "steps": [
-      {{
-        "title": "",
-        "description": ""
+    }},
+    "about": {{
+      "html": "<section>...complete HTML with Tailwind classes...</section>",
+      "data": {{
+        "paragraphs": ["...", "..."]
       }}
-    ]
-  }},
-  "testimonial": {{
-    "quote": "",
-    "author": ""
-  }},
-  "faq": {{
-    "title": "",
-    "items": [
-      {{
-        "q": "",
-        "a": ""
-      }}
-    ]
-  }},
-  "cta": {{
-    "headline": "",
-    "subheadline": "",
-    "button": ""
-  }},
-  "contact": {{
-    "phone": "",
-    "email": "",
-    "address": ""
-  }},
-  "footer": {{
-    "tagline": ""
-  }},
-  "image_slots": [
-    {{
-      "id": "hero",
-      "label": "Hero image",
-      "recommended_prompt": "",
-      "placement": "hero",
-      "aspect_ratio": "16:9",
-      "optional": true
     }}
-  ],
-  "ai_todos": []
+    // ... for each section in the sections list
+  }},
+  "meta": {{
+    "primary_color": "tailwind color class",
+    "background_style": "description of background"
+  }}
 }}
 
-Important:
-- contact fields MUST be empty strings.
-- image fields MUST be either null or a string URL (but you can set them to null).
-- image_slots should propose 3 to 8 good places for images for this business type.
-- ai_todos should be short and practical (5 to 10 items max).
+IMPORTANT:
+- Make each section visually DISTINCT
+- Use {accent} as the primary accent (indigo-500, emerald-500, etc.)
+- For {palette}="dark": use dark backgrounds (bg-black, bg-slate-900)
+- For {palette}="light": use light backgrounds (bg-white, bg-gray-50)
+- Vary the layout structure for each section
+- Include the data object with editable content
+- Use semantic HTML (section, article, div, h1-h6, p, etc.)
+- Mobile-first responsive design
+- NO placeholder text - make it specific to the business
+
+Example hero variations:
+1. Centered text with large heading
+2. Split layout with text left, image placeholder right
+3. Full-width background with overlay
+4. Minimal with small centered content
+5. Asymmetric with diagonal elements
+
+Be creative and make EVERY website look different!
 """
 
 
-def _coerce_content_minimums(intent: Dict[str, Any], content: Dict[str, Any]) -> Dict[str, Any]:
-    bn = (content.get("business_name") or "").strip() or (intent.get("business_name") or "").strip() or "Your Business"
-    goal = (intent.get("primary_goal") or "Get started").strip()
-
-    content.setdefault("business_name", bn)
-    content.setdefault("tagline", "")
-
-    content.setdefault("hero", {})
-    content["hero"].setdefault("headline", bn)
-    content["hero"].setdefault("subheadline", "A simple, reliable solution for customers who want it done right.")
-    content["hero"].setdefault("cta_text", goal)
-    if "image" not in content["hero"]:
-        content["hero"]["image"] = None
-
-    content.setdefault("highlight", {})
-    content["highlight"].setdefault("headline", "Simple, fast, and done right.")
-    content["highlight"].setdefault("subheadline", "Clear communication, quality work, and a great experience end-to-end.")
-
-    content.setdefault("about", {})
-    content["about"].setdefault("title", "About")
-    if not isinstance(content["about"].get("paragraphs"), list):
-        content["about"]["paragraphs"] = []
-    if len(content["about"]["paragraphs"]) == 0:
-        content["about"]["paragraphs"] = [
-            "We focus on doing the basics extremely well: quality work, clear pricing, and a smooth experience.",
-            "From the first message to the final result, we keep things simple, honest, and dependable.",
-        ]
-
-    content.setdefault("trust", {})
-    content["trust"].setdefault("title", "Why choose us")
-    if not isinstance(content["trust"].get("items"), list) or len(content["trust"]["items"]) == 0:
-        content["trust"]["items"] = [
-            "Fast response and clear next steps",
-            "Quality you can see and feel",
-            "No surprises — just honest work",
-        ]
-
-    content.setdefault("services", {})
-    content["services"].setdefault("title", "Services")
-    if not isinstance(content["services"].get("items"), list) or len(content["services"]["items"]) == 0:
-        content["services"]["items"] = [
-            {"title": s, "description": "Delivered with care and attention to detail.", "image": None}
-            for s in (intent.get("services") or GENERIC_SERVICES)
-        ]
-    else:
-        for it in content["services"]["items"]:
-            if isinstance(it, dict) and "image" not in it:
-                it["image"] = None
-
-    content.setdefault("process", {})
-    content["process"].setdefault("title", "How it works")
-    if not isinstance(content["process"].get("steps"), list) or len(content["process"]["steps"]) == 0:
-        content["process"]["steps"] = [
-            {"title": "Reach out", "description": "Send a short message about what you need."},
-            {"title": "Get a plan", "description": "We reply with clear options and next steps."},
-            {"title": "Get it done", "description": "We deliver quickly, cleanly, and professionally."},
-        ]
-
-    content.setdefault("testimonial", {})
-    content["testimonial"].setdefault("quote", "“Professional, fast, and easy to work with.”")
-    content["testimonial"].setdefault("author", "Happy customer")
-
-    content.setdefault("faq", {})
-    content["faq"].setdefault("title", "FAQ")
-    if not isinstance(content["faq"].get("items"), list) or len(content["faq"]["items"]) == 0:
-        content["faq"]["items"] = [
-            {"q": "How fast can I get started?", "a": "Usually the same day — send a message and we’ll take it from there."},
-            {"q": "Do you offer flexible options?", "a": "Yes. We tailor it to what you actually need, without overcomplicating things."},
-            {"q": "Can I make changes later?", "a": "Absolutely. You can update details anytime."},
-        ]
-
-    content.setdefault("cta", {})
-    content["cta"].setdefault("headline", "Ready to get started?")
-    content["cta"].setdefault("subheadline", "Send a message and we’ll respond quickly with the next step.")
-    content["cta"].setdefault("button", goal)
-
-    content.setdefault("contact", {})
-    content["contact"]["phone"] = ""
-    content["contact"]["email"] = ""
-    content["contact"]["address"] = ""
-
-    content.setdefault("footer", {})
-    content["footer"].setdefault("tagline", f"{bn} — built for results.")
-
-    slots = content.get("image_slots")
-    if not isinstance(slots, list) or len(slots) == 0:
-        content["image_slots"] = [
-            {
-                "id": "hero",
-                "label": "Hero image",
-                "recommended_prompt": f"high quality photo that fits {intent.get('raw_prompt','').strip()}",
-                "placement": "hero",
-                "aspect_ratio": "16:9",
-                "optional": True,
-            },
-            {
-                "id": "about",
-                "label": "About image",
-                "recommended_prompt": "warm, authentic photo of the team or the workspace",
-                "placement": "about",
-                "aspect_ratio": "4:3",
-                "optional": True,
-            },
-            {
-                "id": "services_1",
-                "label": "Service image 1",
-                "recommended_prompt": "high quality photo showing the service in action",
-                "placement": "services",
-                "aspect_ratio": "1:1",
-                "optional": True,
-            },
-        ]
-
-    todos = content.get("ai_todos")
-    if not isinstance(todos, list):
-        todos = []
-    if len(todos) == 0:
-        content["ai_todos"] = [
-            "Add phone number",
-            "Add email address",
-            "Add address or city",
-            "Add 1–3 real photos",
-            "Tweak the hero headline to match your exact offer",
-        ]
-    else:
-        content["ai_todos"] = [str(t) for t in todos][:10]
-
-    return content
-
-
-def generate_publishable_content(intent: Dict[str, Any]) -> Dict[str, Any]:
+def generate_html_sections(
+    business_name: str,
+    prompt: str,
+    template: str,
+    sections: List[str],
+    theme: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Generates complete HTML for each section using AI.
+    Returns a dict with section HTML and editable data.
+    """
     try:
         response = chat_completion(
-            system=CONTENT_SYSTEM_PROMPT,
-            user=CONTENT_USER_PROMPT.format(
-                prompt=intent["raw_prompt"],
-                business_name=intent["business_name"],
-                goal=intent["primary_goal"],
-                industry=intent["industry"],
-                template=intent["template"],
+            system=HTML_SYSTEM_PROMPT,
+            user=HTML_USER_PROMPT.format(
+                business_name=business_name,
+                prompt=prompt,
+                template=template,
+                sections=", ".join(sections),
+                palette=theme.get("palette", "dark"),
+                accent=theme.get("accent", "indigo"),
+                style=theme.get("style", "modern"),
+                density=theme.get("density", "comfortable"),
             ),
-            temperature=0.8,
+            temperature=0.9,  # Higher temperature for more variety
         )
+        
         parsed = json.loads(response)
-        return _coerce_content_minimums(intent, parsed)
-    except Exception:
-        bn = (intent.get("business_name") or "Your Business").strip() or "Your Business"
-        goal = (intent.get("primary_goal") or "Get started").strip() or "Get started"
+        
+        # Validate structure
+        if not isinstance(parsed, dict):
+            raise ValueError("Invalid response structure")
+        
+        if "sections" not in parsed or not isinstance(parsed["sections"], dict):
+            raise ValueError("Missing sections in response")
+        
+        return parsed
+        
+    except Exception as e:
+        print(f"HTML generation failed: {str(e)}")
+        # Return fallback structure
+        return generate_fallback_html(business_name, sections, theme)
 
-        fallback = {
-            "business_name": bn,
-            "tagline": "Simple, reliable service — done right.",
-            "hero": {
-                "headline": bn,
-                "subheadline": "Clear communication, quality work, and a smooth experience from start to finish.",
-                "cta_text": goal,
-                "image": None,
-            },
-            "highlight": {
-                "headline": "Warm service. Real results.",
-                "subheadline": "We keep it simple — and we deliver what we promise.",
-            },
-            "about": {
-                "title": "About",
-                "paragraphs": [
-                    "We focus on what customers actually want: a clear plan, great quality, and zero hassle.",
-                    "Whether it’s your first time or you’ve tried other options before, we make the process easy.",
-                ],
-            },
-            "trust": {
-                "title": "Why choose us",
-                "items": [
-                    "Fast response and clear next steps",
-                    "Quality you can see and feel",
-                    "Honest pricing and no surprises",
-                ],
-            },
-            "services": {
-                "title": "Services",
-                "items": [
-                    {"title": s, "description": "Delivered with care and attention to detail.", "image": None}
-                    for s in (intent.get("services") or GENERIC_SERVICES)
-                ],
-            },
-            "process": {
-                "title": "How it works",
-                "steps": [
-                    {"title": "Reach out", "description": "Send a short message about what you need."},
-                    {"title": "Get a plan", "description": "We reply with clear options and next steps."},
-                    {"title": "Get it done", "description": "We deliver quickly, cleanly, and professionally."},
-                ],
-            },
-            "testimonial": {
-                "quote": "“Professional, fast, and easy to work with.”",
-                "author": "Happy customer",
-            },
-            "faq": {
-                "title": "FAQ",
-                "items": [
-                    {"q": "How fast can I get started?", "a": "Usually the same day — send a message and we’ll take it from there."},
-                    {"q": "Do you offer flexible options?", "a": "Yes. We tailor it to what you actually need, without overcomplicating things."},
-                    {"q": "Can I update the site later?", "a": "Absolutely — you can edit anytime."},
-                ],
-            },
-            "cta": {
-                "headline": "Ready to get started?",
-                "subheadline": "Send a message and we’ll respond quickly with the next step.",
-                "button": goal,
-            },
-            "contact": {"phone": "", "email": "", "address": ""},
-            "footer": {"tagline": f"{bn} — built for results."},
-            "image_slots": [
-                {
-                    "id": "hero",
-                    "label": "Hero image",
-                    "recommended_prompt": "high quality hero photo that fits the business",
-                    "placement": "hero",
-                    "aspect_ratio": "16:9",
-                    "optional": True,
-                },
-                {
-                    "id": "about",
-                    "label": "About image",
-                    "recommended_prompt": "warm photo of team, workspace, or product",
-                    "placement": "about",
-                    "aspect_ratio": "4:3",
-                    "optional": True,
-                },
-                {
-                    "id": "services_1",
-                    "label": "Service image 1",
-                    "recommended_prompt": "photo showing the service in action",
-                    "placement": "services",
-                    "aspect_ratio": "1:1",
-                    "optional": True,
-                },
-            ],
-            "ai_todos": [
-                "Add phone number",
-                "Add email address",
-                "Add address or city",
-                "Add 1–3 real photos",
-            ],
+
+def generate_fallback_html(
+    business_name: str,
+    sections: List[str],
+    theme: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Fallback HTML generator if AI fails.
+    """
+    palette = theme.get("palette", "dark")
+    accent = theme.get("accent", "indigo")
+    
+    bg_class = "bg-black text-white" if palette == "dark" else "bg-white text-black"
+    accent_class = f"bg-{accent}-500"
+    
+    fallback_sections = {}
+    
+    if "hero" in sections:
+        fallback_sections["hero"] = {
+            "html": f"""
+                <section class="min-h-screen flex items-center justify-center {bg_class} px-6 py-20">
+                    <div class="max-w-4xl mx-auto text-center">
+                        <h1 class="text-5xl md:text-7xl font-bold tracking-tight mb-6">
+                            {{{{headline}}}}
+                        </h1>
+                        <p class="text-xl md:text-2xl text-gray-400 mb-8">
+                            {{{{subheadline}}}}
+                        </p>
+                        <button class="{accent_class} hover:opacity-90 text-white px-8 py-4 rounded-xl font-semibold text-lg transition">
+                            {{{{cta_text}}}}
+                        </button>
+                    </div>
+                </section>
+            """,
+            "data": {
+                "headline": business_name,
+                "subheadline": "Welcome to our website",
+                "cta_text": "Get Started"
+            }
         }
-
-        return _coerce_content_minimums(intent, fallback)
+    
+    # Add other fallback sections as needed...
+    
+    return {
+        "business_name": business_name,
+        "sections": fallback_sections,
+        "meta": {
+            "primary_color": accent,
+            "background_style": palette
+        }
+    }
 
 
 # ======================================================
-# ONE STOP ENTRY (USED BY DASHBOARD)
+# MAIN GENERATION FUNCTION
 # ======================================================
 
 def generate_ai_plan(ai_input: Dict[str, Any], version: int = 1) -> Dict[str, Any]:
-    intent = infer_intent(ai_input)
-
+    """
+    Main entry point for AI website generation.
+    Now generates complete HTML sections.
+    """
+    # Extract business info
+    prompt = ai_input.get("prompt", "")
+    business_name = ai_input.get("business_name", "")
+    
+    # Infer template
+    template = "business"
+    if any(word in prompt.lower() for word in ["restaurant", "cafe", "pizza", "burger", "food"]):
+        template = "restaurant"
+    
+    # Generate structure
     structure = generate_ai_structure(
-        business_type=intent["template"],
-        goal=intent["primary_goal"],
+        business_type=template,
+        goal=ai_input.get("primary_goal", "Get started"),
         version=version,
-        prompt=intent.get("raw_prompt") or intent.get("prompt") or "",
+        prompt=prompt,
     )
-
-    content = generate_publishable_content(intent)
-
+    
+    # Generate HTML sections
+    html_data = generate_html_sections(
+        business_name=business_name or "Your Business",
+        prompt=prompt,
+        template=template,
+        sections=structure["sections"],
+        theme=structure["theme"],
+    )
+    
     return {
-        "template": intent["template"],
-        "intent": intent,
+        "template": template,
         "structure": structure,
-        "content": content,
+        "content": html_data,
     }
