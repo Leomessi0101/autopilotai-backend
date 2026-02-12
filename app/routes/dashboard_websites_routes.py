@@ -10,7 +10,7 @@ from app.database.session import SessionLocal
 from app.database.models import Website, User
 from app.utils.auth import get_current_user
 
-from app.ai.website_ai_premium import generate_ai_plan, rewrite_content
+from app.ai.website_ai import generate_ai_plan, rewrite_content
 
 # =========================
 # OPTIONAL: OpenAI
