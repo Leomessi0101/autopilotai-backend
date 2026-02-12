@@ -462,3 +462,29 @@ def publish_website(
         "message": "Website published successfully!",
         "url": f"https://autopilotai.app/r/{username}",
     }
+
+
+@router.post("/{username}/unpublish")
+def unpublish_website(
+    username: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Unpublish website.
+    """
+    site = db.query(Website).filter(Website.username == username).first()
+    
+    if not site:
+        raise HTTPException(status_code=404, detail="Website not found")
+    
+    if site.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    site.publish_status = "draft"
+    db.commit()
+
+    return {
+        "ok": True,
+        "message": "Website unpublished successfully",
+    }
