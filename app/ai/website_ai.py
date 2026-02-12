@@ -1,104 +1,90 @@
 import random
 import hashlib
-import re
 import json
-from typing import Dict, Any, List, Tuple, Optional
+from typing import Dict, Any, List
 
 from app.ai.openai_client import chat_completion
 
 
 # ======================================================
-# SECTION LIBRARY - Pre-built templates users can add
+# ULTRA-MODERN DESIGN SYSTEMS
 # ======================================================
 
-SECTION_LIBRARY = {
-    "testimonials": {
-        "name": "Testimonials",
-        "description": "Customer reviews and feedback",
-        "category": "social_proof",
+DESIGN_SYSTEMS = [
+    {
+        "id": "glass_luxury",
+        "name": "Glass Luxury",
+        "base": "dark",
+        "style": "glassmorphism cards with backdrop-blur-2xl, floating elements, gradient meshes, overlapping sections with -mt-20 to -mt-40, subtle borders, premium shadows with colored glows",
     },
-    "pricing": {
-        "name": "Pricing",
-        "description": "Pricing plans and packages",
-        "category": "conversion",
+    {
+        "id": "flow_minimal",
+        "name": "Flow Minimal",
+        "base": "light",
+        "style": "huge typography (text-7xl+), flowing sections blend seamlessly, generous white space, elegant transitions, no hard edges, organic shapes",
     },
-    "team": {
-        "name": "Team",
-        "description": "Meet the team members",
-        "category": "about",
+    {
+        "id": "vibrant_depth",
+        "name": "Vibrant Depth",
+        "base": "dark",
+        "style": "bright gradient overlays, layered cards with transform hover effects, z-index depth, geometric background patterns, bold neon accents",
     },
-    "stats": {
-        "name": "Statistics",
-        "description": "Numbers and achievements",
-        "category": "social_proof",
+    {
+        "id": "elegant_serif",
+        "name": "Elegant Serif",
+        "base": "light",
+        "style": "serif headings (font-serif), refined spacing, gold/champagne accents, soft shadows, luxury feel, subtle animations, organic curved dividers",
     },
-    "newsletter": {
-        "name": "Newsletter",
-        "description": "Email signup form",
-        "category": "conversion",
+    {
+        "id": "sharp_modern",
+        "name": "Sharp Modern",
+        "base": "light",
+        "style": "sharp edges, high contrast blacks and whites, asymmetric grid layouts, bold sans-serif, geometric shapes, minimal decoration, brutalist influence",
     },
-    "brands": {
-        "name": "Trusted By",
-        "description": "Logo wall of clients/partners",
-        "category": "social_proof",
+]
+
+COLOR_PALETTES = {
+    "midnight_purple": {
+        "name": "Midnight Purple",
+        "primary": "from-purple-600 via-indigo-600 to-purple-700",
+        "accent": "purple-500",
+        "bg_dark": "from-purple-950 via-indigo-950 to-black",
+        "bg_light": "from-purple-50 via-indigo-50 to-white",
+        "glow": "purple-500/30",
+    },
+    "ocean_deep": {
+        "name": "Ocean Deep",
+        "primary": "from-cyan-500 via-blue-600 to-cyan-700",
+        "accent": "cyan-400",
+        "bg_dark": "from-cyan-950 via-blue-950 to-black",
+        "bg_light": "from-cyan-50 via-blue-50 to-white",
+        "glow": "cyan-500/30",
+    },
+    "sunset_fire": {
+        "name": "Sunset Fire",
+        "primary": "from-orange-500 via-rose-600 to-pink-600",
+        "accent": "orange-500",
+        "bg_dark": "from-orange-950 via-rose-950 to-black",
+        "bg_light": "from-orange-50 via-rose-50 to-white",
+        "glow": "orange-500/30",
+    },
+    "emerald_forest": {
+        "name": "Emerald Forest",
+        "primary": "from-emerald-600 via-teal-600 to-green-600",
+        "accent": "emerald-500",
+        "bg_dark": "from-emerald-950 via-teal-950 to-black",
+        "bg_light": "from-emerald-50 via-teal-50 to-white",
+        "glow": "emerald-500/30",
+    },
+    "slate_pro": {
+        "name": "Slate Pro",
+        "primary": "from-slate-700 via-gray-800 to-slate-900",
+        "accent": "slate-600",
+        "bg_dark": "from-black via-slate-950 to-gray-900",
+        "bg_light": "from-white via-slate-50 to-gray-100",
+        "glow": "slate-500/30",
     },
 }
-
-# ======================================================
-# DESIGN STYLES - Multiple variations for same content
-# ======================================================
-
-DESIGN_STYLES = [
-    {
-        "id": "modern",
-        "name": "Modern",
-        "description": "Clean, minimalist, lots of white space",
-        "characteristics": "large typography, subtle shadows, rounded corners, gradient accents",
-    },
-    {
-        "id": "bold",
-        "name": "Bold",
-        "description": "High contrast, dramatic, eye-catching",
-        "characteristics": "vibrant colors, sharp edges, strong typography, dark backgrounds",
-    },
-    {
-        "id": "warm",
-        "name": "Warm",
-        "description": "Friendly, approachable, inviting",
-        "characteristics": "warm colors, soft shadows, organic shapes, welcoming tone",
-    },
-    {
-        "id": "minimal",
-        "name": "Minimal",
-        "description": "Ultra-clean, focused, distraction-free",
-        "characteristics": "monochrome, lots of negative space, simple typography, no decorations",
-    },
-    {
-        "id": "premium",
-        "name": "Premium",
-        "description": "Luxury, elegant, sophisticated",
-        "characteristics": "elegant typography, gold accents, subtle animations, refined spacing",
-    },
-]
-
-# ======================================================
-# THEMES - Color palettes
-# ======================================================
-
-COLOR_THEMES = [
-    {"id": "indigo", "name": "Indigo", "primary": "indigo-500", "dark": True},
-    {"id": "emerald", "name": "Emerald", "primary": "emerald-500", "dark": False},
-    {"id": "orange", "name": "Orange", "primary": "orange-500", "dark": False},
-    {"id": "purple", "name": "Purple", "primary": "purple-500", "dark": True},
-    {"id": "blue", "name": "Blue", "primary": "blue-500", "dark": False},
-    {"id": "rose", "name": "Rose", "primary": "rose-500", "dark": False},
-    {"id": "neutral", "name": "Neutral", "primary": "neutral-800", "dark": False},
-]
-
-SECTION_POOL = [
-    "hero", "highlight", "about", "services", "trust", "process", 
-    "testimonial", "faq", "gallery", "cta", "contact", "location"
-]
 
 
 def stable_seed(*values: str) -> int:
@@ -106,18 +92,8 @@ def stable_seed(*values: str) -> int:
     return int(hashlib.sha256(raw.encode()).hexdigest()[:8], 16)
 
 
-def _ensure_unique_keep_order(items: List[str]) -> List[str]:
-    seen = set()
-    out = []
-    for x in items:
-        if x not in seen:
-            seen.add(x)
-            out.append(x)
-    return out
-
-
 # ======================================================
-# ENHANCED STRUCTURE GENERATION
+# STRUCTURE GENERATION
 # ======================================================
 
 def generate_ai_structure(
@@ -125,314 +101,298 @@ def generate_ai_structure(
     goal: str,
     version: int = 1,
     prompt: str = "",
-    style_preference: str = None,
 ):
     """
-    Generates varied structure with design style support.
+    Generates flowing, modern website structure.
     """
     bt = (business_type or "business").lower().strip()
     if bt not in ("restaurant", "business"):
         bt = "business"
 
-    # Deterministic if prompt exists, random otherwise
-    if (prompt or "").strip():
-        rng = random.Random(stable_seed(bt, (goal or ""), (prompt or ""), str(version)))
+    # Deterministic if prompt provided
+    if prompt.strip():
+        rng = random.Random(stable_seed(bt, goal or "", prompt, str(version)))
     else:
         rng = random.Random()
-        rng.seed(random.SystemRandom().randint(0, 2**31 - 1))
 
-    # Pick sections (variety)
-    if bt == "restaurant":
-        base_count = rng.randint(6, 9)
-        preferred = ["hero", "about", "services", "gallery", "testimonial", "cta", "contact"]
-    else:
-        base_count = rng.randint(5, 8)
-        preferred = ["hero", "about", "services", "trust", "process", "cta", "contact"]
+    # Pick design system
+    design = rng.choice(DESIGN_SYSTEMS)
+    
+    # Pick color palette
+    palette_key = rng.choice(list(COLOR_PALETTES.keys()))
+    palette = COLOR_PALETTES[palette_key]
 
-    # Add some random sections for variety
-    available = [s for s in SECTION_POOL if s not in preferred]
-    extra = rng.sample(available, min(2, len(available)))
+    # Core sections (always included)
+    core = ["hero", "value_prop", "features", "social_proof", "cta"]
     
-    sections = _ensure_unique_keep_order(preferred + extra)[:base_count]
+    # Optional sections
+    optional = ["process", "pricing", "testimonials", "faq", "team", "contact"]
     
-    # Ensure hero first, cta/contact last
-    if "hero" in sections:
-        sections = ["hero"] + [s for s in sections if s != "hero"]
+    # Pick 2-4 optional sections
+    selected_optional = rng.sample(optional, rng.randint(2, 4))
+    
+    # Combine
+    sections = core + selected_optional
+    
+    # Ensure contact is last if included
     if "contact" in sections:
         sections = [s for s in sections if s != "contact"] + ["contact"]
-    if "cta" in sections and "cta" != sections[-1]:
-        sections = [s for s in sections if s != "cta"]
-        if sections[-1] == "contact":
-            sections.insert(-1, "cta")
-        else:
-            sections.append("cta")
-
-    # Design style
-    if style_preference and any(s["id"] == style_preference for s in DESIGN_STYLES):
-        style = next(s for s in DESIGN_STYLES if s["id"] == style_preference)
-    else:
-        style = rng.choice(DESIGN_STYLES)
-
-    # Color theme
-    theme = rng.choice(COLOR_THEMES)
+    
+    # Limit to 7-9 sections for optimal flow
+    sections = sections[:rng.randint(7, 9)]
 
     return {
         "sections": sections,
-        "style": {
-            "id": style["id"],
-            "name": style["name"],
-            "characteristics": style["characteristics"],
-        },
-        "theme": {
-            "id": theme["id"],
-            "name": theme["name"],
-            "primary": theme["primary"],
-            "dark_mode": theme["dark"],
-        },
+        "design": design,
+        "palette": palette,
+        "palette_key": palette_key,
         "html_mode": True,
-        "animations_enabled": True,
+        "modern_flow": True,
     }
 
 
 # ======================================================
-# STYLE VARIATIONS GENERATOR
+# ULTRA-MODERN HTML GENERATION
 # ======================================================
 
-def generate_style_variations(
-    business_name: str,
-    prompt: str,
-    template: str,
-    sections: List[str],
-) -> List[Dict[str, Any]]:
-    """
-    Generates 3 different style variations of the same website.
-    Returns list of complete website data with different designs.
-    """
-    variations = []
-    
-    # Pick 3 different styles
-    styles_to_generate = random.sample(DESIGN_STYLES, min(3, len(DESIGN_STYLES)))
-    
-    for style in styles_to_generate:
-        # Generate structure with this style
-        structure = generate_ai_structure(
-            business_type=template,
-            goal="Get started",
-            prompt=prompt,
-            style_preference=style["id"],
-        )
-        
-        # Generate HTML with this style
-        html_data = generate_html_sections(
-            business_name=business_name,
-            prompt=prompt,
-            template=template,
-            sections=sections,
-            structure=structure,
-        )
-        
-        variations.append({
-            "style": style,
-            "structure": structure,
-            "content": html_data,
-        })
-    
-    return variations
+ULTRA_MODERN_SYSTEM = """You are the world's best web designer creating ULTRA-PREMIUM, FLOWING websites.
 
+Your designs are MASTERPIECES that look like they cost $50,000+.
 
-# ======================================================
-# AI HTML GENERATION WITH STYLE AWARENESS
-# ======================================================
+CORE PRINCIPLES:
 
-HTML_SYSTEM_PROMPT = """You are an expert web designer and developer specializing in creating beautiful, unique landing pages.
+1. FLOWING SECTIONS (CRITICAL!)
+   - Sections MUST overlap using negative margins (-mt-32, -mt-48)
+   - Create depth with layering (z-10, z-20, z-30)
+   - Blend backgrounds with gradients
+   - NO hard separations between sections
+   - Make it feel like ONE cohesive page
 
-You generate complete HTML sections using Tailwind CSS classes. Each website should feel COMPLETELY DIFFERENT from others.
+2. GLASSMORPHISM (for dark themes)
+   - backdrop-blur-xl on all cards
+   - bg-white/[0.05] to bg-white/[0.15] backgrounds
+   - border border-white/10
+   - Subtle shadows: shadow-2xl shadow-[color]/20
 
-KEY RULES:
-1. Return ONLY valid JSON (no markdown, no commentary)
-2. Generate complete HTML with Tailwind classes for each section
-3. Make each layout UNIQUE based on the design style provided
-4. Use the theme palette and accent color provided
-5. Be creative with layouts - vary everything based on style
-6. Ensure mobile responsiveness with Tailwind's responsive classes
-7. Never use placeholder text - generate real, business-specific copy
-8. Include proper semantic HTML tags
-9. Make it look PREMIUM and MODERN
-10. DO NOT add any image placeholders - users will add images separately
-11. Apply the design style characteristics consistently
+3. DEPTH & LAYERING
+   - Floating cards over backgrounds
+   - Overlapping elements create 3D effect
+   - Use transform hover:scale-105
+   - Gradient mesh backgrounds (blur-3xl orbs)
 
-DESIGN STYLE GUIDELINES:
-- Modern: Clean, minimalist, large typography, subtle shadows, rounded-2xl corners, gradient accents
-- Bold: High contrast, sharp edges (rounded-none or rounded-sm), vibrant colors, strong typography, dark backgrounds
-- Warm: Warm colors (amber, orange hues), soft shadows, rounded-3xl corners, welcoming tone, gentle gradients
-- Minimal: Monochrome, excessive negative space, simple sans-serif, no decorations, ultra-clean
-- Premium: Elegant serif fonts mix, gold/silver accents, subtle animations, refined spacing, luxury feel
+4. TYPOGRAPHY
+   - Hero: text-7xl md:text-8xl lg:text-9xl
+   - Mix font weights: from-thin to font-black
+   - Gradient text: bg-gradient-to-r bg-clip-text text-transparent
+   - Line height: leading-tight on huge text
 
-LAYOUT VARIETY TECHNIQUES:
-- Vary grid columns: grid-cols-1, grid-cols-2, grid-cols-3, md:grid-cols-2, lg:grid-cols-3
-- Mix alignments: items-start, items-center, items-end
-- Different card styles based on style (sharp vs rounded)
-- Varied spacing: gap-4, gap-6, gap-8, gap-10, gap-12
-- Asymmetric layouts: split 2/3 and 1/3, or 1/2 and 1/2
-- Different text alignments: text-left, text-center
-- Varied padding: p-6, p-8, p-10, p-12
-- Background variations: bg-white/5, bg-black/20, gradient backgrounds
+5. SPACING
+   - Generous: py-32, py-40, py-48 on sections
+   - Overlap: -mt-32, -mt-40, -mt-48 to blend
+   - Breathing room: max-w-7xl mx-auto px-6
+
+6. BACKGROUNDS
+   - Gradient meshes with animated orbs
+   - Subtle grid patterns: opacity-[0.02]
+   - Blend between sections with gradients
+   - Use backdrop-blur on overlays
+
+7. ANIMATIONS READY
+   - Add data-animate attributes for scroll
+   - Stagger delays: delay-100, delay-200, delay-300
+   - Transform ready: hover:scale-105 transition-all
+
+TECHNICAL:
+- Return ONLY valid JSON
+- Each section: { html: "...", data: {...} }
+- NO image placeholders (users add later)
+- NO generic text (make it specific to business)
+- Mobile-first: use md: and lg: breakpoints
+- Semantic HTML5
+
+GOAL:
+Make every website feel like a custom-designed masterpiece.
+Users should think "This looks EXPENSIVE!"
 """
 
-HTML_USER_PROMPT = """Business: {business_name}
+ULTRA_MODERN_USER = """Business: {business_name}
 Description: {prompt}
-Type: {template}
+Type: {business_type}
 
-DESIGN STYLE: {style_name}
-Style Characteristics: {style_characteristics}
+DESIGN SYSTEM: {design_name}
+Style Rules: {design_style}
+Base Theme: {design_base}
 
-Theme: {theme_name}
-Primary Color: {primary_color}
-Dark Mode: {dark_mode}
+COLOR PALETTE: {palette_name}
+Primary Gradient: {primary}
+Accent: {accent}
+Background: {background}
+Glow Effect: {glow}
 
-Sections to generate: {sections}
+Sections to Create: {sections}
 
-Generate a JSON object with this EXACT structure:
+Generate this JSON structure:
 {{
-  "business_name": "actual business name",
+  "business_name": "{business_name}",
   "sections": {{
     "hero": {{
-      "html": "<section>...complete HTML with Tailwind classes...</section>",
+      "html": "<section class='relative min-h-screen ...'>FLOWING MODERN HTML</section>",
       "data": {{
-        "headline": "...",
-        "subheadline": "...",
-        "cta_text": "..."
+        "headline": "Powerful headline",
+        "subheadline": "Compelling subheadline",
+        "cta": "Clear call-to-action"
       }}
     }},
-    "about": {{
-      "html": "<section>...complete HTML with Tailwind classes...</section>",
+    "value_prop": {{
+      "html": "<section class='relative py-32 -mt-40 z-20 ...'>OVERLAPPING SECTION</section>",
       "data": {{
-        "paragraphs": ["...", "..."]
+        "title": "Key benefit",
+        "description": "Why this matters"
       }}
     }}
-    // ... for each section in the sections list
+    ... for ALL sections in the list
   }},
   "seo": {{
-    "meta_description": "compelling 150-160 char description",
+    "title": "SEO-optimized title",
+    "description": "Compelling meta description (155 chars)",
     "keywords": ["keyword1", "keyword2", "keyword3"]
   }}
 }}
 
-IMPORTANT:
-- Apply the {style_name} style characteristics throughout
-- Use {primary_color} as the primary accent color
-- For dark_mode={dark_mode}: use dark backgrounds if True, light if False
-- Make each section visually DISTINCT
-- Vary the layout structure for each section
-- Use semantic HTML
-- Mobile-first responsive design
-- NO placeholder text - make it specific to the business
-- Generate compelling, conversion-focused copy
-- Include SEO metadata
+CRITICAL REQUIREMENTS:
+✓ Sections MUST overlap with negative margins
+✓ Use the exact color palette provided
+✓ Apply design system style consistently
+✓ NO boxy separated sections
+✓ Create visual depth with layering
+✓ Make it look EXPENSIVE
+✓ Real business copy (no placeholders)
+✓ Mobile responsive
+✓ Ready for scroll animations
+
+Make this a MASTERPIECE!
 """
 
 
 def generate_html_sections(
     business_name: str,
     prompt: str,
-    template: str,
-    sections: List[str],
+    business_type: str,
     structure: Dict[str, Any],
 ) -> Dict[str, Any]:
     """
-    Generates complete HTML for each section using AI with style awareness.
+    Generates ultra-modern HTML sections.
     """
-    style = structure.get("style", {})
-    theme = structure.get("theme", {})
-    
+    design = structure["design"]
+    palette = structure["palette"]
+    sections = structure["sections"]
+
     try:
         response = chat_completion(
-            system=HTML_SYSTEM_PROMPT,
-            user=HTML_USER_PROMPT.format(
+            system=ULTRA_MODERN_SYSTEM,
+            user=ULTRA_MODERN_USER.format(
                 business_name=business_name,
                 prompt=prompt,
-                template=template,
+                business_type=business_type,
+                design_name=design["name"],
+                design_style=design["style"],
+                design_base=design["base"],
+                palette_name=palette["name"],
+                primary=palette["primary"],
+                accent=palette["accent"],
+                background=palette["bg_dark" if design["base"] == "dark" else "bg_light"],
+                glow=palette["glow"],
                 sections=", ".join(sections),
-                style_name=style.get("name", "Modern"),
-                style_characteristics=style.get("characteristics", "clean and minimal"),
-                theme_name=theme.get("name", "Indigo"),
-                primary_color=theme.get("primary", "indigo-500"),
-                dark_mode=theme.get("dark_mode", True),
             ),
-            temperature=0.9,
+            temperature=0.95,  # High creativity
         )
-        
+
         parsed = json.loads(response)
-        
-        if not isinstance(parsed, dict):
+
+        # Validate
+        if not isinstance(parsed, dict) or "sections" not in parsed:
             raise ValueError("Invalid response structure")
-        
-        if "sections" not in parsed or not isinstance(parsed["sections"], dict):
-            raise ValueError("Missing sections in response")
-        
-        # Add SEO if not present
+
+        # Ensure SEO
         if "seo" not in parsed:
             parsed["seo"] = {
-                "meta_description": f"{business_name} - Quality service you can trust.",
-                "keywords": [template, "professional", "reliable"],
+                "title": f"{business_name} - Professional {business_type}",
+                "description": f"Discover {business_name}, your trusted partner for {business_type} services.",
+                "keywords": [business_type, "professional", "quality", "trusted"],
             }
-        
+
         return parsed
-        
+
     except Exception as e:
-        print(f"HTML generation failed: {str(e)}")
-        return generate_fallback_html(business_name, sections, structure)
+        print(f"AI generation failed: {e}")
+        return generate_premium_fallback(business_name, sections, structure)
 
 
-def generate_fallback_html(
+def generate_premium_fallback(
     business_name: str,
     sections: List[str],
     structure: Dict[str, Any],
 ) -> Dict[str, Any]:
     """
-    Fallback HTML generator if AI fails.
+    Premium fallback if AI fails.
     """
-    theme = structure.get("theme", {})
-    primary = theme.get("primary", "indigo-500")
-    is_dark = theme.get("dark_mode", True)
-    
-    bg_class = "bg-black text-white" if is_dark else "bg-white text-black"
-    accent_class = f"bg-{primary}"
-    
-    fallback_sections = {}
-    
+    design = structure["design"]
+    palette = structure["palette"]
+    is_dark = design["base"] == "dark"
+
+    bg = palette["bg_dark"] if is_dark else palette["bg_light"]
+    text = "text-white" if is_dark else "text-black"
+    primary = palette["primary"]
+    accent = palette["accent"]
+    glow = palette["glow"]
+
+    fallback = {
+        "business_name": business_name,
+        "sections": {},
+        "seo": {
+            "title": f"{business_name}",
+            "description": f"Welcome to {business_name}",
+            "keywords": ["business", "professional"],
+        },
+    }
+
+    # Hero section
     if "hero" in sections:
-        fallback_sections["hero"] = {
+        fallback["sections"]["hero"] = {
             "html": f"""
-                <section class="min-h-screen flex items-center justify-center {bg_class} px-6 py-20">
-                    <div class="max-w-4xl mx-auto text-center">
-                        <h1 class="text-5xl md:text-7xl font-bold tracking-tight mb-6">
-                            {{{{headline}}}}
-                        </h1>
-                        <p class="text-xl md:text-2xl text-gray-400 mb-8">
-                            {{{{subheadline}}}}
-                        </p>
-                        <button class="{accent_class} hover:opacity-90 text-white px-8 py-4 rounded-xl font-semibold text-lg transition">
-                            {{{{cta_text}}}}
-                        </button>
-                    </div>
-                </section>
+<section class="relative min-h-screen flex items-center justify-center overflow-hidden bg-gradient-to-br {bg}">
+    <div class="absolute inset-0 overflow-hidden">
+        <div class="absolute top-1/4 left-1/4 w-[600px] h-[600px] bg-{accent} rounded-full blur-3xl opacity-20 animate-pulse"></div>
+        <div class="absolute bottom-1/4 right-1/4 w-[600px] h-[600px] bg-gradient-to-r {primary} rounded-full blur-3xl opacity-20"></div>
+        <div class="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:64px_64px]"></div>
+    </div>
+    
+    <div class="relative z-10 max-w-7xl mx-auto px-6 text-center">
+        <h1 class="text-7xl md:text-8xl lg:text-9xl font-bold {text} tracking-tight leading-none mb-8">
+            <span class="bg-gradient-to-r {primary} bg-clip-text text-transparent">
+                {{{{headline}}}}
+            </span>
+        </h1>
+        
+        <p class="text-xl md:text-2xl {text} opacity-80 max-w-4xl mx-auto mb-12 leading-relaxed">
+            {{{{subheadline}}}}
+        </p>
+        
+        <button class="group relative px-10 py-5 bg-gradient-to-r {primary} text-white rounded-2xl font-semibold text-lg overflow-hidden transition-all hover:scale-105 hover:shadow-2xl shadow-{glow}">
+            <span class="relative z-10">{{{{cta}}}}</span>
+            <div class="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform"></div>
+        </button>
+    </div>
+</section>
             """,
             "data": {
                 "headline": business_name,
-                "subheadline": "Welcome to our website",
-                "cta_text": "Get Started"
-            }
+                "subheadline": "Your trusted partner for exceptional service and quality",
+                "cta": "Get Started Today",
+            },
         }
-    
-    return {
-        "business_name": business_name,
-        "sections": fallback_sections,
-        "seo": {
-            "meta_description": f"{business_name} - Quality service you can trust.",
-            "keywords": ["business", "professional", "reliable"],
-        }
-    }
+
+    return fallback
 
 
 # ======================================================
@@ -445,79 +405,71 @@ def rewrite_content(
     business_context: str = "",
 ) -> List[str]:
     """
-    Generates 3 alternative versions of text content.
-    Tones: professional, casual, persuasive
+    Generates 3 alternative versions of text.
     """
-    prompt = f"""Rewrite this text in a {tone} tone. Generate 3 different versions.
+    prompt = f"""Rewrite this text in {tone} tone. Generate 3 different versions.
 
-Original text: {original_text}
+Original: {original_text}
+Context: {business_context}
 
-Business context: {business_context}
+Return ONLY a JSON array: ["version 1", "version 2", "version 3"]
 
-Return ONLY a JSON array of 3 alternative versions:
-["version 1", "version 2", "version 3"]
-
-Each version should:
-- Be {tone} in tone
-- Maintain the core message
-- Be slightly different from each other
-- Be compelling and clear
+Each version:
+- {tone} tone
+- Compelling and clear
+- Different from others
+- Maintains core message
 """
 
     try:
         response = chat_completion(
-            system="You are an expert copywriter. Return only valid JSON arrays.",
+            system="Expert copywriter. Return only JSON arrays.",
             user=prompt,
             temperature=0.8,
         )
         
         alternatives = json.loads(response)
-        
-        if isinstance(alternatives, list) and len(alternatives) >= 3:
-            return alternatives[:3]
-        
-        return [original_text] * 3
-        
+        return alternatives[:3] if isinstance(alternatives, list) and len(alternatives) >= 3 else [original_text] * 3
     except Exception:
         return [original_text] * 3
 
 
 # ======================================================
-# MAIN GENERATION FUNCTION
+# MAIN ENTRY POINT
 # ======================================================
 
 def generate_ai_plan(ai_input: Dict[str, Any], version: int = 1) -> Dict[str, Any]:
     """
-    Main entry point for AI website generation.
-    Now generates complete HTML sections with style awareness.
+    Main generation function.
     """
     prompt = ai_input.get("prompt", "")
-    business_name = ai_input.get("business_name", "")
-    
-    # Infer template
-    template = "business"
-    if any(word in prompt.lower() for word in ["restaurant", "cafe", "pizza", "burger", "food"]):
-        template = "restaurant"
-    
+    business_name = ai_input.get("business_name", "Your Business")
+    goal = ai_input.get("primary_goal", "Get started")
+
+    # Infer business type
+    business_type = "business"
+    prompt_lower = prompt.lower()
+    if any(w in prompt_lower for w in ["restaurant", "cafe", "food", "pizza", "burger", "dining"]):
+        business_type = "restaurant"
+
     # Generate structure
     structure = generate_ai_structure(
-        business_type=template,
-        goal=ai_input.get("primary_goal", "Get started"),
+        business_type=business_type,
+        goal=goal,
         version=version,
         prompt=prompt,
     )
-    
-    # Generate HTML sections
-    html_data = generate_html_sections(
-        business_name=business_name or "Your Business",
+
+    # Generate HTML
+    content = generate_html_sections(
+        business_name=business_name,
         prompt=prompt,
-        template=template,
-        sections=structure["sections"],
+        business_type=business_type,
         structure=structure,
     )
-    
+
     return {
-        "template": template,
+        "template": business_type,
         "structure": structure,
-        "content": html_data,
+        "content": content,
     }

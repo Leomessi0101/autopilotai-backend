@@ -9,8 +9,7 @@ import base64
 from app.database.session import SessionLocal
 from app.database.models import Website, User
 from app.utils.auth import get_current_user
-
-from app.ai.website_ai import generate_ai_plan, rewrite_content, generate_style_variations
+from app.ai.website_ai import generate_ai_plan, rewrite_content
 
 # =========================
 # OPTIONAL: OpenAI
@@ -22,6 +21,7 @@ except Exception:
     _openai_client = None
 
 router = APIRouter(prefix="/api/dashboard/websites")
+
 
 # =========================
 # HELPERS
@@ -42,7 +42,7 @@ def _clean_text(v: Any) -> str:
 
 
 # =========================
-# CREATE WEBSITE (UPDATED FOR HTML GENERATION)
+# CREATE WEBSITE
 # =========================
 
 @router.post("/create")
@@ -51,33 +51,43 @@ def create_website(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    print("=== [AUTOPILOTAI] /api/dashboard/websites/create HIT ===")
+    """
+    Creates a new AI-generated website with ultra-modern flowing design.
+    """
+    print("=== [AUTOPILOTAI] Creating new website ===")
 
     plan = (user.subscription_plan or "free").lower()
 
-    # 1 site per user
-    if db.query(Website).filter(Website.user_id == user.id).count() >= 1:
-        raise HTTPException(status_code=403, detail="Only one website allowed")
+    # Check limit (1 site per user)
+    existing_count = db.query(Website).filter(Website.user_id == user.id).count()
+    if existing_count >= 1:
+        raise HTTPException(
+            status_code=403,
+            detail="You already have a website. Delete it first to create a new one.",
+        )
 
     username = (payload.get("username") or "").strip().lower()
     prompt = (payload.get("prompt") or "").strip()
 
     if not username:
-        raise HTTPException(status_code=400, detail="Missing username")
+        raise HTTPException(status_code=400, detail="Username is required")
 
+    if not prompt:
+        raise HTTPException(status_code=400, detail="Business description is required")
+
+    # Check username availability
     if db.query(Website).filter(Website.username == username).first():
         raise HTTPException(status_code=400, detail="Username already taken")
 
-    # --- HARD REQUIRE: AI must be configured ---
+    # Require OpenAI
     if not _openai_client:
-        print("=== [AUTOPILOTAI] OPENAI CLIENT NOT CONFIGURED ===")
         raise HTTPException(
             status_code=500,
-            detail="OpenAI not configured on server (OPENAI_API_KEY missing).",
+            detail="AI service not configured. Please contact support.",
         )
 
-    # --- Generate complete AI plan (structure + HTML content) ---
-    print("=== [AUTOPILOTAI] GENERATING AI WEBSITE WITH HTML ===")
+    # Generate AI website
+    print(f"=== [AUTOPILOTAI] Generating AI website for: {username} ===")
     
     try:
         ai_plan = generate_ai_plan(
@@ -89,34 +99,36 @@ def create_website(
             version=1,
         )
     except Exception as e:
-        print(f"=== [AUTOPILOTAI] AI GENERATION FAILED: {str(e)} ===")
+        print(f"=== [AUTOPILOTAI] AI generation failed: {str(e)} ===")
         raise HTTPException(
             status_code=500,
-            detail=f"AI generation failed: {str(e)}"
+            detail=f"Failed to generate website: {str(e)}",
         )
 
     structure = ai_plan["structure"]
     content = ai_plan["content"]
     template = ai_plan["template"]
 
+    # Validate
+    if not content.get("sections"):
+        raise HTTPException(
+            status_code=500,
+            detail="AI generation failed: no sections created",
+        )
+
+    # Plan settings
     max_pages = 3 if plan == "pro" else 1
+    can_publish = plan in ("starter", "pro")
 
     structure["plan"] = {
         "name": plan,
         "max_pages": max_pages,
-        "can_publish": plan in ("starter", "pro"),
+        "can_publish": can_publish,
     }
 
-    # Validate content has sections
-    if not content.get("sections"):
-        print("=== [AUTOPILOTAI] NO SECTIONS IN CONTENT ===")
-        raise HTTPException(
-            status_code=500,
-            detail="AI generation failed: no sections generated"
-        )
+    publish_status = "published" if can_publish else "draft"
 
-    publish_status = "published" if plan in ("starter", "pro") else "draft"
-
+    # Create website record
     site = Website(
         user_id=user.id,
         username=username,
@@ -128,20 +140,51 @@ def create_website(
 
     db.add(site)
     db.commit()
+    db.refresh(site)
 
-    print("=== [AUTOPILOTAI] WEBSITE CREATED OK ===", username)
+    print(f"=== [AUTOPILOTAI] Website created successfully: {username} ===")
 
     return {
         "ok": True,
         "username": username,
         "redirect": f"/r/{username}?edit=1",
         "plan": plan,
-        "max_pages": max_pages,
-        "published": plan in ("starter", "pro"),
-        "debug_has_ai": True,
-        "debug_business_name": content.get("business_name"),
-        "debug_sections": list(content.get("sections", {}).keys()),
+        "can_publish": can_publish,
+        "design": structure.get("design", {}).get("name", "Modern"),
+        "palette": structure.get("palette", {}).get("name", "Purple"),
     }
+
+
+# =========================
+# SAVE WEBSITE
+# =========================
+
+@router.post("/{username}/save")
+def save_website(
+    username: str,
+    payload: dict = Body(...),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Saves website content updates.
+    """
+    site = db.query(Website).filter(Website.username == username).first()
+    
+    if not site:
+        raise HTTPException(status_code=404, detail="Website not found")
+    
+    if site.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    try:
+        # Update content
+        site.content_json = json.dumps(payload)
+        db.commit()
+        
+        return {"ok": True, "message": "Saved successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # =========================
@@ -149,7 +192,7 @@ def create_website(
 # =========================
 
 @router.post("/{username}/rewrite")
-def rewrite_content_endpoint(
+def rewrite_text(
     username: str,
     payload: dict = Body(...),
     user: User = Depends(get_current_user),
@@ -159,8 +202,10 @@ def rewrite_content_endpoint(
     Generates alternative versions of text content.
     """
     site = db.query(Website).filter(Website.username == username).first()
+    
     if not site:
         raise HTTPException(status_code=404, detail="Website not found")
+    
     if site.user_id != user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
@@ -168,7 +213,7 @@ def rewrite_content_endpoint(
     tone = payload.get("tone", "professional")
 
     if not text:
-        raise HTTPException(status_code=400, detail="Missing text")
+        raise HTTPException(status_code=400, detail="Text is required")
 
     try:
         alternatives = rewrite_content(
@@ -186,51 +231,38 @@ def rewrite_content_endpoint(
 
 
 # =========================
-# STYLE VARIATIONS
+# DELETE WEBSITE
 # =========================
 
-@router.post("/{username}/style-variations")
-def get_style_variations(
+@router.delete("/{username}")
+def delete_website(
     username: str,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
-    Generates 3 different style variations of the current website.
+    Deletes a website.
     """
     site = db.query(Website).filter(Website.username == username).first()
+    
     if not site:
         raise HTTPException(status_code=404, detail="Website not found")
+    
     if site.user_id != user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    try:
-        content = json.loads(site.content_json)
-        structure = json.loads(site.ai_structure_json)
-        
-        business_name = content.get("business_name", username.replace("-", " ").title())
-        prompt = "Generate variations"  # We don't have the original prompt
-        
-        variations = generate_style_variations(
-            business_name=business_name,
-            prompt=prompt,
-            template=site.template or "business",
-            sections=structure.get("sections", []),
-        )
-        
-        return {
-            "ok": True,
-            "variations": variations,
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    db.delete(site)
+    db.commit()
+
+    return {"ok": True, "message": "Website deleted successfully"}
 
 
 # =========================
-# CUSTOM DOMAIN (CONNECT + VERIFY)
+# CUSTOM DOMAIN
 # =========================
 
 def _normalize_host(host: str) -> str:
+    """Normalize domain name."""
     h = (host or "").strip().lower()
     if ":" in h:
         h = h.split(":", 1)[0]
@@ -238,15 +270,13 @@ def _normalize_host(host: str) -> str:
         h = h[4:]
     return h
 
+
 def _domain_token_for_site(site: Website) -> str:
-    """
-    Deterministic token (no DB column needed).
-    User adds TXT record:
-      autopilotai-verify=<token>
-    """
+    """Generate verification token for domain."""
     raw = f"autopilotai:{site.id}:{site.user_id}:{site.username}"
     digest = hashlib.sha256(raw.encode("utf-8")).digest()
     return base64.urlsafe_b64encode(digest).decode("utf-8").rstrip("=")[:32]
+
 
 @router.get("/{username}/domain/status")
 def domain_status(
@@ -254,13 +284,19 @@ def domain_status(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """
+    Get custom domain status.
+    """
     site = db.query(Website).filter(Website.username == username).first()
+    
     if not site:
         raise HTTPException(status_code=404, detail="Website not found")
+    
     if site.user_id != user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
     token = _domain_token_for_site(site)
+    
     return {
         "ok": True,
         "custom_domain": site.custom_domain,
@@ -269,6 +305,7 @@ def domain_status(
         "txt_value": f"autopilotai-verify={token}",
     }
 
+
 @router.post("/{username}/domain/set")
 def set_custom_domain(
     username: str,
@@ -276,16 +313,30 @@ def set_custom_domain(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """
+    Set custom domain (requires Pro plan).
+    """
     site = db.query(Website).filter(Website.username == username).first()
+    
     if not site:
         raise HTTPException(status_code=404, detail="Website not found")
+    
     if site.user_id != user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    domain = _normalize_host(payload.get("domain") or "")
-    if not domain:
-        raise HTTPException(status_code=400, detail="Missing domain")
+    # Check plan
+    if user.subscription_plan not in ("pro",):
+        raise HTTPException(
+            status_code=403,
+            detail="Custom domains require Pro plan",
+        )
 
+    domain = _normalize_host(payload.get("domain") or "")
+    
+    if not domain:
+        raise HTTPException(status_code=400, detail="Domain is required")
+
+    # Check if domain is already taken
     existing = db.query(Website).filter(Website.custom_domain == domain).first()
     if existing and existing.id != site.id:
         raise HTTPException(status_code=400, detail="Domain already in use")
@@ -295,14 +346,16 @@ def set_custom_domain(
     db.commit()
 
     token = _domain_token_for_site(site)
+    
     return {
         "ok": True,
         "custom_domain": site.custom_domain,
-        "domain_verified": bool(site.domain_verified),
+        "domain_verified": False,
         "txt_name": "@",
         "txt_value": f"autopilotai-verify={token}",
-        "next": "Add TXT record, then call /verify",
+        "instructions": "Add this TXT record to your domain's DNS, then verify.",
     }
+
 
 @router.post("/{username}/domain/verify")
 def verify_custom_domain(
@@ -310,29 +363,35 @@ def verify_custom_domain(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """
+    Verify custom domain ownership via DNS TXT record.
+    """
     site = db.query(Website).filter(Website.username == username).first()
+    
     if not site:
         raise HTTPException(status_code=404, detail="Website not found")
+    
     if site.user_id != user.id:
         raise HTTPException(status_code=403, detail="Not authorized")
 
     if not site.custom_domain:
-        raise HTTPException(status_code=400, detail="No custom_domain set")
+        raise HTTPException(status_code=400, detail="No custom domain set")
 
     token = _domain_token_for_site(site)
     expected = f"autopilotai-verify={token}"
 
     try:
-        import dns.resolver  # type: ignore
-    except Exception:
+        import dns.resolver
+    except ImportError:
         raise HTTPException(
             status_code=500,
-            detail="dnspython missing. Install with: pip install dnspython",
+            detail="DNS verification not available. Please contact support.",
         )
 
     try:
         answers = dns.resolver.resolve(site.custom_domain, "TXT")
         values = []
+        
         for rdata in answers:
             parts = []
             for s in getattr(rdata, "strings", []):
@@ -344,15 +403,62 @@ def verify_custom_domain(
             if txt:
                 values.append(txt)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"TXT lookup failed: {str(e)}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"DNS lookup failed: {str(e)}. Make sure you added the TXT record.",
+        )
 
     if expected not in values:
         raise HTTPException(
             status_code=400,
-            detail=f"TXT not found. Expected: {expected}",
+            detail=f"TXT record not found. Expected: {expected}",
         )
 
+    # Verified!
     site.domain_verified = True
     db.commit()
 
-    return {"ok": True, "custom_domain": site.custom_domain, "domain_verified": True}
+    return {
+        "ok": True,
+        "custom_domain": site.custom_domain,
+        "domain_verified": True,
+        "message": "Domain verified successfully!",
+    }
+
+
+# =========================
+# PUBLISH WEBSITE
+# =========================
+
+@router.post("/{username}/publish")
+def publish_website(
+    username: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Publish website (requires paid plan).
+    """
+    site = db.query(Website).filter(Website.username == username).first()
+    
+    if not site:
+        raise HTTPException(status_code=404, detail="Website not found")
+    
+    if site.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    # Check plan
+    if user.subscription_plan not in ("starter", "pro"):
+        raise HTTPException(
+            status_code=403,
+            detail="Publishing requires Starter or Pro plan",
+        )
+
+    site.publish_status = "published"
+    db.commit()
+
+    return {
+        "ok": True,
+        "message": "Website published successfully!",
+        "url": f"https://autopilotai.app/r/{username}",
+    }
