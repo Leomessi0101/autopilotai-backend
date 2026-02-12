@@ -119,8 +119,9 @@ def generate_flowing_website(
     is_dark = design["base"] == "dark"
 
     bg = palette["bg_dark"] if is_dark else palette["bg_light"]
-    text = "text-white" if is_dark else "text-black"
-    text_muted = "text-gray-400" if is_dark else "text-gray-600"
+    # FIX: Correct text colors based on theme
+    text = "text-white" if is_dark else "text-gray-900"
+    text_muted = "text-gray-300" if is_dark else "text-gray-600"
     primary = palette["primary"]
     accent = palette["accent"]
     glow = palette["glow"]
@@ -338,31 +339,79 @@ def generate_html_sections(business_name: str, prompt: str, business_type: str, 
     design = structure["design"]
     palette = structure["palette"]
     sections = structure["sections"]
+    is_dark = design["base"] == "dark"
 
-    ai_prompt = f"""Create a flowing website for: {business_name}
+    # Smart text colors
+    text_color = "text-white" if is_dark else "text-gray-900"
+    text_muted = "text-gray-300" if is_dark else "text-gray-600"
+    bg = palette["bg_dark"] if is_dark else palette["bg_light"]
 
-Description: {prompt}
+    ai_prompt = f"""Create a BEAUTIFUL, FLOWING website for: {business_name}
+
+Business: {prompt}
+Theme: {design['base']} ({"DARK backgrounds with WHITE text" if is_dark else "LIGHT backgrounds with DARK text"})
 Style: {design['name']}  
-Colors: {palette['name']} - Primary: {palette['primary']}, Accent: {palette['accent']}
+Colors: {palette['name']}
 
-Generate JSON:
+CRITICAL COLOR RULES:
+- Background: bg-gradient-to-br {bg}
+- Text color: {text_color} (READABLE on {design['base']} background!)
+- Muted text: {text_muted}
+- Primary gradient: {palette['primary']}
+- Accent: {palette['accent']}
+- Cards: backdrop-blur-xl bg-white/5 (glassmorphism)
+
+Generate JSON with FLOWING, OVERLAPPING sections:
 {{
   "business_name": "{business_name}",
   "sections": {{
-    "hero": {{"html": "<section class='relative min-h-screen bg-gradient-to-br...'>HTML</section>", "data": {{"headline": "...", "subheadline": "...", "cta": "..."}}}},
-    "features": {{"html": "<section class='relative -mt-32 z-20...'>OVERLAPPING HTML</section>", "data": {{"title": "...", "feature1_title": "...", "feature1_desc": "...", "feature2_title": "...", "feature2_desc": "...", "feature3_title": "...", "feature3_desc": "..."}}}},
-    "social_proof": {{"html": "<section class='py-32...'>STATS</section>", "data": {{"title": "...", "stat1_number": "...", "stat1_label": "...", "stat2_number": "...", "stat2_label": "...", "stat3_number": "...", "stat3_label": "..."}}}},
-    "cta": {{"html": "<section class='py-40...'>CTA</section>", "data": {{"headline": "...", "subheadline": "...", "cta": "..."}}}}
+    "hero": {{
+      "html": "<section class='relative min-h-screen bg-gradient-to-br {bg}'>
+        <div class='max-w-7xl mx-auto px-6 text-center'>
+          <h1 class='text-7xl font-bold {text_color}'>{{{{headline}}}}</h1>
+          <p class='text-xl {text_muted}'>{{{{subheadline}}}}</p>
+          <button class='bg-gradient-to-r {palette['primary']} text-white px-10 py-5'>{{{{cta}}}}</button>
+        </div>
+      </section>",
+      "data": {{"headline": "Compelling headline", "subheadline": "Great subheadline", "cta": "Get Started"}}
+    }},
+    "features": {{
+      "html": "<section class='relative -mt-32 z-20 py-24'>
+        <div class='backdrop-blur-xl bg-white/5 border border-white/10 rounded-3xl p-12'>
+          <h2 class='text-5xl font-bold {text_color}'>{{{{title}}}}</h2>
+        </div>
+        <div class='grid md:grid-cols-3 gap-8 mt-8'>
+          <div class='backdrop-blur-xl bg-white/5 p-8 rounded-3xl'>
+            <h3 class='text-2xl font-bold {text_color}'>{{{{feature1_title}}}}</h3>
+            <p class='{text_muted}'>{{{{feature1_desc}}}}</p>
+          </div>
+        </div>
+      </section>",
+      "data": {{"title": "Why Choose Us", "feature1_title": "Fast", "feature1_desc": "Quick service", "feature2_title": "Trusted", "feature2_desc": "Reliable", "feature3_title": "Quality", "feature3_desc": "Premium"}}
+    }},
+    "social_proof": {{
+      "html": "<section class='py-32'><div class='grid md:grid-cols-3 gap-12'><div class='text-center'><div class='text-7xl font-bold bg-gradient-to-r {palette['primary']} bg-clip-text text-transparent'>{{{{stat1_number}}}}</div><p class='{text_muted}'>{{{{stat1_label}}}}</p></div></div></section>",
+      "data": {{"title": "Trusted Worldwide", "stat1_number": "10K+", "stat1_label": "Customers", "stat2_number": "99%", "stat2_label": "Satisfaction", "stat3_number": "24/7", "stat3_label": "Support"}}
+    }},
+    "cta": {{
+      "html": "<section class='py-40'><div class='text-center'><h2 class='text-7xl font-bold {text_color}'>{{{{headline}}}}</h2><p class='text-2xl {text_muted}'>{{{{subheadline}}}}</p><button class='bg-gradient-to-r {palette['primary']} text-white px-12 py-6'>{{{{cta}}}}</button></div></section>",
+      "data": {{"headline": "Ready?", "subheadline": "Join us today", "cta": "Get Started"}}
+    }}
   }}
 }}
 
-CRITICAL: Sections MUST overlap with -mt-32. Use exact color classes. Real business copy."""
+CRITICAL: 
+- Use {text_color} for ALL main text (readable on {design['base']} bg!)
+- Use {text_muted} for secondary text
+- Sections MUST overlap with -mt-32
+- Generate REAL business copy (not placeholders)
+- Make it look EXPENSIVE and PREMIUM"""
 
-    print("=== 🤖 Trying AI generation ===")
+    print(f"=== 🤖 Trying AI generation ({design['base']} theme) ===")
     
     try:
         response = chat_completion(
-            system="Expert web designer. Return ONLY JSON. Make sections OVERLAP.",
+            system="Expert web designer. Return ONLY JSON. Text must be READABLE on the background!",
             user=ai_prompt,
             temperature=0.9,
         )
