@@ -1,13 +1,57 @@
 import random
 import hashlib
 import json
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple
 
 from app.ai.openai_client import chat_completion
 
 
 # ======================================================
-# DESIGN SYSTEMS & PALETTES
+# FRONTEND CONTRACT: theme, hero, footer (ai_structure_json)
+# ======================================================
+
+THEME_PALETTE_VALUES = ("light", "dark")
+THEME_ACCENT_VALUES = ("indigo", "emerald", "orange", "neutral", "violet", "rose")
+HERO_VARIANTS = ("split_image", "centered_text", "image_background", "minimal")
+FOOTER_VARIANTS = ("minimal", "standard")
+
+# Section presets by business type — order and set vary so sites look different
+SECTION_PRESETS: Dict[str, List[str]] = {
+    "restaurant": ["hero", "about", "menu", "gallery", "contact"],
+    "cafe": ["hero", "about", "menu", "testimonial", "contact"],
+    "bar": ["hero", "about", "gallery", "contact"],
+    "law": ["hero", "about", "services", "trust", "contact"],
+    "clinic": ["hero", "about", "services", "process", "contact"],
+    "salon": ["hero", "about", "services", "gallery", "testimonial", "contact"],
+    "saas": ["hero", "features", "pricing", "cta", "contact"],
+    "agency": ["hero", "about", "services", "portfolio", "testimonial", "contact"],
+    "default": ["hero", "features", "social_proof", "cta"],
+}
+
+# Keywords in prompt → business type for section choice
+def _infer_business_type(prompt: str) -> str:
+    p = (prompt or "").lower()
+    if any(w in p for w in ["restaurant", "restaurants", "dining", "food", "pizza", "bistro"]):
+        return "restaurant"
+    if any(w in p for w in ["cafe", "coffee", "bakery"]):
+        return "cafe"
+    if any(w in p for w in ["bar", "pub", "brewery"]):
+        return "bar"
+    if any(w in p for w in ["law", "lawyer", "legal", "attorney"]):
+        return "law"
+    if any(w in p for w in ["clinic", "doctor", "medical", "health"]):
+        return "clinic"
+    if any(w in p for w in ["salon", "spa", "beauty", "hair"]):
+        return "salon"
+    if any(w in p for w in ["saas", "software", "app", "platform", "startup"]):
+        return "saas"
+    if any(w in p for w in ["agency", "marketing", "creative", "design studio"]):
+        return "agency"
+    return "default"
+
+
+# ======================================================
+# DESIGN SYSTEMS & PALETTES (internal HTML generation)
 # ======================================================
 
 DESIGN_SYSTEMS = [
@@ -64,6 +108,37 @@ COLOR_PALETTES = {
     },
 }
 
+# Map frontend theme.accent to internal palette key (for HTML class names / remapping)
+ACCENT_TO_PALETTE_KEY: Dict[str, str] = {
+    "indigo": "midnight_purple",
+    "emerald": "emerald_forest",
+    "orange": "sunset_fire",
+    "neutral": "slate_pro",
+    "violet": "midnight_purple",
+    "rose": "sunset_fire",
+}
+
+# Map section keys (from structure.sections) to template type for fallback HTML
+SECTION_KEY_TO_TEMPLATE: Dict[str, str] = {
+    "hero": "hero",
+    "features": "features",
+    "about": "features",
+    "services": "features",
+    "process": "features",
+    "team": "features",
+    "portfolio": "features",
+    "menu": "features",
+    "social_proof": "social_proof",
+    "testimonial": "social_proof",
+    "gallery": "social_proof",
+    "trust": "social_proof",
+    "cta": "cta",
+    "contact": "cta",
+    "location": "cta",
+    "pricing": "features",
+    "faq": "features",
+}
+
 
 def stable_seed(*values: str) -> int:
     raw = "|".join([v or "" for v in values])
@@ -71,27 +146,68 @@ def stable_seed(*values: str) -> int:
 
 
 # ======================================================
-# STRUCTURE GENERATION
+# STRUCTURE GENERATION (varied per business & prompt)
 # ======================================================
+
+def _choose_theme_and_variants(
+    prompt: str, business_type: str, rng: random.Random
+) -> Tuple[str, str, str, str]:
+    """Returns (palette, accent, hero_variant, footer_variant)."""
+    # Palette: bias by business type so sites look different
+    dark_biased = business_type in ("restaurant", "bar", "agency")
+    light_biased = business_type in ("clinic", "cafe", "law")
+    if dark_biased and not light_biased:
+        palette = "dark" if rng.random() < 0.7 else "light"
+    elif light_biased and not dark_biased:
+        palette = "light" if rng.random() < 0.7 else "dark"
+    else:
+        palette = rng.choice(list(THEME_PALETTE_VALUES))
+    accent = rng.choice(list(THEME_ACCENT_VALUES))
+    hero_variant = rng.choice(list(HERO_VARIANTS))
+    footer_variant = rng.choice(list(FOOTER_VARIANTS))
+    return palette, accent, hero_variant, footer_variant
+
 
 def generate_ai_structure(business_type: str, goal: str, version: int = 1, prompt: str = ""):
     bt = (business_type or "business").lower().strip()
     if bt not in ("restaurant", "business"):
         bt = "business"
 
-    if prompt.strip():
-        rng = random.Random(stable_seed(bt, goal or "", prompt, str(version)))
+    seed_prompt = (prompt or "").strip()
+    if seed_prompt:
+        rng = random.Random(stable_seed(bt, goal or "", seed_prompt, str(version)))
     else:
         rng = random.Random()
 
-    design = rng.choice(DESIGN_SYSTEMS)
-    palette_key = rng.choice(list(COLOR_PALETTES.keys()))
-    palette = COLOR_PALETTES[palette_key]
+    # Infer section preset from prompt so structure fits the business
+    inferred = _infer_business_type(seed_prompt)
+    section_list = list(SECTION_PRESETS.get(inferred, SECTION_PRESETS["default"]))
+    # Optional: shuffle or drop one for extra variety (keep order deterministic by seed)
+    if rng.random() < 0.2 and len(section_list) > 3:
+        section_list = section_list[:-1]  # sometimes one fewer section
 
-    sections = ["hero", "features", "social_proof", "cta"]
+    palette_light_dark, accent, hero_variant, footer_variant = _choose_theme_and_variants(
+        seed_prompt, inferred, rng
+    )
+
+    # Internal: design + palette for HTML generation (derive from theme)
+    palette_key = ACCENT_TO_PALETTE_KEY.get(accent, "midnight_purple")
+    palette = COLOR_PALETTES[palette_key]
+    design = next(
+        (d for d in DESIGN_SYSTEMS if d["base"] == palette_light_dark),
+        DESIGN_SYSTEMS[0],
+    )
 
     return {
-        "sections": sections,
+        # Frontend contract: theme, hero, footer, sections
+        "theme": {
+            "palette": palette_light_dark,
+            "accent": accent,
+        },
+        "hero": {"variant": hero_variant},
+        "footer": {"variant": footer_variant},
+        "sections": section_list,
+        # Internal (for generate_flowing_website / generate_html_sections)
         "design": design,
         "palette": palette,
         "palette_key": palette_key,
@@ -319,9 +435,37 @@ def generate_flowing_website(
         },
     }
 
+    # Build output sections: only include keys in requested order, map to template + section-specific data
+    template_to_data_defaults: Dict[str, Dict[str, Any]] = {
+        "hero": {"headline": business_name, "subheadline": f"Experience excellence with {business_name}.", "cta": "Get Started Today"},
+        "features": {"title": "Why Choose Us", "subtitle": "We provide exceptional service.", "feature1_title": "Quality", "feature1_desc": "Best-in-class.", "feature2_title": "Trusted", "feature2_desc": "Join our community.", "feature3_title": "Premium", "feature3_desc": "Competitive prices."},
+        "social_proof": {"title": "Trusted Worldwide", "stat1_number": "10K+", "stat1_label": "Happy Customers", "stat2_number": "99%", "stat2_label": "Satisfaction", "stat3_number": "24/7", "stat3_label": "Support"},
+        "cta": {"headline": "Ready to Get Started?", "subheadline": "Join us today.", "cta": "Start Your Journey Today"},
+    }
+    section_data_overrides: Dict[str, Dict[str, str]] = {
+        "about": {"title": "About Us", "subtitle": f"Learn more about {business_name}.", "feature1_title": "Our Story", "feature1_desc": "Dedicated to excellence.", "feature2_title": "Our Values", "feature2_desc": "Quality and trust.", "feature3_title": "Our Mission", "feature3_desc": "Serving you better."},
+        "menu": {"title": "Our Menu", "subtitle": "Discover our offerings.", "feature1_title": "Signature", "feature1_desc": "Customer favorites.", "feature2_title": "Seasonal", "feature2_desc": "Fresh and new.", "feature3_title": "Specials", "feature3_desc": "Limited time only."},
+        "services": {"title": "Our Services", "subtitle": "What we offer.", "feature1_title": "Service One", "feature1_desc": "Detailed description.", "feature2_title": "Service Two", "feature2_desc": "Detailed description.", "feature3_title": "Service Three", "feature3_desc": "Detailed description."},
+        "contact": {"headline": "Get in Touch", "subheadline": "We'd love to hear from you.", "cta": "Contact Us"},
+        "gallery": {"title": "Gallery", "stat1_number": "500+", "stat1_label": "Projects", "stat2_number": "50+", "stat2_label": "Awards", "stat3_number": "100%", "stat3_label": "Dedication"},
+    }
+    out_sections: Dict[str, Dict[str, Any]] = {}
+    templates = {
+        "hero": flowing_sections["hero"],
+        "features": flowing_sections["features"],
+        "social_proof": flowing_sections["social_proof"],
+        "cta": flowing_sections["cta"],
+    }
+    for key in sections:
+        template_key = SECTION_KEY_TO_TEMPLATE.get(key, "features")
+        t = templates.get(template_key, flowing_sections["features"])
+        base_data = dict(template_to_data_defaults.get(template_key, template_to_data_defaults["features"]))
+        base_data.update(section_data_overrides.get(key, {}))
+        out_sections[key] = {"html": t["html"], "data": base_data}
+
     return {
         "business_name": business_name,
-        "sections": flowing_sections,
+        "sections": out_sections,
         "seo": {
             "title": f"{business_name} - Professional Services",
             "description": f"Discover {business_name}, your trusted partner for professional services.",
@@ -335,98 +479,81 @@ def generate_flowing_website(
 # ======================================================
 
 def generate_html_sections(business_name: str, prompt: str, business_type: str, structure: Dict[str, Any]) -> Dict[str, Any]:
-    """Try REAL AI, fallback if it fails."""
+    """Try REAL AI, fallback if it fails. Output section keys must match structure['sections']."""
     design = structure["design"]
     palette = structure["palette"]
     sections = structure["sections"]
-    is_dark = design["base"] == "dark"
+    theme = structure.get("theme") or {}
+    accent_name = theme.get("accent", "indigo")
+    palette_ld = theme.get("palette", design["base"])
+    is_dark = (palette_ld == "dark") or (design["base"] == "dark")
 
-    # Smart text colors
     text_color = "text-white" if is_dark else "text-gray-900"
     text_muted = "text-gray-300" if is_dark else "text-gray-600"
     bg = palette["bg_dark"] if is_dark else palette["bg_light"]
 
+    sections_list_str = ", ".join(sections)
+
     ai_prompt = f"""Create a BEAUTIFUL, FLOWING website for: {business_name}
 
-Business: {prompt}
-Theme: {design['base']} ({"DARK backgrounds with WHITE text" if is_dark else "LIGHT backgrounds with DARK text"})
-Style: {design['name']}  
-Colors: {palette['name']}
+Business description: {prompt}
 
-CRITICAL COLOR RULES:
+DESIGN RULES (follow exactly):
+- Use a DIFFERENT color theme that fits THIS business. This site uses accent "{accent_name}" and palette "{palette_ld}". Do NOT use generic indigo/light for everything.
+- Choose copy and tone SPECIFIC to this business — no generic placeholders. Every headline, subheadline, and CTA must feel written for "{business_name}" and the industry.
+- Section order and set are fixed. You MUST output exactly these section keys (with html and data for each): {sections_list_str}
+
+THEME (frontend will apply these):
+- Palette: {palette_ld} ({"DARK backgrounds, WHITE text" if is_dark else "LIGHT backgrounds, DARK text"})
+- Accent: {accent_name}
+- Use these classes so the frontend can remap accent: use bg-indigo-500 / text-indigo-600 style classes for accent areas (or semantic equivalents).
+
+COLOR RULES:
 - Background: bg-gradient-to-br {bg}
-- Text color: {text_color} (READABLE on {design['base']} background!)
-- Muted text: {text_muted}
-- Primary gradient: {palette['primary']}
-- Accent: {palette['accent']}
-- Cards: backdrop-blur-xl bg-white/5 (glassmorphism)
+- Text: {text_color} | Muted: {text_muted}
+- Primary gradient: {palette['primary']} | Accent: {palette['accent']}
+- Cards: backdrop-blur-xl bg-white/5
 
-Generate JSON with FLOWING, OVERLAPPING sections:
+Return ONLY valid JSON in this shape (no markdown, no explanation):
 {{
   "business_name": "{business_name}",
   "sections": {{
-    "hero": {{
-      "html": "<section class='relative min-h-screen bg-gradient-to-br {bg}'>
-        <div class='max-w-7xl mx-auto px-6 text-center'>
-          <h1 class='text-7xl font-bold {text_color}'>{{{{headline}}}}</h1>
-          <p class='text-xl {text_muted}'>{{{{subheadline}}}}</p>
-          <button class='bg-gradient-to-r {palette['primary']} text-white px-10 py-5'>{{{{cta}}}}</button>
-        </div>
-      </section>",
-      "data": {{"headline": "Compelling headline", "subheadline": "Great subheadline", "cta": "Get Started"}}
-    }},
-    "features": {{
-      "html": "<section class='relative -mt-32 z-20 py-24'>
-        <div class='backdrop-blur-xl bg-white/5 border border-white/10 rounded-3xl p-12'>
-          <h2 class='text-5xl font-bold {text_color}'>{{{{title}}}}</h2>
-        </div>
-        <div class='grid md:grid-cols-3 gap-8 mt-8'>
-          <div class='backdrop-blur-xl bg-white/5 p-8 rounded-3xl'>
-            <h3 class='text-2xl font-bold {text_color}'>{{{{feature1_title}}}}</h3>
-            <p class='{text_muted}'>{{{{feature1_desc}}}}</p>
-          </div>
-        </div>
-      </section>",
-      "data": {{"title": "Why Choose Us", "feature1_title": "Fast", "feature1_desc": "Quick service", "feature2_title": "Trusted", "feature2_desc": "Reliable", "feature3_title": "Quality", "feature3_desc": "Premium"}}
-    }},
-    "social_proof": {{
-      "html": "<section class='py-32'><div class='grid md:grid-cols-3 gap-12'><div class='text-center'><div class='text-7xl font-bold bg-gradient-to-r {palette['primary']} bg-clip-text text-transparent'>{{{{stat1_number}}}}</div><p class='{text_muted}'>{{{{stat1_label}}}}</p></div></div></section>",
-      "data": {{"title": "Trusted Worldwide", "stat1_number": "10K+", "stat1_label": "Customers", "stat2_number": "99%", "stat2_label": "Satisfaction", "stat3_number": "24/7", "stat3_label": "Support"}}
-    }},
-    "cta": {{
-      "html": "<section class='py-40'><div class='text-center'><h2 class='text-7xl font-bold {text_color}'>{{{{headline}}}}</h2><p class='text-2xl {text_muted}'>{{{{subheadline}}}}</p><button class='bg-gradient-to-r {palette['primary']} text-white px-12 py-6'>{{{{cta}}}}</button></div></section>",
-      "data": {{"headline": "Ready?", "subheadline": "Join us today", "cta": "Get Started"}}
-    }}
-  }}
+    "hero": {{ "html": "<section ...>...</section>", "data": {{ "headline": "...", "subheadline": "...", "cta": "..." }} }},
+    ... one entry for EACH of: {sections_list_str} ...
+  }},
+  "seo": {{ "title": "...", "description": "...", "keywords": [] }}
 }}
 
-CRITICAL: 
-- Use {text_color} for ALL main text (readable on {design['base']} bg!)
-- Use {text_muted} for secondary text
-- Sections MUST overlap with -mt-32
-- Generate REAL business copy (not placeholders)
-- Make it look EXPENSIVE and PREMIUM"""
+CRITICAL:
+- Output sections for EVERY key in: [{sections_list_str}]. Use "hero" template (headline, subheadline, cta) for hero; use "features" template (title, subtitle, feature1_title, feature1_desc, feature2_title, feature2_desc, feature3_title, feature3_desc) for about/services/menu/features; use "social_proof" (title, stat1_number, stat1_label, stat2_number, stat2_label, stat3_number, stat3_label) for social_proof/gallery/testimonial; use "cta" (headline, subheadline, cta) for cta/contact.
+- Use {text_color} for all main text, {text_muted} for secondary.
+- Copy must be SPECIFIC to this business — not "Lorem" or "Get Started" everywhere. Make it premium and on-brand."""
 
-    print(f"=== 🤖 Trying AI generation ({design['base']} theme) ===")
-    
+    print(f"=== 🤖 Trying AI generation (theme: {palette_ld} / {accent_name}) ===")
+
     try:
         response = chat_completion(
-            system="Expert web designer. Return ONLY JSON. Text must be READABLE on the background!",
+            system="Expert web designer. Return ONLY valid JSON. No markdown. Text must be READABLE on the background. Output section keys must match the requested list exactly.",
             user=ai_prompt,
             temperature=0.9,
         )
-        
         parsed = json.loads(response)
-        
-        if not parsed.get("sections") or len(parsed["sections"]) < 3:
-            raise ValueError("Invalid response")
-        
+
+        if not parsed.get("sections"):
+            raise ValueError("No sections in response")
+
+        # Ensure we have every requested section; fill missing from fallback
+        fallback = generate_flowing_website(business_name, prompt, sections, structure)
+        for key in sections:
+            if key not in parsed["sections"] and key in fallback["sections"]:
+                parsed["sections"][key] = fallback["sections"][key]
+
         if "seo" not in parsed:
             parsed["seo"] = {"title": f"{business_name}", "description": f"{business_name}", "keywords": [business_type]}
-        
+
         print(f"=== ✅ AI SUCCESS! {len(parsed['sections'])} sections ===")
         return parsed
-        
+
     except Exception as e:
         print(f"=== ⚠️ AI failed: {e} - Using fallback ===")
         return generate_flowing_website(business_name, prompt, sections, structure)

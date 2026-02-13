@@ -152,6 +152,7 @@ def create_website(
         "can_publish": can_publish,
         "design": structure.get("design", {}).get("name", "Modern"),
         "palette": structure.get("palette", {}).get("name", "Purple"),
+        "theme": structure.get("theme"),  # { palette: "light"|"dark", accent: "indigo"|"emerald"|... }
     }
 
 
