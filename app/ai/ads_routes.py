@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.database.session import SessionLocal
-from app.database.models import SavedContent, Profile
+from app.database.models import SavedContent, Profile, User
 from app.utils.auth import get_current_user
 from app.utils.usage import get_user_limit, reset_if_new_month
 from openai import OpenAI
@@ -38,11 +38,15 @@ def generate_ads_internal(
     db: Session,
     charge_usage: bool = True
 ):
-    reset_if_new_month(user)
+    user_db = db.query(User).filter(User.id == user.id).first()
+    if not user_db:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    reset_if_new_month(user_db)
 
     if charge_usage:
-        limit = get_user_limit(user.subscription_plan)
-        if limit is not None and user.used_generations >= limit:
+        limit = get_user_limit(user_db.subscription_plan)
+        if limit is not None and (user_db.used_generations or 0) >= limit:
             raise HTTPException(
                 status_code=403,
                 detail="Monthly generation limit reached. Please upgrade your plan."
@@ -69,7 +73,7 @@ def generate_ads_internal(
     prompt = (data.prompt or data.text or "").strip()
 
     if not prompt and (not product or not audience):
-        raise HTTPException(422, "Provide prompt/text or product+audience")
+        raise HTTPException(status_code=422, detail="Provide prompt/text or product+audience")
 
     if not prompt:
         prompt = f"Create ads for {product} targeting {audience} with objective {objective}."
@@ -153,13 +157,19 @@ def generate_ads_internal(
         f"{platform_format}"
     )
 
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": system},
-            {
-                "role": "user",
-                "content": f"""
+    if not os.getenv("OPENAI_API_KEY"):
+        raise HTTPException(
+            status_code=503,
+            detail="Ad generation is not configured. Missing OPENAI_API_KEY."
+        )
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system},
+                {
+                    "role": "user",
+                    "content": f"""
 Create 3 ads.
 
 OBJECTIVE:
@@ -174,13 +184,18 @@ AUDIENCE:
 PROMPT:
 {prompt}
 """
-            }
-        ]
-    )
+                }
+            ]
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=502,
+            detail=f"AI service error: {getattr(e, 'message', str(e))}"
+        ) from e
 
     output = (response.choices[0].message.content or "").strip()
     if not output:
-        raise HTTPException(500, "OpenAI returned empty output")
+        raise HTTPException(status_code=500, detail="OpenAI returned empty output")
 
     db.add(SavedContent(
         user_id=user.id,
@@ -190,11 +205,9 @@ PROMPT:
     ))
 
     if charge_usage:
-        user.used_generations = (user.used_generations or 0) + 1
-        db.add(user)
+        user_db.used_generations = (user_db.used_generations or 0) + 1
 
     db.commit()
-    db.refresh(user)
 
     return output
 

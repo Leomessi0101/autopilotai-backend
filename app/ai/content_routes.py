@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.database.session import SessionLocal
-from app.database.models import SavedContent, Profile
+from app.database.models import SavedContent, Profile, User
 from app.utils.auth import get_current_user
 from app.utils.usage import get_user_limit, reset_if_new_month
 from openai import OpenAI
@@ -64,6 +64,12 @@ def platform_instructions(platform: str) -> str:
     )
 
 
+def _is_paid_user(subscription_plan: str | None) -> bool:
+    """AI image is only for paid plans (anything not 'free')."""
+    plan = (subscription_plan or "free").lower()
+    return plan != "free"
+
+
 # ======================================================
 # INTERNAL GENERATOR (REUSABLE, OPTIONAL USAGE CHARGE)
 # ======================================================
@@ -73,11 +79,16 @@ def generate_content_internal(
     db: Session,
     charge_usage: bool = True
 ):
-    reset_if_new_month(user)
+    # Use user from THIS session so updates (reset, used_generations) commit correctly.
+    user_db = db.query(User).filter(User.id == user.id).first()
+    if not user_db:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    reset_if_new_month(user_db)
 
     if charge_usage:
-        limit = get_user_limit(user.subscription_plan)
-        if limit is not None and user.used_generations >= limit:
+        limit = get_user_limit(user_db.subscription_plan)
+        if limit is not None and (user_db.used_generations or 0) >= limit:
             raise HTTPException(
                 status_code=403,
                 detail="Monthly generation limit reached. Please upgrade your plan."
@@ -98,7 +109,7 @@ def generate_content_internal(
     # ---------------- PROMPT LOGIC ----------------
     prompt = (data.topic or data.prompt or data.text or "").strip()
     if not prompt:
-        raise HTTPException(422, "Missing topic/prompt/text")
+        raise HTTPException(status_code=422, detail="Missing topic/prompt/text")
 
     platform = (data.platform or "instagram").lower()
 
@@ -134,17 +145,28 @@ def generate_content_internal(
     )
 
     # ---------- TEXT GENERATION ----------
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Create 5 posts about:\n\n{prompt}"}
-        ]
-    )
+    if not os.getenv("OPENAI_API_KEY"):
+        raise HTTPException(
+            status_code=503,
+            detail="Content generation is not configured. Missing OPENAI_API_KEY."
+        )
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Create 5 posts about:\n\n{prompt}"}
+            ]
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=502,
+            detail=f"AI service error: {getattr(e, 'message', str(e))}"
+        ) from e
 
-    output = response.choices[0].message.content.strip()
+    output = (response.choices[0].message.content or "").strip()
     if not output:
-        raise HTTPException(500, "Empty AI response")
+        raise HTTPException(status_code=500, detail="Empty AI response")
 
     db.add(SavedContent(
         user_id=user.id,
@@ -154,11 +176,9 @@ def generate_content_internal(
     ))
 
     if charge_usage:
-        user.used_generations = (user.used_generations or 0) + 1
-        db.add(user)
+        user_db.used_generations = (user_db.used_generations or 0) + 1
 
     db.commit()
-    db.refresh(user)
 
     return output
 
@@ -187,8 +207,8 @@ def generate_content(
             "error": None
         }
 
-    # ---------- IF USER IS FREE ----------
-    if user.subscription_plan == "free":
+    # ---------- AI IMAGE: PAID USERS ONLY ----------
+    if not _is_paid_user(user.subscription_plan):
         return {
             "output": output,
             "image": None,
@@ -204,27 +224,36 @@ def generate_content(
     CONTENT THE IMAGE SHOULD REPRESENT:
     {output[:900]}
     """
-
-    image_response = client.images.generate(
-        model="gpt-image-1",
-        prompt=visual_prompt,
-        size="1024x1024",
-        response_format="url"
-    )
+    try:
+        image_response = client.images.generate(
+            model="dall-e-3",
+            prompt=visual_prompt[:1000],
+            size="1024x1024",
+            quality="standard",
+            n=1,
+            response_format="url",
+        )
+    except Exception as img_err:
+        return {
+            "output": output,
+            "image": None,
+            "error": f"Image generation failed: {getattr(img_err, 'message', str(img_err))}"
+        }
 
     image_url = None
-
-    try:
-        image_url = image_response.data[0].url
-    except:
-        try:
-            base64_data = image_response.data[0].b64_json
-            image_url = f"data:image/png;base64,{base64_data}"
-        except:
-            image_url = None
+    if image_response.data and len(image_response.data) > 0:
+        first = image_response.data[0]
+        if getattr(first, "url", None):
+            image_url = first.url
+        elif getattr(first, "b64_json", None):
+            image_url = f"data:image/png;base64,{first.b64_json}"
 
     if not image_url:
-        raise HTTPException(500, "Image generated but no image returned from OpenAI.")
+        return {
+            "output": output,
+            "image": None,
+            "error": "Image was requested but no image returned from AI."
+        }
 
     return {
         "output": output,
