@@ -504,9 +504,127 @@ def generate_premium_website(business_name: str, prompt: str, sections: List[str
 # ======================================================
 
 def generate_html_sections(business_name: str, prompt: str, business_type: str, structure: Dict[str, Any]) -> Dict[str, Any]:
-    """Always use premium fallback for guaranteed quality."""
+    """
+    Try REAL AI first with detailed prompt about the business.
+    Fallback only if AI fails.
+    """
+    palette = structure["palette"]
+    theme = structure.get("theme", {})
     sections = structure["sections"]
-    return generate_premium_website(business_name, prompt, sections, structure)
+    is_dark = theme.get("palette", "dark") == "dark"
+    inferred = _infer_business_type(prompt)
+    
+    text_color = "text-white" if is_dark else "text-gray-900"
+    text_muted = "text-gray-300" if is_dark else "text-gray-600"
+    bg = palette["bg_dark"] if is_dark else palette["bg_light"]
+    primary = palette["primary"]
+    accent = palette["accent"]
+    glow = palette["glow"]
+
+    # Build industry-appropriate CTA guidance
+    industry_ctas = {
+        "restaurant": "Use CTAs like 'Reserve a Table', 'View Menu', 'Order Now'. NEVER 'Contact Us' or 'Get Quote'.",
+        "cafe": "Use CTAs like 'View Menu', 'Order Online', 'Visit Us'.",
+        "bar": "Use CTAs like 'View Hours', 'Reserve a Booth', 'See Events'.",
+        "law": "Use CTAs like 'Schedule Consultation', 'Get Legal Help', 'Speak to Attorney'.",
+        "clinic": "Use CTAs like 'Book Appointment', 'Schedule Visit', 'Contact Clinic'.",
+        "salon": "Use CTAs like 'Book Appointment', 'See Services', 'Book Now'.",
+        "saas": "Use CTAs like 'Start Free Trial', 'Get Started', 'Sign Up Free'.",
+        "agency": "Use CTAs like 'Start a Project', 'Get a Quote', 'Work With Us'.",
+    }
+    cta_guidance = industry_ctas.get(inferred, "Use clear, action-oriented CTAs like 'Get Started', 'Learn More', 'Contact Us'.")
+
+    sections_list = ", ".join(sections)
+
+    ai_prompt = f"""Create a CUSTOM website specifically for this business. Read the description carefully and make it UNIQUE.
+
+Business Name: {business_name}
+Business Description: {prompt}
+Business Type: {inferred}
+
+CRITICAL - READ THE BUSINESS DESCRIPTION:
+- Use details from the description to make SPECIFIC content
+- If they mention services, include those exact services
+- If they mention location, reference it
+- If they mention unique features, highlight them
+- Make headlines and copy SPECIFIC to THIS business, not generic
+
+VISUAL QUALITY (NON-NEGOTIABLE):
+- MASSIVE gradient orbs: <div class="absolute w-[800px] h-[800px] bg-{accent} rounded-full blur-3xl opacity-20 animate-pulse">
+- Glassmorphism cards: backdrop-blur-xl bg-white/5 border border-white/10
+- Hover animations: hover:-translate-y-2 hover:shadow-2xl hover:shadow-{glow} transition-all duration-500
+- Icons with hover scale: group-hover:scale-110 transition-transform duration-300
+- Button hover overlay: <div class="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100">
+- Film grain texture in hero background
+- Scroll indicator at bottom of hero
+
+THEME (must use these exact classes):
+- Background: bg-gradient-to-br {bg}
+- Text: {text_color} for main, {text_muted} for secondary
+- Primary gradient: {primary}
+- Accent: {accent}
+- Glow: shadow-{glow}
+
+CTA RULES FOR {inferred.upper()}:
+{cta_guidance}
+
+Section keys to generate (MUST include all): {sections_list}
+
+Return ONLY valid JSON (no markdown, no code fences):
+{{
+  "business_name": "{business_name}",
+  "sections": {{
+    "hero": {{
+      "html": "<section class='relative min-h-screen...'>COMPLETE PREMIUM HTML WITH ORBS & ANIMATIONS</section>",
+      "data": {{ "headline": "SPECIFIC to {business_name}", "subheadline": "BASED ON: {prompt}", "cta": "{cta_guidance}" }}
+    }},
+    "features": {{
+      "html": "<section class='relative -mt-24 z-20...'>GLASSMORPHISM CARDS WITH HOVER</section>",
+      "data": {{ "title": "...", "subtitle": "...", "feature1_title": "SPECIFIC", "feature1_desc": "FROM PROMPT", ... }}
+    }},
+    ... (one for EACH section in: {sections_list})
+  }},
+  "seo": {{ "title": "...", "description": "...", "keywords": [] }}
+}}
+
+EVERY piece of copy must be SPECIFIC to this business based on the prompt.
+Include 3 features based on what they described.
+Stats should be relevant to their industry.
+Make it feel CUSTOM, not templated."""
+
+    print(f"=== 🤖 CALLING AI for {business_name} ({inferred}) ===")
+    print(f"=== 📝 Prompt: {prompt[:100]}... ===")
+    
+    try:
+        response = chat_completion(
+            system="You are an expert web designer. Read the business description carefully and create CUSTOM content based on it. Output ONLY valid JSON. Include massive gradient orbs (w-[800px]), glassmorphism (backdrop-blur-xl bg-white/5), and smooth hover animations (duration-500).",
+            user=ai_prompt,
+            temperature=0.9,
+        )
+        
+        parsed = json.loads(response)
+        
+        if not parsed.get("sections") or len(parsed["sections"]) < 3:
+            raise ValueError(f"AI returned invalid structure: {len(parsed.get('sections', {}))} sections")
+        
+        # Ensure all requested sections exist
+        fallback = generate_premium_website(business_name, prompt, sections, structure)
+        for key in sections:
+            if key not in parsed["sections"]:
+                print(f"=== ⚠️ Missing section {key}, using fallback ===")
+                if key in fallback["sections"]:
+                    parsed["sections"][key] = fallback["sections"][key]
+        
+        if "seo" not in parsed:
+            parsed["seo"] = {"title": f"{business_name}", "description": f"{business_name}", "keywords": [business_type]}
+        
+        print(f"=== ✅ AI SUCCESS! Generated {len(parsed['sections'])} custom sections ===")
+        return parsed
+        
+    except Exception as e:
+        print(f"=== ❌ AI FAILED: {str(e)} ===")
+        print(f"=== 🔄 Using premium fallback ===")
+        return generate_premium_website(business_name, prompt, sections, structure)
 
 
 def rewrite_content(original_text: str, tone: str = "professional", business_context: str = "") -> List[str]:
