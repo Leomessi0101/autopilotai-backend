@@ -39,6 +39,30 @@ except ImportError as e:
         })
 
 # ============================================================================
+# UNSPLASH IMAGE HELPER
+# ============================================================================
+
+def get_unsplash_image(keyword: str, index: int = 0, width: int = 800) -> str:
+    """Generate unique Unsplash image URL with variety"""
+    # Use different photo IDs based on keyword and index
+    photo_ids = {
+        "saas": ["3f9wSAq5H5w", "1sJU0W-r8Dw", "cAtzHUz7Z8g", "5A2W5InI6aw"],
+        "ai": ["xyQd_jXWULI", "tV_rDYdjCFM", "JFUWe-K7B-0", "4Xpwy_5X1IA"],
+        "tech": ["l3N97FvodXw", "6PF6DaiWn48", "wVBffFe5vU4", "u3bF6L7D9t8"],
+        "business": ["0X8tNUtn5gE", "1iYR-7XOF0A", "n6W6cXlm_0M", "3s7uNIw8bAA"],
+        "startup": ["9SninhlxFCE", "xzpxpQxR3L8", "j0T-X-3HMxE", "pAtA8xe_Gms"],
+        "marketing": ["1k3vsv_p_-LC", "gZB-_8NK4P0", "B6yDtYs2IgE", "VNKL4wey7yI"],
+        "design": ["y02jEX_B0TU", "Z1BjlH3SDmc", "6DYu-S-maKA", "H10lEkksHjc"],
+        "health": ["o-g04ejjcv8", "rDLW5IL_yDE", "7jTJkv6wvfg", "vRVHKwWLsToI"],
+        "default": ["xzpxpQxR3L8", "1sJU0W-r8Dw", "5A2W5InI6aw", "n6W6cXlm_0M"],
+    }
+    
+    ids = photo_ids.get(keyword, photo_ids["default"])
+    photo_id = ids[index % len(ids)]
+    
+    return f"https://images.unsplash.com/photo-{photo_id}?w={width}&auto=format&fit=crop&q=80&fm=webp"
+
+# ============================================================================
 # DESIGN SYSTEM: Elite Principles
 # ============================================================================
 
@@ -151,6 +175,8 @@ THEMES = {
 # SECTION VARIANT LIBRARY: Multi-Style Components
 # ============================================================================
 
+# Find this section and replace it:
+
 class HeroVariant:
     """3 distinct hero styles for maximum visual variety"""
     
@@ -158,6 +184,10 @@ class HeroVariant:
     def split_grid(theme: Dict, data: Dict) -> str:
         """Classic: Text left, image right in bold grid"""
         try:
+            # Get unique image from unsplash keywords
+            keywords = data.get('metadata', {}).get('unsplash_keywords', ['business'])
+            hero_keyword = keywords[0] if keywords else 'business'
+            
             return f"""
             <section id="hero" class="relative {theme['bg']} {PADDING_SECTION} overflow-hidden pt-32">
                 <div class="container mx-auto {PADDING_CONTAINER}">
@@ -179,9 +209,9 @@ class HeroVariant:
                                 </a>
                             </div>
                         </div>
-                        <div class="relative h-[500px] md:h-[600px] rounded-3xl overflow-hidden bg-gradient-to-br {theme['grad']} opacity-10">
-                            <img src="https://images.unsplash.com/photo-1552664730-d307ca884978?w=800&auto=format&fit=crop&q=80" 
-                                 alt="hero" class="w-full h-full object-cover {HOVER_LIFT}" />
+                        <div class="relative h-[500px] md:h-[600px] rounded-3xl overflow-hidden">
+                            <img src="https://images.unsplash.com/photo-1552664730-d307ca884978?w=800&auto=format&fit=crop&q=80&fm=webp" 
+                                 alt="{data.get('hero', {}).get('h1', 'hero')}" class="w-full h-full object-cover {HOVER_LIFT}" />
                             <div class="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent"></div>
                         </div>
                     </div>
@@ -238,7 +268,7 @@ class HeroVariant:
                         </div>
                         <div class="relative order-1 lg:order-2 h-96">
                             <div class="absolute inset-0 bg-gradient-to-br {theme['grad']} opacity-10 rounded-3xl blur-2xl"></div>
-                            <img src="https://images.unsplash.com/photo-1552664730-d307ca884978?w=600&auto=format&fit=crop&q=80" 
+                            <img src="https://images.unsplash.com/photo-1552664730-d307ca884978?w=600&auto=format&fit=crop&q=80&fm=webp" 
                                  alt="hero" class="relative z-10 w-full h-full object-cover rounded-3xl {HOVER_LIFT}" />
                         </div>
                     </div>
@@ -247,7 +277,6 @@ class HeroVariant:
         except Exception as e:
             logger.error(f"Error rendering asymmetric_wave hero: {e}")
             return f"<section class='{theme['bg']} py-20'><div class='container mx-auto text-center'><h1>Hero Section</h1></div></section>"
-
 
 class FeatureVariant:
     """3 distinct feature section designs"""
@@ -281,9 +310,9 @@ class FeatureVariant:
             logger.error(f"Error rendering cards_grid features: {e}")
             return f"<section id='features' class='{theme['bg_alt']} py-20'><div class='container mx-auto text-center'><h2>Features</h2></div></section>"
 
-    @staticmethod
+        @staticmethod
     def alternating_blocks(theme: Dict, features: List[Dict]) -> str:
-        """Rich: Alternating text-image blocks"""
+        """Rich: Alternating text-image blocks (single feature per row)"""
         try:
             blocks = "".join([f"""
             <div class="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center {'lg:flex-row-reverse' if i % 2 else ''}">
@@ -294,8 +323,8 @@ class FeatureVariant:
                     <h3 class="{HEADING_FEATURE} {theme['text']}">{feat.get('title', 'Feature')}</h3>
                     <p class="text-lg {theme['text_muted']} leading-relaxed">{feat.get('description', 'Premium feature')}</p>
                 </div>
-                <div class="h-80 rounded-2xl overflow-hidden bg-gray-300 {'order-1' if i % 2 else ''}">
-                    <img src="https://images.unsplash.com/photo-1552664730-d307ca884978?w=600&auto=format&fit=crop&q=80" 
+                <div class="h-80 rounded-2xl overflow-hidden {'order-1' if i % 2 else ''}">
+                    <img src="{get_unsplash_image('business', i, 600)}" 
                          alt="{feat.get('title', 'Feature')}" class="w-full h-full object-cover" />
                 </div>
             </div>""" for i, feat in enumerate(features or [])])
