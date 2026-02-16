@@ -75,7 +75,7 @@ class WebsiteArchitect:
             </div>
             <div class="container mx-auto px-6 relative z-10 pt-20">
                 <div class="max-w-4xl">
-                    <h1 class="text-7xl md:text-9xl font-black {self.theme['text']} leading-none mb-8 animate-in fade-in slide-in-from-bottom-10 duration-1000">
+                    <h1 class="text-7xl md:text-9xl font-black {self.theme['text']} leading-none mb-8">
                         {data['hero']['h1']}
                     </h1>
                     <p class="text-xl md:text-2xl text-gray-300 mb-12 max-w-2xl leading-relaxed">
@@ -136,16 +136,28 @@ class WebsiteArchitect:
                 </footer>
             </div>
         """
+        # Note: We return "content" nested inside the dict to satisfy your app's structure
         return {"html": full_site, "meta": data}
 
 # --- REQUIRED EXPORTS ---
 
-def generate_ai_plan(ai_input: Dict[str, Any]) -> Dict[str, Any]:
+def generate_ai_plan(ai_input: Dict[str, Any], version: int = 1, **kwargs) -> Dict[str, Any]:
+    """
+    Main entry point. 
+    Added 'version' and '**kwargs' to prevent 'unexpected keyword argument' errors.
+    """
     architect = WebsiteArchitect(
         business_name=ai_input.get("business_name", "Brand"),
         prompt=ai_input.get("prompt", "A modern business")
     )
-    return {"content": architect.build()}
+    # Your app likely expects a dictionary with a "content" key containing the actual data
+    plan = architect.build()
+    
+    return {
+        "template": "modern",
+        "structure": {"sections": ["hero", "contact"]}, # Required for some frontend loops
+        "content": plan
+    }
 
 def rewrite_content(original_text: str, tone: str = "professional", business_context: str = "") -> List[str]:
     """Provides alternative phrasing for the AI Chatbox editor."""
