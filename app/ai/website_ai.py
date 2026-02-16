@@ -213,246 +213,100 @@ def _generate_fallback_section(section_key: str, business_name: str, industry: D
         return {"html": html, "data": {"headline": industry.get("contact_headline", "Get in Touch"), "subheadline": industry.get("contact_subheadline", "Ready to get started? Contact us today."), "cta": industry.get("contact_cta", "Contact Us")}}
 
 def generate_html_sections(business_name: str, prompt: str, business_type: str, structure: Dict[str, Any]) -> Dict[str, Any]:
-    """AI-FIRST website generation. Creates completely custom HTML based on business description."""
-    palette = structure["palette"]
+    """AI generates EVERYTHING from scratch - NO TEMPLATES"""
+    pal = structure["palette"]
     theme = structure.get("theme", {})
     sections = structure["sections"]
     is_dark = theme.get("palette", "dark") == "dark"
     inferred = _infer_business_type(prompt)
-    industry = _industry_defaults(inferred, business_name)
     
-    text_color = "text-white" if is_dark else "text-gray-900"
-    text_muted = "text-gray-300" if is_dark else "text-gray-600"
-    bg = palette["bg_dark"] if is_dark else palette["bg_light"]
-    primary = palette["primary"]
-    accent = palette["accent"]
-    glow = palette["glow"]
+    tc = "text-white" if is_dark else "text-gray-900"
+    tm = "text-gray-300" if is_dark else "text-gray-600"
+    bg = pal["bg_dark"] if is_dark else pal["bg_light"]
+    pr = pal["primary"]
+    ac = pal["accent"]
+    gl = pal["glow"]
 
-    cta_guidance_map = {
-        "restaurant": "Use CTAs like 'Reserve a Table', 'View Menu', 'Order Now'. NEVER generic 'Contact Us'.",
-        "cafe": "Use CTAs like 'View Menu', 'Order Online', 'Visit Us'.",
-        "bar": "Use CTAs like 'View Hours', 'Reserve a Booth', 'See Events'.",
-        "law": "Use CTAs like 'Schedule Consultation', 'Get Legal Help', 'Speak to Attorney'.",
-        "clinic": "Use CTAs like 'Book Appointment', 'Schedule Visit', 'Contact Clinic'.",
-        "salon": "Use CTAs like 'Book Appointment', 'See Services', 'Book Now'.",
-        "saas": "Use CTAs like 'Start Free Trial', 'Get Started', 'Sign Up Free'.",
-        "agency": "Use CTAs like 'Start a Project', 'Get a Quote', 'Work With Us'.",
-    }
-    cta_guidance = cta_guidance_map.get(inferred, "Use clear, action-oriented CTAs relevant to the business.")
-    sections_list = ", ".join(sections)
+    ai_prompt = f"""Create a COMPLETELY CUSTOM website for this business.
 
-    # COMPREHENSIVE AI PROMPT FOR FULL CUSTOM GENERATION
-    ai_prompt = f"""You are an elite web designer creating a COMPLETELY CUSTOM website. Read the business description carefully and generate UNIQUE HTML and content.
+BUSINESS: {business_name}
+FULL DESCRIPTION: {prompt}
+INDUSTRY: {inferred}
+SECTIONS NEEDED: {", ".join(sections)}
 
-🎯 BUSINESS DETAILS:
-Name: {business_name}
-Description: {prompt}
-Industry: {inferred}
-Sections needed: {sections_list}
+YOUR JOB: Generate COMPLETE unique HTML + content for EACH section from scratch.
 
-📐 CRITICAL DESIGN REQUIREMENTS (NON-NEGOTIABLE):
+VISUAL REQUIREMENTS:
+- Huge gradient orbs: w-[1400px] h-[1400px] blur-[200px] opacity-20 animate-pulse
+- Glassmorphism: backdrop-blur-3xl bg-white/5 border border-white/10 rounded-[40px]
+- Animations: hover:-translate-y-4 hover:shadow-2xl transition-all duration-700
+- Typography: text-9xl for hero, text-7xl for sections
 
-1. MASSIVE GRADIENT ORBS (1400-1600px):
-   - Multiple orbs per section: w-[1400px] h-[1400px] or larger
-   - Heavy blur: blur-[200px] to blur-[240px]
-   - Animated: animate-pulse with staggered delays
-   - Example: <div class="absolute top-1/4 left-1/4 w-[1400px] h-[1400px] bg-{accent} rounded-full blur-[200px] opacity-20 animate-pulse"></div>
+THEME (use exact classes):
+BG: bg-gradient-to-br {bg}
+Text: {tc} headlines, {tm} body
+Gradient: bg-gradient-to-r {pr}
+Accent: {ac}
+Glow: shadow-{gl}
 
-2. GLASSMORPHISM EVERYWHERE:
-   - Cards: backdrop-blur-2xl bg-white/5 border border-white/10 rounded-[40px]
-   - Hover effects: hover:border-white/25 hover:shadow-2xl hover:shadow-{glow}
-   - Smooth transitions: transition-all duration-700
+CONTENT RULES:
+1. READ THE DESCRIPTION - extract their actual services/features
+2. Make headlines SPECIFIC to {business_name}
+3. Use details from description in all copy
+4. Industry CTAs (not generic "Get Started")
 
-3. DRAMATIC ANIMATIONS:
-   - Hover lifts: hover:-translate-y-4
-   - Icon rotations: group-hover:scale-125 group-hover:rotate-12
-   - Button overlays: <div class="absolute inset-0 bg-white/30 opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
-   - Scale effects: hover:scale-110 transition-all duration-700
-
-4. PREMIUM TYPOGRAPHY:
-   - Hero headlines: text-6xl sm:text-7xl md:text-8xl lg:text-9xl font-bold
-   - Tight tracking: tracking-tight style="letter-spacing: -0.05em;"
-   - Section titles: text-5xl md:text-6xl lg:text-7xl
-   - Generous spacing: mb-10, mb-16, py-40, py-48
-
-5. THEME INTEGRATION (MUST USE EXACT CLASSES):
-   - Background: bg-gradient-to-br {bg}
-   - Text primary: {text_color}
-   - Text secondary: {text_muted}
-   - Gradient accents: {primary}
-   - Solid accent: {accent}
-   - Glow effects: shadow-{glow}
-
-6. INDUSTRY-SPECIFIC CTAS:
-   {cta_guidance}
-
-🎨 CONTENT REQUIREMENTS:
-
-1. READ THE BUSINESS DESCRIPTION CAREFULLY
-   - Extract specific services/offerings mentioned
-   - Reference unique features or location details
-   - Make headlines SPECIFIC to this business
-   - Use industry-appropriate language
-
-2. SECTION-SPECIFIC CONTENT:
-   - HERO: Dramatic headline with business name, compelling subheadline from description, strong CTA
-   - FEATURES/ABOUT/SERVICES: Title + subtitle + 3 detailed feature cards with icons
-   - SOCIAL PROOF/TESTIMONIAL: Title + 3 impressive stats with large numbers
-   - CTA/CONTACT: Final call-to-action headline, subheadline, industry-appropriate CTA
-
-3. AVOID GENERIC CONTENT:
-   - NO "Why Choose Us" unless very specific
-   - NO "Get Started" buttons for restaurants/clinics
-   - NO vague "quality service" - be specific about what they offer
-
-📦 OUTPUT FORMAT (STRICT JSON):
-
+OUTPUT (pure JSON):
 {{
   "business_name": "{business_name}",
   "sections": {{
-    "hero": {{
-      "html": "<section class='relative min-h-screen...'>COMPLETE CUSTOM HTML WITH GIANT ORBS</section>",
-      "data": {{
-        "headline": "SPECIFIC headline for {business_name}",
-        "subheadline": "Based on: {prompt}",
-        "cta": "Industry-appropriate CTA"
-      }}
-    }},
-    "features": {{
-      "html": "<section class='relative py-40...'>GLASSMORPHISM CARDS WITH ANIMATIONS</section>",
-      "data": {{
-        "title": "Custom title based on business",
-        "subtitle": "Relevant subtitle",
-        "feature1_title": "Specific feature from description",
-        "feature1_desc": "Detailed description",
-        "feature2_title": "...",
-        "feature2_desc": "...",
-        "feature3_title": "...",
-        "feature3_desc": "..."
-      }}
-    }}
-    ... (generate ALL sections: {sections_list})
+    "hero": {{"html": "<section>COMPLETE CUSTOM HTML</section>", "data": {{"headline": "...", "subheadline": "...", "cta": "..."}}}},
+    ... (all sections: {", ".join(sections)})
   }},
-  "seo": {{
-    "title": "{business_name} - [Specific Value Prop]",
-    "description": "Custom description based on business",
-    "keywords": ["relevant", "keywords"]
-  }}
-}}
+  "seo": {{"title": "...", "description": "...", "keywords": []}}
+}}"""
 
-⚠️ VALIDATION CHECKLIST:
-- [ ] All orbs are 1400px+ with blur-[200px]+
-- [ ] All cards have backdrop-blur-2xl and glassmorphism
-- [ ] All hover states have smooth 700ms transitions
-- [ ] Hero headline is 9xl on desktop
-- [ ] All content is SPECIFIC to the business description
-- [ ] CTAs match the industry ({inferred})
-- [ ] Every section in {sections_list} is included
-- [ ] Output is valid JSON (no markdown, no code fences)
-
-Generate a completely unique, visually stunning website that feels custom-built for this specific business."""
-
-    print(f"\n{'='*60}")
-    print(f"🤖 GENERATING AI WEBSITE")
-    print(f"{'='*60}")
-    print(f"Business: {business_name}")
-    print(f"Industry: {inferred}")
-    print(f"Theme: {theme.get('palette')} + {theme.get('accent')}")
-    print(f"Sections: {sections_list}")
-    print(f"Description: {prompt[:150]}...")
-    print(f"{'='*60}\n")
+    print(f"\n🤖 GENERATING AI WEBSITE: {business_name} ({inferred})\n")
     
     try:
-        response = chat_completion(
-            system="""You are an elite web designer specializing in creating completely custom, visually stunning websites. 
-
-Your expertise:
-- Generating UNIQUE layouts based on business descriptions
-- Creating massive gradient orbs (1400px+) with heavy blur
-- Implementing premium glassmorphism and animations
-- Writing industry-specific, compelling copy
-- Producing valid, clean JSON output
-
-NEVER use generic templates. Every website should feel custom-built for that specific business.
-ALWAYS use massive orbs (w-[1400px]), glassmorphism (backdrop-blur-2xl bg-white/5), and smooth animations (duration-700).
-Output ONLY valid JSON with no markdown formatting.""",
+        resp = chat_completion(
+            system="Expert web designer. Create UNIQUE custom websites from scratch based on business descriptions. Output valid JSON only.",
             user=ai_prompt,
-            temperature=0.95,  # High creativity for unique designs
+            temperature=0.95
         )
         
-        # Clean response - remove any markdown formatting
-        response = response.strip()
-        if response.startswith("```json"):
-            response = response[7:]
-        if response.startswith("```"):
-            response = response[3:]
-        if response.endswith("```"):
-            response = response[:-3]
-        response = response.strip()
+        # Clean JSON
+        resp = resp.strip().replace("```json", "").replace("```", "").strip()
+        parsed = json.loads(resp)
         
-        parsed = json.loads(response)
-        
-        # Validation - ensure all sections present
         if not parsed.get("sections"):
-            raise ValueError("AI response missing 'sections' key")
+            raise ValueError("Missing sections")
         
-        missing_sections = []
-        for key in sections:
-            if key not in parsed["sections"]:
-                missing_sections.append(key)
+        # Fill any missing sections by asking AI again
+        for sec in sections:
+            if sec not in parsed["sections"]:
+                print(f"⚠️ Re-generating missing: {sec}")
+                sec_resp = chat_completion(
+                    system="Generate section",
+                    user=f"Create {sec} section for {business_name} ({prompt[:100]}). Theme: {tc}, {pr}. Return JSON: {{\"html\": \"...\", \"data\": {{}}}}",
+                    temperature=0.9
+                )
+                parsed["sections"][sec] = json.loads(sec_resp.strip().replace("```", ""))
         
-        if missing_sections:
-            print(f"⚠️  AI missing sections: {missing_sections}")
-            print("🔄 Generating fallback sections for missing parts...")
-            for key in missing_sections:
-                parsed["sections"][key] = _generate_fallback_section(key, business_name, industry, palette, is_dark)
+        if not parsed.get("seo"):
+            parsed["seo"] = {"title": business_name, "description": prompt[:150], "keywords": [inferred]}
         
-        # Add SEO if missing
-        if "seo" not in parsed:
-            parsed["seo"] = {
-                "title": f"{business_name} - {inferred.title()}",
-                "description": f"Discover {business_name}. {prompt[:100]}",
-                "keywords": [inferred, business_type, "premium"]
-            }
-        
-        print(f"✅ AI SUCCESS!")
-        print(f"   Generated {len(parsed['sections'])} unique sections")
-        print(f"   Theme: {theme.get('palette')} + {theme.get('accent')}")
-        print(f"{'='*60}\n")
-        
+        print(f"✅ SUCCESS! {len(parsed['sections'])} sections\n")
         return parsed
         
-    except json.JSONDecodeError as e:
-        print(f"❌ AI JSON PARSE ERROR: {str(e)}")
-        print(f"   Response preview: {response[:200] if 'response' in locals() else 'N/A'}...")
-        print(f"🔄 Using premium fallback...")
-        return _generate_complete_fallback(business_name, prompt, sections, structure, industry)
-        
     except Exception as e:
-        print(f"❌ AI GENERATION FAILED: {str(e)}")
-        print(f"🔄 Using premium fallback...")
-        return _generate_complete_fallback(business_name, prompt, sections, structure, industry)
+        print(f"❌ FAILED: {e}\n")
+        # Minimal emergency fallback
+        return {
+            "business_name": business_name,
+            "sections": {s: {"html": f"<section class='py-40 {tc}'><div class='max-w-7xl mx-auto px-6'><h2 class='text-7xl font-bold mb-6'>{s.title()}</h2><p class='{tm}'>Content for {business_name}</p></div></section>", "data": {}} for s in sections},
+            "seo": {"title": business_name, "description": prompt[:100], "keywords": [inferred]}
+        }
 
-
-def _generate_complete_fallback(business_name: str, prompt: str, sections: List[str], structure: Dict[str, Any], industry: Dict[str, str]) -> Dict[str, Any]:
-    """Generate complete fallback website when AI totally fails."""
-    palette = structure["palette"]
-    theme = structure.get("theme", {})
-    is_dark = theme.get("palette", "dark") == "dark"
-    
-    out_sections = {}
-    for section_key in sections:
-        out_sections[section_key] = _generate_fallback_section(section_key, business_name, industry, palette, is_dark)
-    
-    return {
-        "business_name": business_name,
-        "sections": out_sections,
-        "seo": {
-            "title": f"{business_name} - Professional Services",
-            "description": f"Discover {business_name}. {prompt[:100]}",
-            "keywords": ["professional", "quality", "premium"],
-        },
-    }
 
 def rewrite_content(original_text: str, tone: str = "professional", business_context: str = "") -> List[str]:
     """Generate alternative versions of content with AI."""
