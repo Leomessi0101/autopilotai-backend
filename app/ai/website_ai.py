@@ -175,8 +175,6 @@ THEMES = {
 # SECTION VARIANT LIBRARY: Multi-Style Components
 # ============================================================================
 
-# Find this section and replace it:
-
 class HeroVariant:
     """3 distinct hero styles for maximum visual variety"""
     
@@ -184,10 +182,6 @@ class HeroVariant:
     def split_grid(theme: Dict, data: Dict) -> str:
         """Classic: Text left, image right in bold grid"""
         try:
-            # Get unique image from unsplash keywords
-            keywords = data.get('metadata', {}).get('unsplash_keywords', ['business'])
-            hero_keyword = keywords[0] if keywords else 'business'
-            
             return f"""
             <section id="hero" class="relative {theme['bg']} {PADDING_SECTION} overflow-hidden pt-32">
                 <div class="container mx-auto {PADDING_CONTAINER}">
@@ -210,7 +204,7 @@ class HeroVariant:
                             </div>
                         </div>
                         <div class="relative h-[500px] md:h-[600px] rounded-3xl overflow-hidden">
-                            <img src="https://images.unsplash.com/photo-1552664730-d307ca884978?w=800&auto=format&fit=crop&q=80&fm=webp" 
+                            <img src="{get_unsplash_image('business', 0, 800)}" 
                                  alt="{data.get('hero', {}).get('h1', 'hero')}" class="w-full h-full object-cover {HOVER_LIFT}" />
                             <div class="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent"></div>
                         </div>
@@ -268,7 +262,7 @@ class HeroVariant:
                         </div>
                         <div class="relative order-1 lg:order-2 h-96">
                             <div class="absolute inset-0 bg-gradient-to-br {theme['grad']} opacity-10 rounded-3xl blur-2xl"></div>
-                            <img src="https://images.unsplash.com/photo-1552664730-d307ca884978?w=600&auto=format&fit=crop&q=80&fm=webp" 
+                            <img src="{get_unsplash_image('business', 1, 600)}" 
                                  alt="hero" class="relative z-10 w-full h-full object-cover rounded-3xl {HOVER_LIFT}" />
                         </div>
                     </div>
@@ -277,6 +271,7 @@ class HeroVariant:
         except Exception as e:
             logger.error(f"Error rendering asymmetric_wave hero: {e}")
             return f"<section class='{theme['bg']} py-20'><div class='container mx-auto text-center'><h1>Hero Section</h1></div></section>"
+
 
 class FeatureVariant:
     """3 distinct feature section designs"""
@@ -310,9 +305,9 @@ class FeatureVariant:
             logger.error(f"Error rendering cards_grid features: {e}")
             return f"<section id='features' class='{theme['bg_alt']} py-20'><div class='container mx-auto text-center'><h2>Features</h2></div></section>"
 
-        @staticmethod
+    @staticmethod
     def alternating_blocks(theme: Dict, features: List[Dict]) -> str:
-        """Rich: Alternating text-image blocks (single feature per row)"""
+        """Rich: Alternating text-image blocks"""
         try:
             blocks = "".join([f"""
             <div class="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center {'lg:flex-row-reverse' if i % 2 else ''}">
@@ -616,8 +611,6 @@ class MasterArchitect:
     def render_hero(self) -> str:
         """Select and render hero variant based on industry"""
         try:
-            variants = [HeroVariant.split_grid, HeroVariant.centered_spotlight, HeroVariant.asymmetric_wave]
-            
             if self.industry in ["luxury", "agency"]:
                 variant_fn = HeroVariant.centered_spotlight
             elif self.industry in ["saas", "finance"]:
