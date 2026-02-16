@@ -1,28 +1,38 @@
 """
-Public API routes for serving published websites
-No authentication required - anyone can view published websites
+Public API routes for serving websites
+- Published websites: anyone can view
+- Draft websites: only authenticated owner can view
 """
 
 import json
 import logging
 from typing import Dict, Any
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from app.database.session import SessionLocal
-from app.database.models import Website
+from app.database.models import Website, User
+from app.utils.auth import get_current_user_optional
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/public/websites", tags=["public-websites"])
 
 
+def get_db():
+    """Database session dependency"""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
 @router.get("/{username}", response_model=Dict[str, Any])
-async def get_public_website(username: str):
+async def get_public_website(username: str, db: Session = Depends(get_db)):
     """
-    Get published website by username (PUBLIC endpoint, no authentication required)
+    Get published website by username (PUBLIC - no auth required)
     Only published websites are visible to the public.
     """
-    db = SessionLocal()
     try:
         username = (username or "").strip().lower()
         
@@ -79,17 +89,18 @@ async def get_public_website(username: str):
     except Exception as e:
         logger.error(f"Error fetching website {username}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
-    finally:
-        db.close()
 
 
 @router.get("/{username}/preview", response_model=Dict[str, Any])
-async def preview_website(username: str):
+async def preview_website(
+    username: str,
+    user: User = Depends(get_current_user_optional),
+    db: Session = Depends(get_db)
+):
     """
     Preview a website (draft or published)
-    Use ?edit=1 in the frontend to access this for draft websites
+    For draft websites, user must be the owner and authenticated
     """
-    db = SessionLocal()
     try:
         username = (username or "").strip().lower()
         
@@ -100,6 +111,14 @@ async def preview_website(username: str):
         
         if not site:
             raise HTTPException(status_code=404, detail="Website not found")
+        
+        # If draft, verify ownership
+        if site.publish_status == "draft":
+            if not user or user.id != site.user_id:
+                raise HTTPException(
+                    status_code=403,
+                    detail="You don't have permission to view this private website"
+                )
         
         try:
             content = json.loads(site.content_json) if site.content_json else {}
@@ -131,5 +150,3 @@ async def preview_website(username: str):
     except Exception as e:
         logger.error(f"Error previewing website {username}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
-    finally:
-        db.close()

@@ -32,7 +32,7 @@ from app.routes.restaurant_websites import router as restaurant_websites_router
 from app.routes.restaurant_websites import domains_router
 from app.routes import websites_routes
 from app.routes import dashboard_websites_routes
-from app.routes import public_websites_routes  # ✅ NEW
+from app.routes import public_websites_routes
 
 # -------------------- APP SETUP --------------------
 app = FastAPI()
@@ -40,11 +40,15 @@ app = FastAPI()
 # -------------------- CREATE DATABASE TABLES --------------------
 Base.metadata.create_all(bind=engine)
 
-# -------------------- CORS (FIXED – NO CONFLICTS) --------------------
+# -------------------- CORS --------------------
 app.add_middleware(
     CORSMiddleware,
-    # allow autopilotai.dev, www, vercel previews, localhost
-    allow_origin_regex=r"^https://(www\.)?autopilotai\.dev$|^https://.*\.vercel\.app$|^http://localhost:3000$|^http://127\.0\.0\.1:3000$",
+    allow_origins=[
+        "https://www.autopilotai.dev",
+        "https://autopilotai.dev",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -67,13 +71,13 @@ app.include_router(websites_routes.router)
 # 🔥 Dashboard website builder (AUTHENTICATED - FIRST)
 app.include_router(dashboard_websites_routes.router)
 
-# 🌍 Public website renderers (NO AUTH - SECOND, so /api/public/* routes work)
+# 🌍 Public website renderers (NO AUTH REQUIRED - SECOND)
 app.include_router(public_websites_routes.router)
 
 # Public website serving (old endpoint for backward compatibility)
 app.include_router(restaurant_websites_router)
 
-# ✅ Custom domain resolver (for custom domain routing)
+# ✅ Custom domain resolver
 app.include_router(domains_router)
 
 # AI Routes
