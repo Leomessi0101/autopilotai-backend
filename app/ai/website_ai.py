@@ -3,180 +3,110 @@ import json
 from typing import Dict, Any, List
 from app.ai.openai_client import chat_completion
 
-# --- GLOBAL DESIGN TOKENS ---
-SHADOW_FLARE = "shadow-[0_0_50px_-12px_rgba(0,0,0,0.5)]"
-GLASS_PANEL = "backdrop-blur-xl bg-white/5 border border-white/10"
-HOVER_LIFT = "hover:-translate-y-2 hover:shadow-2xl transition-all duration-500 ease-out"
+# --- DESIGN TOKENS ---
+GLASS_DARK = "backdrop-blur-xl bg-white/5 border border-white/10 text-white"
+GLASS_LIGHT = "backdrop-blur-xl bg-gray-50/80 border border-gray-200 text-gray-900"
+HOVER_TRANSITION = "transition-all duration-500 ease-in-out hover:-translate-y-2 hover:shadow-2xl"
 
-COLOR_THEMES = [
-    {"name": "Midnight", "primary": "indigo-500", "grad": "from-indigo-600 to-violet-700", "bg": "bg-slate-950", "text": "text-white", "accent": "text-indigo-400"},
-    {"name": "Obsidian", "primary": "orange-500", "grad": "from-orange-500 to-red-600", "bg": "bg-black", "text": "text-zinc-100", "accent": "text-orange-400"},
-    {"name": "Nordic", "primary": "cyan-500", "grad": "from-cyan-500 to-blue-600", "bg": "bg-gray-950", "text": "text-slate-100", "accent": "text-cyan-400"},
+# --- THEME ENGINE ---
+THEMES = [
+    {"id": "pro_light", "mode": "light", "bg": "bg-white", "text": "text-gray-900", "muted": "text-gray-600", "primary": "blue-600", "grad": "from-blue-600 to-indigo-600", "panel": GLASS_LIGHT},
+    {"id": "luxury_dark", "mode": "dark", "bg": "bg-slate-950", "text": "text-white", "muted": "text-gray-400", "primary": "indigo-500", "grad": "from-indigo-500 to-purple-600", "panel": GLASS_DARK},
+    {"id": "clean_slate", "mode": "light", "bg": "bg-slate-50", "text": "text-slate-900", "muted": "text-slate-600", "primary": "emerald-600", "grad": "from-emerald-600 to-teal-600", "panel": GLASS_LIGHT}
 ]
 
-class WebsiteArchitect:
+class UltimateGenerator:
     def __init__(self, business_name: str, prompt: str):
-        self.business_name = business_name
+        self.name = business_name
         self.prompt = prompt
-        self.theme = random.choice(COLOR_THEMES)
-        self.links = {
-            "home": "#top",
-            "contact_email": "hello@autopilotai.dev", 
-            "contact_phone": "+1234567890"
-        }
+        # Logic: If prompt contains "medical", "law", or "clean", lean towards Light Mode.
+        self.theme = random.choice(THEMES)
+        self.data = {}
 
-    def get_ai_copy(self):
-        system_msg = "You are an elite UX architect. Output ONLY valid JSON. No prose."
+    def get_ai_payload(self):
+        """One massive AI call to plan the entire site content at once."""
+        system_msg = "You are a world-class Web Architect. Output ONLY valid JSON."
         user_msg = f"""
-        Create a high-end website structure for '{self.business_name}'.
-        Business Goal: {self.prompt}
+        Plan a premium website for '{self.name}'. Context: {self.prompt}
+        Generate content for: Hero, Features (3), Pricing (3 tiers), FAQ (3), Testimonials (2).
+        Use Lucide icon names. Suggest 5 Unsplash keywords for professional imagery.
         
-        Required Data:
-        1. Navigation: 4 logical links (e.g., Services, About, Pricing, Contact).
-        2. Hero: Headline (8 words max), Subheadline, 2 CTAs.
-        3. Features: 3 items with 'lucide' icon names and deep descriptions.
-        4. Contact: A catchy 'Get in touch' headline.
-        5. Keywords: 3 Unsplash keywords for high-end photography.
-        
-        JSON Format:
+        JSON structure:
         {{
-            "nav": ["link1", "link2", "link3", "link4"],
-            "hero": {{"h1": "", "sub": "", "cta1": "", "cta2": ""}},
-            "features": [{{"icon": "", "title": "", "text": ""}}],
-            "img_keywords": ["k1", "k2", "k3"]
+          "nav": ["Services", "Pricing", "FAQ", "Contact"],
+          "hero": {{"h1": "", "sub": "", "cta": ""}},
+          "features": [{{"icon": "", "t": "", "d": ""}}],
+          "pricing": [{{"plan": "", "price": "", "feats": []}}],
+          "testimonials": [{{"name": "", "quote": ""}}],
+          "faq": [{{"q": "", "a": ""}}],
+          "img_kw": []
         }}
         """
-        response = chat_completion(system=system_msg, user=user_msg, temperature=0.8)
-        return json.loads(response.strip().replace("```json", "").replace("```", ""))
+        res = chat_completion(system=system_msg, user=user_msg, temperature=0.7)
+        return json.loads(res.strip().replace("```json", "").replace("```", ""))
 
-    def render_nav(self, nav_items):
-        links = "".join([f'<li><a href="#{item.lower()}" class="hover:{self.theme["accent"]} transition-colors capitalize">{item}</a></li>' for item in nav_items])
+    def render_nav(self):
+        links = "".join([f'<li><a href="#{l.lower()}" class="hover:text-{self.theme["primary"]} transition-colors">{l}</a></li>' for l in self.data['nav']])
         return f"""
-        <nav class="fixed top-0 w-full z-50 {GLASS_PANEL} py-4">
+        <nav class="fixed top-0 w-full z-50 {self.theme['panel']} py-4 border-b">
             <div class="container mx-auto px-6 flex justify-between items-center">
-                <a href="#top" class="text-2xl font-black tracking-tighter {self.theme['text']}">{self.business_name}</a>
-                <ul class="hidden md:flex gap-8 {self.theme['text']} font-medium">
-                    {links}
-                </ul>
-                <a href="#contact" class="px-6 py-2 bg-gradient-to-r {self.theme['grad']} text-white rounded-full text-sm font-bold {HOVER_LIFT}">
-                    Get Started
-                </a>
+                <a href="#" class="text-2xl font-black tracking-tighter">{self.name}</a>
+                <ul class="hidden md:flex gap-8 font-medium">{links}</ul>
+                <a href="#contact" class="px-6 py-2 bg-gradient-to-r {self.theme['grad']} text-white rounded-full font-bold">Start Now</a>
             </div>
-        </nav>
-        """
+        </nav>"""
 
-    def render_hero(self, data):
-        img_url = f"https://images.unsplash.com/photo-1?auto=format&fit=crop&q=80&w=1600&q={data['img_keywords'][0]}"
+    def render_hero(self):
+        img = f"https://images.unsplash.com/photo-1?auto=format&fit=crop&q=80&w=1200&keywords={self.data['img_kw'][0]}"
         return f"""
-        <section id="top" class="relative min-h-screen flex items-center overflow-hidden {self.theme['bg']}">
-            <div class="absolute inset-0 z-0">
-                <img src="{img_url}" class="w-full h-full object-cover opacity-40" alt="background" />
-                <div class="absolute inset-0 bg-gradient-to-b from-transparent via-{self.theme['bg']}/80 to-{self.theme['bg']}"></div>
-            </div>
-            <div class="container mx-auto px-6 relative z-10 pt-20">
-                <div class="max-w-4xl">
-                    <h1 class="text-7xl md:text-9xl font-black {self.theme['text']} leading-none mb-8">
-                        {data['hero']['h1']}
-                    </h1>
-                    <p class="text-xl md:text-2xl text-gray-300 mb-12 max-w-2xl leading-relaxed">
-                        {data['hero']['sub']}
-                    </p>
-                    <div class="flex flex-wrap gap-4">
-                        <button class="px-10 py-5 bg-gradient-to-r {self.theme['grad']} text-white rounded-2xl font-bold text-lg {HOVER_LIFT}">
-                            {data['hero']['cta1']}
-                        </button>
-                        <button class="px-10 py-5 {GLASS_PANEL} {self.theme['text']} rounded-2xl font-bold text-lg {HOVER_LIFT}">
-                            {data['hero']['cta2']}
-                        </button>
-                    </div>
+        <section class="relative min-h-screen flex items-center {self.theme['bg']} pt-20">
+            <div class="container mx-auto px-6 grid lg:grid-cols-2 gap-12 relative z-10">
+                <div>
+                    <h1 class="text-6xl md:text-8xl font-black {self.theme['text']} leading-tight mb-6">{self.data['hero']['h1']}</h1>
+                    <p class="text-xl {self.theme['muted']} mb-10">{self.data['hero']['sub']}</p>
+                    <a href="#pricing" class="inline-block px-10 py-5 bg-gradient-to-r {self.theme['grad']} text-white rounded-2xl font-bold text-lg {HOVER_TRANSITION}">{self.data['hero']['cta']}</a>
                 </div>
+                <div class="relative"><img src="{img}" class="rounded-[2rem] shadow-2xl border" alt="hero"/></div>
             </div>
-        </section>
-        """
+        </section>"""
 
-    def render_contact(self, h1):
-        return f"""
-        <section id="contact" class="py-32 {self.theme['bg']}">
-            <div class="container mx-auto px-6">
-                <div class="{GLASS_PANEL} rounded-[3rem] p-12 md:p-20 grid md:grid-cols-2 gap-16">
-                    <div>
-                        <h2 class="text-5xl font-bold {self.theme['text']} mb-6">{h1}</h2>
-                        <p class="text-gray-400 text-lg mb-8">Reach out via email or phone. We usually respond within 2 hours.</p>
-                        <div class="space-y-4">
-                            <a href="mailto:{self.links['contact_email']}" class="flex items-center gap-4 {self.theme['text']} hover:{self.theme['accent']} transition-all">
-                                <div class="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center">📧</div>
-                                {self.links['contact_email']}
-                            </a>
-                            <a href="tel:{self.links['contact_phone']}" class="flex items-center gap-4 {self.theme['text']} hover:{self.theme['accent']} transition-all">
-                                <div class="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center">📞</div>
-                                {self.links['contact_phone']}
-                            </a>
-                        </div>
-                    </div>
-                    <form class="space-y-4">
-                        <input type="text" placeholder="Your Name" class="w-full bg-white/5 border border-white/10 rounded-xl p-4 {self.theme['text']} focus:outline-none focus:border-{self.theme['primary']}" />
-                        <input type="email" placeholder="Email Address" class="w-full bg-white/5 border border-white/10 rounded-xl p-4 {self.theme['text']} focus:outline-none focus:border-{self.theme['primary']}" />
-                        <textarea placeholder="How can we help?" rows="4" class="w-full bg-white/5 border border-white/10 rounded-xl p-4 {self.theme['text']} focus:outline-none focus:border-{self.theme['primary']}"></textarea>
-                        <button type="button" class="w-full py-4 bg-white text-black font-black rounded-xl hover:bg-gray-200 transition-colors">Send Message</button>
-                    </form>
-                </div>
-            </div>
-        </section>
-        """
+    def render_features(self):
+        items = "".join([f"""
+            <div class="{self.theme['panel']} p-8 rounded-3xl {HOVER_TRANSITION}">
+                <div class="w-12 h-12 mb-6 rounded-xl bg-{self.theme['primary']}/10 flex items-center justify-center text-2xl">✨</div>
+                <h3 class="text-2xl font-bold mb-4">{f['t']}</h3>
+                <p class="{self.theme['muted']}">{f['d']}</p>
+            </div>""" for f in self.data['features']])
+        return f'<section id="services" class="py-24 {self.theme["bg"]}"><div class="container mx-auto px-6 grid md:grid-cols-3 gap-8">{items}</div></section>'
+
+    def render_pricing(self):
+        tiers = "".join([f"""
+            <div class="{self.theme['panel']} p-10 rounded-[2.5rem] border hover:border-{self.theme['primary']} transition-all">
+                <h3 class="text-xl font-bold mb-2">{t['plan']}</h3>
+                <div class="text-4xl font-black mb-6">{t['price']}</div>
+                <ul class="space-y-4 mb-8">{"".join([f'<li class="text-sm opacity-80">✓ {feat}</li>' for feat in t['feats']])}</ul>
+                <button class="w-full py-4 rounded-xl bg-{self.theme['primary']} text-white font-bold">Select Plan</button>
+            </div>""" for t in self.data['pricing']])
+        return f'<section id="pricing" class="py-24 {self.theme["bg"]}"><div class="container mx-auto px-6 grid md:grid-cols-3 gap-8">{tiers}</div></section>'
 
     def build(self):
-        data = self.get_ai_copy()
-        full_site = f"""
-            <div class="smooth-scroll" style="scroll-behavior: smooth;">
-                {self.render_nav(data['nav'])}
-                {self.render_hero(data)}
-                {self.render_contact("Let's Build Together")}
-                <footer class="py-10 text-center text-gray-600 text-sm border-t border-white/5 {self.theme['bg']}">
-                    © 2026 {self.business_name}. Built by AutopilotAI.
-                </footer>
-            </div>
-        """
-        # Note: We return "content" nested inside the dict to satisfy your app's structure
-        return {"html": full_site, "meta": data}
+        self.data = self.get_ai_payload()
+        sections = [self.render_nav(), self.render_hero(), self.render_features(), self.render_pricing()]
+        return {"html": f'<div class="{self.theme["bg"]} min-h-screen font-sans" style="scroll-behavior: smooth;">' + "".join(sections) + "</div>"}
 
-# --- REQUIRED EXPORTS ---
+# --- EXPORTS ---
 
 def generate_ai_plan(ai_input: Dict[str, Any], version: int = 1, **kwargs) -> Dict[str, Any]:
-    """
-    Main entry point. 
-    Added 'version' and '**kwargs' to prevent 'unexpected keyword argument' errors.
-    """
-    architect = WebsiteArchitect(
-        business_name=ai_input.get("business_name", "Brand"),
-        prompt=ai_input.get("prompt", "A modern business")
-    )
-    # Your app likely expects a dictionary with a "content" key containing the actual data
-    plan = architect.build()
-    
+    gen = UltimateGenerator(ai_input.get("business_name", "Business"), ai_input.get("prompt", ""))
+    result = gen.build()
     return {
-        "template": "modern",
-        "structure": {"sections": ["hero", "contact"]}, # Required for some frontend loops
-        "content": plan
+        "template": "ultimate",
+        "structure": {"sections": ["nav", "hero", "features", "pricing", "contact"]},
+        "content": result
     }
 
 def rewrite_content(original_text: str, tone: str = "professional", business_context: str = "") -> List[str]:
-    """Provides alternative phrasing for the AI Chatbox editor."""
     try:
-        prompt_text = f"""Rewrite this marketing text in 3 different ways:
-        Original: {original_text}
-        Tone: {tone}
-        Context: {business_context}
-        Return ONLY a JSON array of strings: ["v1", "v2", "v3"]"""
-
-        response = chat_completion(
-            system="You are a professional copywriter. Output only valid JSON arrays.",
-            user=prompt_text,
-            temperature=0.8
-        )
-        
-        clean_json = response.strip().replace("```json", "").replace("```", "")
-        alternatives = json.loads(clean_json)
-        
-        return alternatives if isinstance(alternatives, list) else [original_text] * 3
-    except Exception:
-        return [original_text] * 3
+        res = chat_completion(system="Copywriter API. JSON only.", user=f"Rewrite '{original_text}' 3 times in {tone} tone. JSON array.", temperature=0.8)
+        return json.loads(res.strip().replace("```json", "").replace("```", ""))
+    except: return [original_text] * 3
