@@ -29,9 +29,10 @@ from app.routes.work_routes import router as work_router
 from app.ai import image_routes
 from app.ai.growth_pack_routes import router as growth_pack_router
 from app.routes.restaurant_websites import router as restaurant_websites_router
-from app.routes.restaurant_websites import domains_router  # ✅ NEW
+from app.routes.restaurant_websites import domains_router
 from app.routes import websites_routes
 from app.routes import dashboard_websites_routes
+from app.routes import public_websites_routes  # ✅ NEW
 
 # -------------------- APP SETUP --------------------
 app = FastAPI()
@@ -63,13 +64,16 @@ app.include_router(image_routes.router, prefix="/api")
 app.include_router(growth_pack_router, prefix="/api")
 app.include_router(websites_routes.router)
 
-# 🔥 dashboard website builder FIRST
+# 🔥 Dashboard website builder (AUTHENTICATED - FIRST)
 app.include_router(dashboard_websites_routes.router)
 
-# public website renderers AFTER
+# 🌍 Public website renderers (NO AUTH - SECOND, so /api/public/* routes work)
+app.include_router(public_websites_routes.router)
+
+# Public website serving (old endpoint for backward compatibility)
 app.include_router(restaurant_websites_router)
 
-# ✅ domains resolver (for custom domain routing)
+# ✅ Custom domain resolver (for custom domain routing)
 app.include_router(domains_router)
 
 # AI Routes
