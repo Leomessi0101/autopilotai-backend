@@ -30,9 +30,9 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 
 WEBSITE_LIMITS = {
-    "free": {"max_websites": 0, "can_publish": False, "custom_domain": False},
+    "free": {"max_websites": 1, "can_publish": False, "custom_domain": False},
     "starter": {"max_websites": 1, "can_publish": True, "custom_domain": False},
-    "pro": {"max_websites": 5, "can_publish": True, "custom_domain": True},
+    "pro": {"max_websites": 3, "can_publish": True, "custom_domain": True},
 }
 
 # ============================================================================
@@ -97,7 +97,7 @@ def normalize_domain(domain: str) -> str:
 
 def generate_domain_token(site: Website) -> str:
     """Generate DNS verification token for domain"""
-    raw = f"autopilotai:{site.id}:{site.user_id}:{site.username}"
+    raw = f"autopilot:{site.id}:{site.user_id}:{site.username}"
     digest = hashlib.sha256(raw.encode("utf-8")).digest()
     return base64.urlsafe_b64encode(digest).decode("utf-8").rstrip("=")[:32]
 
@@ -155,11 +155,15 @@ async def create_website(
     """
     Create a new AI-generated website using Master Architect system.
     
+    FREE: 1 website (draft only)
+    STARTER: 1 website (can publish)
+    PRO: 3 websites (can publish)
+    
     Request body:
     {
-        "username": "my-site",  # subdomain name (required)
-        "prompt": "AI SaaS platform with analytics",  # business description (required)
-        "name": "My Company"  # optional: override business name
+        "username": "my-site",
+        "prompt": "AI SaaS platform with analytics",
+        "name": "My Company"
     }
     """
     try:
@@ -182,12 +186,6 @@ async def create_website(
         # ---- Plan Limits ----
         plan_limits = get_user_plan_limits(user)
         
-        if not plan_limits["can_publish"]:
-            raise HTTPException(
-                status_code=403,
-                detail=f"Website creation requires at least Starter plan (you have {user.subscription_plan or 'free'})"
-            )
-
         existing_count = db.query(Website).filter(Website.user_id == user.id).count()
         if existing_count >= plan_limits["max_websites"]:
             raise HTTPException(
@@ -231,6 +229,9 @@ async def create_website(
         if not html_content:
             raise HTTPException(status_code=500, detail="No HTML content generated")
 
+        # ---- Determine Publish Status ----
+        publish_status = "published" if plan_limits["can_publish"] else "draft"
+
         # ---- Create Database Record ----
         site = Website(
             user_id=user.id,
@@ -242,7 +243,7 @@ async def create_website(
                 "prompt": prompt,
                 "business_name": business_name,
             }),
-            publish_status="published" if plan_limits["can_publish"] else "draft",
+            publish_status=publish_status,
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow(),
         )
@@ -252,6 +253,8 @@ async def create_website(
         db.refresh(site)
 
         log_action("CREATE_WEBSITE_SUCCESS", username, user.id, f"theme={metadata.get('theme')} industry={metadata.get('industry')}")
+
+        status_msg = "PUBLISHED" if publish_status == "published" else "PRIVATE (draft)"
 
         return {
             "ok": True,
@@ -264,11 +267,11 @@ async def create_website(
                 "template": "master_architect",
                 "publish_status": site.publish_status,
                 "created_at": site.created_at.isoformat() if site.created_at else None,
-                "preview_url": f"/api/preview/{username}",
+                "preview_url": f"/r/{username}?edit=1",
                 "edit_url": f"/dashboard/websites/{username}/edit",
-                "published_url": f"/r/{username}" if site.publish_status == "published" else None,
+                "public_url": f"/r/{username}" if publish_status == "published" else None,
             },
-            "message": f"Website '{username}' created successfully!",
+            "message": f"Website '{username}' created successfully! Status: {status_msg}",
         }
 
     except HTTPException:
@@ -279,7 +282,7 @@ async def create_website(
 
 
 # ============================================================================
-# GET WEBSITE (PREVIEW)
+# GET WEBSITE (AUTHENTICATED)
 # ============================================================================
 
 
@@ -289,7 +292,7 @@ async def get_website(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Get website details and HTML content"""
+    """Get website details and HTML content (authenticated users only)"""
     try:
         username = normalize_username(username)
         site = get_website_or_404(db, username)
@@ -333,23 +336,12 @@ async def update_website(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """
-    Update website content and metadata.
-    
-    Request body:
-    {
-        "html": "<html>...</html>",  # optional: new HTML
-        "metadata": {...},  # optional: update metadata
-        "prompt": "Updated description",  # optional
-        "business_name": "Updated Name"  # optional
-    }
-    """
+    """Update website content and metadata"""
     try:
         username = normalize_username(username)
         site = get_website_or_404(db, username)
         authorize_website_access(site, user)
 
-        # Update content
         current_content = json.loads(site.content_json) if site.content_json else {}
 
         if "html" in payload and payload["html"]:
@@ -397,15 +389,7 @@ async def regenerate_website(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """
-    Regenerate website with new or updated prompt.
-    
-    Request body:
-    {
-        "prompt": "New business description",  # required
-        "keep_domains": true  # optional: keep custom domain settings
-    }
-    """
+    """Regenerate website with new or updated prompt"""
     try:
         username = normalize_username(username)
         prompt = payload.get("prompt", "").strip()
@@ -418,11 +402,9 @@ async def regenerate_website(
 
         log_action("REGENERATE_WEBSITE_START", username, user.id)
 
-        # Get current business name
         current_content = json.loads(site.content_json) if site.content_json else {}
         business_name = current_content.get("business_name", username.replace("-", " ").title())
 
-        # Generate new website
         try:
             ai_result = generate_ai_plan(
                 ai_input={
@@ -444,7 +426,6 @@ async def regenerate_website(
         if not html_content:
             raise HTTPException(status_code=500, detail="No HTML generated")
 
-        # Update site
         site.html_content = html_content
         site.content_json = json.dumps({
             "metadata": metadata,
@@ -487,15 +468,7 @@ async def rewrite_text(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """
-    Generate alternative versions of text content.
-    
-    Request body:
-    {
-        "text": "Original text to rewrite",  # required
-        "tone": "professional|casual|luxury|technical"  # optional, default: professional
-    }
-    """
+    """Generate alternative versions of text content"""
     try:
         username = normalize_username(username)
         text = payload.get("text", "").strip()
@@ -521,7 +494,7 @@ async def rewrite_text(
             )
         except Exception as e:
             logger.warning(f"Rewrite failed for {username}: {str(e)}")
-            alternatives = [text, text, text]  # Fallback
+            alternatives = [text, text, text]
 
         return {
             "ok": True,
@@ -615,6 +588,41 @@ async def unpublish_website(
 
 
 # ============================================================================
+# DELETE WEBSITE
+# ============================================================================
+
+
+@router.delete("/{username}", response_model=Dict[str, Any])
+async def delete_website(
+    username: str,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Delete website permanently"""
+    try:
+        username = normalize_username(username)
+        site = get_website_or_404(db, username)
+        authorize_website_access(site, user)
+
+        db.delete(site)
+        db.commit()
+
+        log_action("DELETE_WEBSITE", username, user.id)
+
+        return {
+            "ok": True,
+            "status": "success",
+            "message": f"Website '{username}' deleted",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting {username}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
 # CUSTOM DOMAIN
 # ============================================================================
 
@@ -642,7 +650,7 @@ async def get_domain_status(
                 "dns_record": {
                     "name": "@",
                     "type": "TXT",
-                    "value": f"autopilotai-verify={token}",
+                    "value": f"autopilot-verify={token}",
                 },
             },
         }
@@ -661,16 +669,7 @@ async def set_custom_domain(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """
-    Set custom domain for website.
-    
-    Request body:
-    {
-        "domain": "example.com"  # required
-    }
-    
-    Requires Pro plan.
-    """
+    """Set custom domain for website (PRO only)"""
     try:
         username = normalize_username(username)
         plan_limits = get_user_plan_limits(user)
@@ -688,7 +687,6 @@ async def set_custom_domain(
         site = get_website_or_404(db, username)
         authorize_website_access(site, user)
 
-        # Check availability
         if not check_domain_available(db, domain, exclude_site_id=site.id):
             raise HTTPException(status_code=409, detail=f"Domain '{domain}' is already in use")
 
@@ -711,7 +709,7 @@ async def set_custom_domain(
                 "dns_record": {
                     "name": "@",
                     "type": "TXT",
-                    "value": f"autopilotai-verify={token}",
+                    "value": f"autopilot-verify={token}",
                 },
                 "instructions": "1. Add the TXT record to your domain's DNS settings\n2. Wait 24 hours for propagation\n3. Call /verify endpoint to confirm",
             },
@@ -740,9 +738,8 @@ async def verify_custom_domain(
             raise HTTPException(status_code=400, detail="No custom domain set")
 
         token = generate_domain_token(site)
-        expected = f"autopilotai-verify={token}"
+        expected = f"autopilot-verify={token}"
 
-        # Try DNS lookup
         try:
             import dns.resolver
             answers = dns.resolver.resolve(site.custom_domain, "TXT")
@@ -758,7 +755,7 @@ async def verify_custom_domain(
             if not any(expected in val for val in txt_values):
                 raise HTTPException(
                     status_code=400,
-                    detail=f"TXT record not found. Expected: {expected}. Found: {txt_values}"
+                    detail=f"TXT record not found. Expected: {expected}"
                 )
 
         except ImportError:
@@ -769,7 +766,6 @@ async def verify_custom_domain(
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"DNS lookup failed: {str(e)}")
 
-        # Verified!
         site.domain_verified = True
         site.updated_at = datetime.utcnow()
         db.commit()
@@ -790,61 +786,6 @@ async def verify_custom_domain(
         raise
     except Exception as e:
         logger.error(f"Error verifying domain for {username}: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ============================================================================
-# DELETE WEBSITE
-# ============================================================================
-
-
-@router.delete("/{username}", response_model=Dict[str, Any])
-async def delete_website(
-    username: str,
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """Delete website permanently"""
-    try:
-        username = normalize_username(username)
-        site = get_website_or_404(db, username)
-        authorize_website_access(site, user)
-
-        site_id = site.id
-        db.delete(site)
-        db.commit()
-
-        log_action("DELETE_WEBSITE", username, user.id)
-
-        return {
-            "ok": True,
-            "status": "success",
-            "message": f"Website '{username}' deleted",
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error deleting {username}: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ============================================================================
-# DESIGN TOKENS / UTILITIES
-# ============================================================================
-
-
-@router.get("/design/tokens", response_model=Dict[str, Any])
-async def get_tokens(user: User = Depends(get_current_user)):
-    """Get design system tokens (for frontend)"""
-    try:
-        tokens = get_design_tokens()
-        return {
-            "ok": True,
-            "data": tokens,
-        }
-    except Exception as e:
-        logger.error(f"Error fetching design tokens: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

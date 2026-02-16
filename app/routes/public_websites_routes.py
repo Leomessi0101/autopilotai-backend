@@ -16,36 +16,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/public/websites", tags=["public-websites"])
 
 
-def get_db():
-    """Database session dependency"""
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
 @router.get("/{username}", response_model=Dict[str, Any])
 async def get_public_website(username: str):
     """
     Get published website by username (PUBLIC endpoint, no authentication required)
-    
-    Returns HTML content and metadata for rendering.
-    
-    Args:
-        username: The website username (subdomain name)
-    
-    Returns:
-        Website data with HTML and metadata
-        
-    Raises:
-        404: Website not found
-        403: Website is not published
-        500: Server error
+    Only published websites are visible to the public.
     """
     db = SessionLocal()
     try:
-        # Normalize username
         username = (username or "").strip().lower()
         
         if not username or len(username) < 3:
@@ -53,7 +31,6 @@ async def get_public_website(username: str):
         
         logger.info(f"Public website request: {username}")
         
-        # Query database
         site = db.query(Website).filter(Website.username == username).first()
         
         if not site:
@@ -63,15 +40,14 @@ async def get_public_website(username: str):
                 detail=f"Website '{username}' not found"
             )
         
-        # Check if published
+        # Only published websites are publicly visible
         if site.publish_status != "published":
-            logger.warning(f"Website not published: {username} (status: {site.publish_status})")
+            logger.warning(f"Website not published: {username}")
             raise HTTPException(
                 status_code=403,
-                detail="This website is not published yet. Only published websites are visible."
+                detail="This website is private"
             )
         
-        # Parse content JSON
         try:
             content = json.loads(site.content_json) if site.content_json else {}
         except json.JSONDecodeError:
@@ -110,8 +86,8 @@ async def get_public_website(username: str):
 @router.get("/{username}/preview", response_model=Dict[str, Any])
 async def preview_website(username: str):
     """
-    Preview a draft website (for edit mode)
-    Note: In production, you should verify the user owns this website
+    Preview a website (draft or published)
+    Use ?edit=1 in the frontend to access this for draft websites
     """
     db = SessionLocal()
     try:
@@ -125,11 +101,12 @@ async def preview_website(username: str):
         if not site:
             raise HTTPException(status_code=404, detail="Website not found")
         
-        # Parse content JSON
         try:
             content = json.loads(site.content_json) if site.content_json else {}
         except json.JSONDecodeError:
             content = {}
+        
+        logger.info(f"Previewing website: {username}")
         
         return {
             "ok": True,
