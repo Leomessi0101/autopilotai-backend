@@ -3,7 +3,7 @@ import json
 import hashlib
 import logging
 import traceback
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Callable
 from enum import Enum
 
 # Set up logging for debugging
@@ -20,550 +20,513 @@ except ImportError as e:
 
     def chat_completion(system: str, user: str, temperature: float = 0.7) -> str:
         """Fallback stub if OpenAI client isn't available"""
-        return "{}"  # Will be replaced by dynamic fallback
+        return json.dumps({
+            "nav": ["Features", "Pricing", "FAQ", "Contact"],
+            "hero": {"h1": "Premium Solution", "sub": "Built for excellence", "cta": "Get Started"},
+            "tagline": "Built for the bold.",
+            "brand_voice": "professional",
+            "features": [
+                {"title": "Speed & Reliability", "description": "Industry-leading uptime with blazing performance.", "icon": "⚡"},
+                {"title": "Seamless Integration", "description": "Connects with your existing stack in minutes.", "icon": "🔗"},
+                {"title": "Powerful Analytics", "description": "Real-time insights to drive smarter decisions.", "icon": "📊"},
+            ],
+            "pricing": [
+                {"name": "Starter", "price": "$29", "description": "Perfect for individuals.", "features": ["5 projects", "1GB storage", "Email support", "API access", "Monthly reports"], "featured": False},
+                {"name": "Pro", "price": "$99", "description": "For growing teams.", "features": ["Unlimited projects", "50GB storage", "Priority support", "Advanced analytics", "Custom integrations"], "featured": True},
+                {"name": "Enterprise", "price": "Custom", "description": "For large organisations.", "features": ["Everything in Pro", "Dedicated manager", "SLA guarantee", "Custom contracts", "On-premise option"], "featured": False},
+            ],
+            "testimonials": [
+                {"name": "Sarah Chen", "role": "CEO", "company": "NexusCorp", "quote": "Completely transformed our workflow. We saved 20 hours per week."},
+                {"name": "Marcus Webb", "role": "CTO", "company": "LaunchpadAI", "quote": "The best platform investment we've made. ROI was visible within weeks."},
+            ],
+            "faq": [
+                {"q": "How quickly can I get started?", "a": "You'll be fully set up in under 10 minutes with our guided onboarding."},
+                {"q": "What support do you provide?", "a": "All plans include email support. Pro and Enterprise get 24/7 priority access."},
+                {"q": "Is there a free trial?", "a": "Yes — a full 14-day free trial, no credit card required."},
+            ],
+            "cta_text": "Ready to transform your business?",
+            "unsplash_keywords": ["technology", "business", "modern", "team", "workspace"],
+        })
 
 
 # ============================================================================
-# DESIGN SYSTEM: Multi-Aesthetic Principles
+# DESIGN SYSTEM
 # ============================================================================
 
-class ColorMode(Enum):
-    PROFESSIONAL_LIGHT = "pro_light"
-    LUXURY_DARK = "luxury_dark"
-    CLEAN_SLATE = "clean_slate"
-    TECH_MIDNIGHT = "tech_midnight"
-    WARM_CREAM = "warm_cream"
-    BOLD_ELECTRIC = "bold_electric"
-    EDITORIAL_MONO = "editorial_mono"
-    NATURE_EARTHY = "nature_earthy"
-    NEON_NOIR = "neon_noir"
+GLASS_DARK  = "backdrop-blur-2xl bg-gradient-to-br from-white/8 to-white/2 border border-white/12 shadow-2xl"
+GLASS_LIGHT = "backdrop-blur-2xl bg-gradient-to-br from-white/80 to-gray-50/60 border border-gray-200/70 shadow-lg"
 
-# Glass Morphism Foundations
-GLASS_DARK = "backdrop-blur-3xl bg-gradient-to-br from-white/8 to-white/3 border border-white/15 rounded-2xl shadow-2xl"
-GLASS_LIGHT = "backdrop-blur-3xl bg-gradient-to-br from-gray-50/90 to-gray-100/70 border border-gray-200/60 rounded-2xl shadow-lg"
-GLASS_BOLD = "bg-white/10 border-2 border-current rounded-xl shadow-xl"
-GLASS_EDITORIAL = "bg-transparent border border-gray-900 rounded-none"
+HOVER_LIFT  = "transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] hover:-translate-y-2 hover:shadow-2xl"
+HOVER_GLOW  = "transition-all duration-400 ease-out hover:shadow-lg hover:brightness-110"
+HOVER_SCALE = "transition-transform duration-400 ease-out hover:scale-[1.03]"
 
-# Hover Animations
-HOVER_LIFT = "transition-all duration-500 ease-out hover:-translate-y-3 hover:shadow-2xl hover:border-opacity-100"
-HOVER_GLOW = "transition-all duration-500 ease-out hover:shadow-lg hover:shadow-current/20"
-HOVER_SCALE = "transition-transform duration-500 ease-out hover:scale-105"
-HOVER_SLIDE = "transition-all duration-300 ease-out hover:translate-x-2"
+HEADING_HERO     = "text-6xl md:text-7xl lg:text-8xl font-black tracking-tighter leading-[1.05]"
+HEADING_HERO_ALT = "text-5xl md:text-6xl lg:text-7xl font-extrabold tracking-tight leading-[1.1]"
+HEADING_SECTION  = "text-4xl md:text-5xl lg:text-6xl font-black tracking-tight leading-[1.15]"
+HEADING_FEATURE  = "text-2xl md:text-3xl font-bold tracking-tight"
+HEADING_CARD     = "text-xl font-bold tracking-tight"
 
-# Typography Systems - DIVERSE choices per aesthetic
-FONT_STACKS = {
-    "geometric":   ("'Space Grotesk', sans-serif", "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700;800&display=swap"),
-    "editorial":   ("'Playfair Display', serif",   "https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Source+Sans+3:wght@400;600&display=swap"),
-    "brutalist":   ("'Bebas Neue', cursive",        "https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;600&display=swap"),
-    "modern_sans": ("'DM Sans', sans-serif",        "https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;900&display=swap"),
-    "luxury":      ("'Cormorant Garamond', serif",  "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Jost:wght@300;400;500&display=swap"),
-    "tech":        ("'JetBrains Mono', monospace",  "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=Inter:wght@400;600;700&display=swap"),
-    "organic":     ("'Nunito', sans-serif",          "https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;900&display=swap"),
-    "sharp":       ("'Syne', sans-serif",            "https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&display=swap"),
-}
-
-# Heading scales
-HEADING_HERO = "text-7xl md:text-8xl font-black tracking-tighter leading-[0.95]"
-HEADING_HERO_EDITORIAL = "text-6xl md:text-8xl font-bold tracking-normal leading-[1.1]"
-HEADING_HERO_BRUTALIST = "text-8xl md:text-[10rem] font-black tracking-tighter leading-none uppercase"
-HEADING_SECTION = "text-5xl md:text-6xl font-black tracking-tight leading-[1.1]"
-HEADING_FEATURE = "text-2xl md:text-3xl font-bold tracking-tight"
-HEADING_CARD = "text-xl font-bold"
-
-# Spacing
-PADDING_SECTION = "py-32 md:py-40"
-PADDING_SECTION_COMPACT = "py-20 md:py-28"
-PADDING_CONTAINER = "px-6 md:px-8 lg:px-12"
+PADDING_SECTION   = "py-28 md:py-36"
+PADDING_SECTION_SM = "py-16 md:py-24"
+PADDING_CONTAINER = "px-5 md:px-8 lg:px-12"
 
 # ============================================================================
-# EXPANDED THEME PALETTE — 9 distinct looks
+# 8 DISTINCT THEMES
 # ============================================================================
 
 THEMES = {
     "pro_light": {
         "id": "pro_light", "mode": "light",
-        "bg": "bg-white", "bg_alt": "bg-gray-50",
+        "bg": "bg-white", "bg_alt": "bg-slate-50",
         "text": "text-gray-950", "text_muted": "text-gray-600", "text_light": "text-gray-400",
         "primary": "blue", "primary_hex": "#2563eb",
-        "grad": "from-blue-600 via-blue-500 to-cyan-500",
-        "btn_grad": "from-blue-600 to-blue-400",
-        "glass": GLASS_LIGHT, "accent": "indigo",
-        "font": "geometric",
-        "card_border": "border border-gray-100",
-        "industries": ["saas", "tech", "finance", "consulting"],
-        "extra_css": "",
+        "grad": "from-blue-600 via-blue-500 to-cyan-400",
+        "grad_subtle": "from-blue-50 to-cyan-50",
+        "glass": GLASS_LIGHT, "accent": "cyan",
+        "border": "border-gray-200",
+        "nav_bg": "bg-white/90 border-b border-gray-100",
+        "badge_style": "bg-blue-50 text-blue-700 border border-blue-200",
+        "stat_color": "text-blue-600",
+        "fonts": "'Plus Jakarta Sans', 'Inter', sans-serif",
+        "font_url": "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800;900&display=swap",
     },
     "luxury_dark": {
         "id": "luxury_dark", "mode": "dark",
-        "bg": "bg-slate-950", "bg_alt": "bg-slate-900",
-        "text": "text-white", "text_muted": "text-gray-300", "text_light": "text-gray-500",
-        "primary": "indigo", "primary_hex": "#6366f1",
-        "grad": "from-indigo-500 via-purple-500 to-pink-500",
-        "btn_grad": "from-indigo-500 to-purple-600",
-        "glass": GLASS_DARK, "accent": "purple",
-        "font": "luxury",
-        "card_border": "border border-white/10",
-        "industries": ["luxury", "fashion", "creative", "agency", "tech"],
-        "extra_css": "",
+        "bg": "bg-[#0a0a0f]", "bg_alt": "bg-[#0f0f18]",
+        "text": "text-white", "text_muted": "text-gray-300", "text_light": "text-gray-600",
+        "primary": "violet", "primary_hex": "#7c3aed",
+        "grad": "from-violet-600 via-purple-500 to-fuchsia-500",
+        "grad_subtle": "from-violet-950/50 to-fuchsia-950/30",
+        "glass": GLASS_DARK, "accent": "fuchsia",
+        "border": "border-white/10",
+        "nav_bg": "bg-black/70 border-b border-white/8",
+        "badge_style": "bg-violet-950/60 text-violet-300 border border-violet-500/30",
+        "stat_color": "text-fuchsia-400",
+        "fonts": "'Syne', serif",
+        "font_url": "https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&display=swap",
     },
-    "clean_slate": {
-        "id": "clean_slate", "mode": "light",
-        "bg": "bg-slate-50", "bg_alt": "bg-white",
+    "clean_emerald": {
+        "id": "clean_emerald", "mode": "light",
+        "bg": "bg-[#f8fffe]", "bg_alt": "bg-white",
         "text": "text-slate-900", "text_muted": "text-slate-600", "text_light": "text-slate-400",
         "primary": "emerald", "primary_hex": "#059669",
         "grad": "from-emerald-500 via-teal-500 to-cyan-500",
-        "btn_grad": "from-emerald-500 to-teal-500",
+        "grad_subtle": "from-emerald-50 to-teal-50",
         "glass": GLASS_LIGHT, "accent": "teal",
-        "font": "organic",
-        "card_border": "border border-slate-100",
-        "industries": ["health", "wellness", "education", "nonprofit"],
-        "extra_css": "",
+        "border": "border-emerald-100",
+        "nav_bg": "bg-white/95 border-b border-emerald-100",
+        "badge_style": "bg-emerald-50 text-emerald-700 border border-emerald-200",
+        "stat_color": "text-emerald-600",
+        "fonts": "'DM Sans', sans-serif",
+        "font_url": "https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700;9..40,800&display=swap",
     },
     "tech_midnight": {
         "id": "tech_midnight", "mode": "dark",
         "bg": "bg-gray-950", "bg_alt": "bg-gray-900",
         "text": "text-white", "text_muted": "text-gray-400", "text_light": "text-gray-600",
         "primary": "cyan", "primary_hex": "#06b6d4",
-        "grad": "from-cyan-500 via-blue-500 to-purple-600",
-        "btn_grad": "from-cyan-400 to-blue-600",
+        "grad": "from-cyan-500 via-blue-500 to-indigo-600",
+        "grad_subtle": "from-cyan-950/40 to-indigo-950/40",
         "glass": GLASS_DARK, "accent": "blue",
-        "font": "tech",
-        "card_border": "border border-cyan-900/50",
-        "industries": ["ai", "blockchain", "software", "startup"],
-        "extra_css": "body { background-image: radial-gradient(ellipse at 20% 50%, rgba(6,182,212,0.04) 0%, transparent 50%), radial-gradient(ellipse at 80% 20%, rgba(99,102,241,0.04) 0%, transparent 50%); }",
+        "border": "border-white/8",
+        "nav_bg": "bg-gray-950/80 border-b border-white/8",
+        "badge_style": "bg-cyan-950/50 text-cyan-400 border border-cyan-500/25",
+        "stat_color": "text-cyan-400",
+        "fonts": "'Space Grotesk', monospace",
+        "font_url": "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap",
     },
-    "warm_cream": {
-        "id": "warm_cream", "mode": "light",
-        "bg": "bg-amber-50", "bg_alt": "bg-white",
-        "text": "text-amber-950", "text_muted": "text-amber-700", "text_light": "text-amber-400",
+    "warm_amber": {
+        "id": "warm_amber", "mode": "light",
+        "bg": "bg-[#fffbf2]", "bg_alt": "bg-amber-50",
+        "text": "text-amber-950", "text_muted": "text-amber-800", "text_light": "text-amber-500",
         "primary": "amber", "primary_hex": "#d97706",
         "grad": "from-amber-500 via-orange-500 to-rose-500",
-        "btn_grad": "from-amber-500 to-orange-500",
+        "grad_subtle": "from-amber-50 to-orange-50",
         "glass": GLASS_LIGHT, "accent": "orange",
-        "font": "modern_sans",
-        "card_border": "border border-amber-100",
-        "industries": ["food", "ecommerce", "hospitality", "lifestyle"],
-        "extra_css": "",
+        "border": "border-amber-200",
+        "nav_bg": "bg-amber-50/90 border-b border-amber-200",
+        "badge_style": "bg-amber-100 text-amber-800 border border-amber-300",
+        "stat_color": "text-orange-600",
+        "fonts": "'Fraunces', serif",
+        "font_url": "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,700;9..144,900&display=swap",
     },
-    "bold_electric": {
-        "id": "bold_electric", "mode": "dark",
-        "bg": "bg-zinc-950", "bg_alt": "bg-zinc-900",
-        "text": "text-white", "text_muted": "text-zinc-300", "text_light": "text-zinc-500",
-        "primary": "lime", "primary_hex": "#84cc16",
-        "grad": "from-lime-400 via-green-400 to-emerald-500",
-        "btn_grad": "from-lime-400 to-green-500",
-        "glass": "bg-white/5 border-2 border-lime-400/30 rounded-xl shadow-xl shadow-lime-400/5",
-        "accent": "lime",
-        "font": "brutalist",
-        "card_border": "border-2 border-lime-400/20",
-        "industries": ["sports", "gaming", "fitness", "entertainment"],
-        "extra_css": "body { background-image: repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(132,204,22,0.03) 39px, rgba(132,204,22,0.03) 40px); }",
+    "midnight_rose": {
+        "id": "midnight_rose", "mode": "dark",
+        "bg": "bg-[#0d0508]", "bg_alt": "bg-[#130a0e]",
+        "text": "text-rose-50", "text_muted": "text-rose-200/80", "text_light": "text-rose-400/60",
+        "primary": "rose", "primary_hex": "#e11d48",
+        "grad": "from-rose-500 via-pink-600 to-fuchsia-600",
+        "grad_subtle": "from-rose-950/40 to-fuchsia-950/30",
+        "glass": GLASS_DARK, "accent": "pink",
+        "border": "border-rose-900/40",
+        "nav_bg": "bg-[#0d0508]/80 border-b border-rose-900/30",
+        "badge_style": "bg-rose-950/60 text-rose-300 border border-rose-500/20",
+        "stat_color": "text-rose-400",
+        "fonts": "'Cormorant Garamond', serif",
+        "font_url": "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600;700&display=swap",
     },
-    "editorial_mono": {
-        "id": "editorial_mono", "mode": "light",
-        "bg": "bg-stone-50", "bg_alt": "bg-white",
-        "text": "text-stone-950", "text_muted": "text-stone-500", "text_light": "text-stone-400",
-        "primary": "stone", "primary_hex": "#292524",
-        "grad": "from-stone-800 via-stone-700 to-stone-600",
-        "btn_grad": "from-stone-900 to-stone-700",
-        "glass": "bg-white border border-stone-200 rounded-none shadow-sm",
-        "accent": "red",
-        "font": "editorial",
-        "card_border": "border border-stone-200",
-        "industries": ["media", "publishing", "design", "architecture", "law"],
-        "extra_css": "",
+    "slate_corporate": {
+        "id": "slate_corporate", "mode": "light",
+        "bg": "bg-slate-50", "bg_alt": "bg-white",
+        "text": "text-slate-900", "text_muted": "text-slate-500", "text_light": "text-slate-400",
+        "primary": "indigo", "primary_hex": "#4338ca",
+        "grad": "from-indigo-600 via-indigo-500 to-blue-500",
+        "grad_subtle": "from-indigo-50 to-blue-50",
+        "glass": GLASS_LIGHT, "accent": "blue",
+        "border": "border-slate-200",
+        "nav_bg": "bg-white border-b border-slate-200",
+        "badge_style": "bg-indigo-50 text-indigo-700 border border-indigo-200",
+        "stat_color": "text-indigo-600",
+        "fonts": "'IBM Plex Sans', sans-serif",
+        "font_url": "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap",
     },
-    "nature_earthy": {
-        "id": "nature_earthy", "mode": "light",
-        "bg": "bg-green-50", "bg_alt": "bg-white",
-        "text": "text-green-950", "text_muted": "text-green-700", "text_light": "text-green-400",
+    "forest_green": {
+        "id": "forest_green", "mode": "dark",
+        "bg": "bg-[#050e08]", "bg_alt": "bg-[#081510]",
+        "text": "text-green-50", "text_muted": "text-green-200/80", "text_light": "text-green-400/50",
         "primary": "green", "primary_hex": "#16a34a",
-        "grad": "from-green-600 via-emerald-600 to-teal-600",
-        "btn_grad": "from-green-600 to-emerald-500",
-        "glass": "bg-white/70 backdrop-blur-xl border border-green-100 rounded-2xl shadow-lg",
-        "accent": "teal",
-        "font": "organic",
-        "card_border": "border border-green-100",
-        "industries": ["agriculture", "eco", "environment", "outdoors", "sustainability"],
-        "extra_css": "",
-    },
-    "neon_noir": {
-        "id": "neon_noir", "mode": "dark",
-        "bg": "bg-black", "bg_alt": "bg-neutral-950",
-        "text": "text-white", "text_muted": "text-neutral-400", "text_light": "text-neutral-600",
-        "primary": "fuchsia", "primary_hex": "#d946ef",
-        "grad": "from-fuchsia-500 via-violet-500 to-cyan-500",
-        "btn_grad": "from-fuchsia-500 to-violet-600",
-        "glass": "bg-white/5 border border-fuchsia-500/20 rounded-xl shadow-2xl shadow-fuchsia-900/20",
-        "accent": "violet",
-        "font": "sharp",
-        "card_border": "border border-fuchsia-900/40",
-        "industries": ["nightlife", "music", "entertainment", "cyberpunk", "nft", "crypto"],
-        "extra_css": "body { background-image: radial-gradient(ellipse at 30% 30%, rgba(217,70,239,0.08) 0%, transparent 60%); }",
+        "grad": "from-green-500 via-emerald-500 to-teal-500",
+        "grad_subtle": "from-green-950/50 to-teal-950/30",
+        "glass": GLASS_DARK, "accent": "teal",
+        "border": "border-green-900/40",
+        "nav_bg": "bg-[#050e08]/80 border-b border-green-900/30",
+        "badge_style": "bg-green-950/60 text-green-300 border border-green-500/25",
+        "stat_color": "text-green-400",
+        "fonts": "'Cabin', sans-serif",
+        "font_url": "https://fonts.googleapis.com/css2?family=Cabin:wght@400;600;700&display=swap",
     },
 }
 
+
 # ============================================================================
-# UNSPLASH IMAGE ROUTING — keyword → real themed URLs
+# DYNAMIC UNSPLASH IMAGE BUILDER
 # ============================================================================
 
-UNSPLASH_COLLECTIONS = {
-    "saas":        ["photo-1551434678-e076c223a692", "photo-1460925895917-afdab827c52f", "photo-1498050108023-c5249f4df085"],
-    "ai":          ["photo-1677442135703-1787eea5ce01", "photo-1620712943543-bcc4688e7485", "photo-1555255707-c07966088b7b"],
-    "tech":        ["photo-1518770660439-4636190af475", "photo-1518770660439-4636190af475", "photo-1519389950473-47ba0277781c"],
-    "finance":     ["photo-1611974789855-9c2a0a7236a3", "photo-1559526324-4b87b5e36e44", "photo-1551288049-bebda4e38f71"],
-    "health":      ["photo-1576091160399-112ba8d25d1d", "photo-1559757148-5c350d0d3c56", "photo-1576091160550-2173dba999ef"],
-    "fitness":     ["photo-1517836357463-d25dfeac3438", "photo-1534438327276-14e5300c3a48", "photo-1571019614242-c5c5dee9f50b"],
-    "food":        ["photo-1504674900247-0877df9cc836", "photo-1490645935967-10de6ba17061", "photo-1565299624946-b28f40a0ae38"],
-    "ecommerce":   ["photo-1472851294608-062f824d29cc", "photo-1607082348824-0a96f2a4b9da", "photo-1556742049-0cfed4f6a45d"],
-    "education":   ["photo-1524178232363-1fb2b075b655", "photo-1503676260728-1c00da094a0b", "photo-1580582932707-520aed937b7b"],
-    "agency":      ["photo-1552664730-d307ca884978", "photo-1497366216548-37526070297c", "photo-1497366811353-6870744d04b2"],
-    "luxury":      ["photo-1441986300917-64674bd600d8", "photo-1549921296-3b0f9a35af35", "photo-1590247813693-5541d1c609fd"],
-    "music":       ["photo-1511671782779-c97d3d27a1d4", "photo-1493225457124-a3eb161ffa5f", "photo-1598488035139-bdbb2231ce04"],
-    "gaming":      ["photo-1542751371-adc38448a05e", "photo-1580327344181-c1163234e5a0", "photo-1598550476439-6a1f857f35e7"],
-    "sports":      ["photo-1461896836934-ffe607ba8211", "photo-1517649763962-0c623066013b", "photo-1579952363873-27f3bade9f55"],
-    "eco":         ["photo-1542601906990-b4d3fb778b09", "photo-1465146344425-f00d5f5c8f07", "photo-1518531933037-91b2f5f229cc"],
-    "architecture":["photo-1486325212027-8081e485255e", "photo-1429497419816-9ca6fa03fd89", "photo-1459767129954-1b1c1f9b9ace"],
-    "default":     ["photo-1552664730-d307ca884978", "photo-1497366811353-6870744d04b2", "photo-1560179707-f14e90ef3623"],
+UNSPLASH_PHOTO_POOLS: Dict[str, List[str]] = {
+    "technology":   ["photo-1518770660439-4636190af475", "photo-1461749280684-dccba630e2f6", "photo-1550751827-4bd374c3f58b"],
+    "business":     ["photo-1507003211169-0a1dd7228f2d", "photo-1554224155-6726b3ff858f", "photo-1521791136064-7986c2920216"],
+    "team":         ["photo-1522071820081-009f0129c71c", "photo-1517048676732-d65bc937f952", "photo-1600880292203-757bb62b4baf"],
+    "workspace":    ["photo-1497366216548-37526070297c", "photo-1497366754035-f200968a6e72", "photo-1524758631624-e2822e304c36"],
+    "startup":      ["photo-1559136555-9303baea8ebd", "photo-1531297484001-80022131f5a1", "photo-1556761175-4b46a572b786"],
+    "food":         ["photo-1504674900247-0877df9cc836", "photo-1512621776951-a57141f2eefd", "photo-1567620905732-2d1ec7ab7445"],
+    "restaurant":   ["photo-1414235077428-338989a2e8c0", "photo-1555396273-367ea4eb4db5", "photo-1517248135467-4c7edcad34c4"],
+    "health":       ["photo-1576091160550-2173dba999ef", "photo-1559757148-5c350d0d3c56", "photo-1535914254981-b5012eebbd15"],
+    "fitness":      ["photo-1534438327276-14e5300c3a48", "photo-1571019613454-1cb2f99b2d8b", "photo-1517836357463-d25dfeac3438"],
+    "nature":       ["photo-1441974231531-c6227db76b6e", "photo-1506905925346-21bda4d32df4", "photo-1469474968028-56623f02e42e"],
+    "fashion":      ["photo-1558769132-cb1aea458c5e", "photo-1490481651871-ab68de25d43d", "photo-1483985988355-763728e1935b"],
+    "luxury":       ["photo-1518546305927-5a555bb7020d", "photo-1571266752045-a0f5cfb5efcb", "photo-1602143407151-7111542de6e8"],
+    "finance":      ["photo-1611974789855-9c2a0a7236a3", "photo-1563986768609-322da13575f3", "photo-1468254095679-bbcba94a7066"],
+    "education":    ["photo-1503676260728-1c00da094a0b", "photo-1456513080510-7bf3a84b82f8", "photo-1516979187457-637abb4f9353"],
+    "ai":           ["photo-1677442135703-1787eea5ce01", "photo-1620712943543-bcc4688e7485", "photo-1555255707-c07966088b7b"],
+    "minimal":      ["photo-1497215728101-856f4ea42174", "photo-1519389950473-47ba0277781c", "photo-1462826303086-329426d1aef5"],
+    "construction": ["photo-1504307651254-35680f356dfd", "photo-1541888946425-d81bb19240f5", "photo-1590674899484-d5640e854abe",
+                     "photo-1581578731548-c64695cc6952", "photo-1565117623394-5f93fd4c7a06"],
+    "legal":        ["photo-1589578527966-fdac0f44566c", "photo-1436450412740-6b988f486c6b", "photo-1505664194779-8beaceb5c7c7"],
+    "logistics":    ["photo-1504493188-45c49f65c6ba", "photo-1586528116311-ad8dd3c8310d", "photo-1601584115197-04ecc0da31d7"],
+    "automotive":   ["photo-1492144534655-ae79c964c9d7", "photo-1503376780353-7e6692767b70", "photo-1544636331-e26879cd4d9b"],
+    "events":       ["photo-1540575467063-178a50c2df87", "photo-1511795409834-ef04bbd61622", "photo-1464366400600-7168b8af9bc3"],
+    "default":      ["photo-1552664730-d307ca884978", "photo-1460925895917-afdab827c52f", "photo-1556742049-0cfed4f6a45d"],
 }
 
-def get_unsplash_url(industry: str, index: int = 0, width: int = 800) -> str:
-    """Return a varied, industry-appropriate Unsplash image URL."""
-    collection = UNSPLASH_COLLECTIONS.get(industry, UNSPLASH_COLLECTIONS["default"])
-    photo_id = collection[index % len(collection)]
-    return f"https://images.unsplash.com/{photo_id}?w={width}&auto=format&fit=crop&q=80"
+def _get_unsplash_url(keywords: List[str], width: int = 800, index: int = 0) -> str:
+    pool: List[str] = []
+    for kw in (keywords or []):
+        kw_lower = kw.lower().strip()
+        for topic, photos in UNSPLASH_PHOTO_POOLS.items():
+            if topic in kw_lower or kw_lower in topic:
+                pool.extend(photos)
+    if not pool:
+        pool = UNSPLASH_PHOTO_POOLS["default"]
+    seen: set = set()
+    unique_pool = [p for p in pool if not (p in seen or seen.add(p))]
+    chosen = unique_pool[index % len(unique_pool)]
+    return f"https://images.unsplash.com/{chosen}?w={width}&auto=format&fit=crop&q=80"
+
+def _get_img_set(keywords: List[str], count: int = 6) -> List[str]:
+    return [_get_unsplash_url(keywords, width=800, index=i) for i in range(count)]
 
 
 # ============================================================================
-# INDUSTRY DETECTION — expanded keyword map
+# INDUSTRY DETECTION
 # ============================================================================
 
-INDUSTRY_KEYWORDS = {
-    "saas":         ["software", "app", "platform", "cloud", "api", "saas", "dashboard", "workflow", "automation"],
-    "ai":           ["ai", "machine learning", "ml", "neural", "algorithm", "gpt", "llm", "data science", "artificial intelligence"],
-    "ecommerce":    ["shop", "store", "ecommerce", "sell", "product", "retail", "marketplace", "inventory", "cart"],
-    "health":       ["health", "medical", "wellness", "clinic", "doctor", "patient", "therapy", "mental health", "care"],
-    "fitness":      ["fitness", "gym", "workout", "training", "coach", "sport", "exercise", "nutrition", "bodybuilding"],
-    "finance":      ["finance", "banking", "investment", "crypto", "payment", "fintech", "insurance", "accounting", "tax"],
-    "agency":       ["agency", "design", "creative", "marketing", "brand", "studio", "advertising", "campaign"],
-    "education":    ["education", "course", "learn", "training", "school", "university", "tutoring", "edtech", "certification"],
-    "luxury":       ["luxury", "premium", "high-end", "exclusive", "prestige", "elite", "bespoke", "concierge"],
-    "food":         ["food", "restaurant", "cafe", "catering", "recipe", "cooking", "meal", "delivery", "kitchen", "bakery"],
-    "music":        ["music", "band", "artist", "album", "concert", "streaming", "podcast", "audio", "record"],
-    "gaming":       ["gaming", "game", "esports", "indie", "studio", "play", "rpg", "stream", "twitch"],
-    "sports":       ["sports", "team", "athlete", "league", "coaching", "stadium", "competition"],
-    "eco":          ["eco", "green", "sustainable", "environment", "organic", "renewable", "solar", "conservation"],
-    "architecture": ["architecture", "design", "interior", "construction", "property", "real estate", "blueprint"],
-    "media":        ["media", "news", "journalism", "publishing", "magazine", "editorial", "content", "blog"],
-    "nft":          ["nft", "crypto", "web3", "blockchain", "token", "defi", "dao", "metaverse"],
-    "nightlife":    ["nightclub", "bar", "club", "event", "party", "venue", "lounge", "entertainment"],
-    "agriculture":  ["farm", "agriculture", "crop", "harvest", "rural", "field", "produce"],
+INDUSTRY_KEYWORD_MAP: Dict[str, List[str]] = {
+    "saas":         ["software", "app", "platform", "cloud", "api", "saas", "dashboard", "workflow", "automation", "crm", "erp"],
+    "ai":           ["ai", "artificial intelligence", "machine learning", "ml", "neural", "algorithm", "gpt", "llm", "data science"],
+    "ecommerce":    ["shop", "store", "ecommerce", "e-commerce", "sell", "product", "cart", "marketplace", "dropship", "retail"],
+    "health":       ["health", "medical", "wellness", "fitness", "clinic", "doctor", "hospital", "therapy", "mental health", "nutrition"],
+    "finance":      ["finance", "banking", "investment", "crypto", "payment", "fintech", "trading", "insurance", "wealth", "accounting", "tax"],
+    "agency":       ["agency", "design", "creative", "marketing", "brand", "advertising", "studio", "production", "media"],
+    "education":    ["education", "course", "learn", "training", "school", "university", "tutoring", "edtech", "bootcamp"],
+    "luxury":       ["luxury", "premium", "high-end", "exclusive", "bespoke", "couture", "prestige", "elite"],
+    "restaurant":   ["restaurant", "food", "cafe", "bakery", "catering", "cuisine", "dining", "menu", "chef", "bar", "bistro"],
+    "beauty":       ["beauty", "salon", "spa", "skincare", "cosmetic", "makeup", "aesthetics", "bridal", "hair", "nail"],
+    "real_estate":  ["real estate", "property", "realty", "housing", "apartment", "mortgage", "agent", "broker"],
+    "travel":       ["travel", "hotel", "tour", "booking", "airbnb", "vacation", "resort", "hospitality"],
+    "startup":      ["startup", "founder", "seed", "venture", "mvp", "launch", "pitch", "growth hacking", "scale"],
+    "developer":    ["developer", "engineer", "code", "open source", "github", "devtools", "ide", "terminal", "cli"],
+    "nature":       ["organic", "eco", "green", "sustainable", "farm", "agriculture", "environment", "garden"],
+    # Trades & physical services
+    "construction": ["construction", "contractor", "builder", "building", "renovation", "remodel", "plumbing", "electrical",
+                     "roofing", "flooring", "masonry", "carpentry", "landscaping", "painting", "hvac", "handyman",
+                     "general contractor", "home improvement", "commercial build", "civil engineering", "infrastructure",
+                     "excavation", "concrete", "drywall", "framing", "welding", "trades"],
+    "legal":        ["law", "lawyer", "attorney", "legal", "firm", "counsel", "litigation", "contract", "court", "compliance",
+                     "paralegal", "notary", "solicitor", "barrister", "law office"],
+    "logistics":    ["logistics", "shipping", "freight", "delivery", "supply chain", "warehouse", "trucking", "transport",
+                     "courier", "fulfillment", "distribution", "fleet"],
+    "automotive":   ["auto", "car", "vehicle", "mechanic", "garage", "dealership", "repair", "tire", "bodywork", "detailing"],
+    "nonprofit":    ["nonprofit", "charity", "foundation", "ngo", "volunteer", "donation", "cause", "community", "social impact"],
+    "events":       ["event", "wedding", "conference", "venue", "catering", "photography", "dj", "entertainment", "party", "corporate event"],
 }
 
 def detect_industry(prompt: str) -> str:
-    """Detect industry from prompt using expanded keyword map."""
     prompt_lower = (prompt or "").lower()
-    scores = {}
-    for industry, keywords in INDUSTRY_KEYWORDS.items():
-        score = sum(1 for kw in keywords if kw in prompt_lower)
-        if score:
-            scores[industry] = score
-    if scores:
-        return max(scores, key=scores.get)
-    return "tech"
+    scores = {ind: 0 for ind in INDUSTRY_KEYWORD_MAP}
+    for industry, keywords in INDUSTRY_KEYWORD_MAP.items():
+        for kw in keywords:
+            if kw in prompt_lower:
+                scores[industry] += 1
+    best = max(scores, key=lambda k: scores[k])
+    return best if scores[best] > 0 else "saas"
 
-# Map industries to themes
-INDUSTRY_THEME_MAP = {
+
+# ============================================================================
+# THEME SELECTION
+# ============================================================================
+
+INDUSTRY_THEME_MAP: Dict[str, str] = {
     "saas":         "pro_light",
     "ai":           "tech_midnight",
-    "ecommerce":    "warm_cream",
-    "health":       "clean_slate",
-    "fitness":      "bold_electric",
-    "finance":      "luxury_dark",
+    "ecommerce":    "warm_amber",
+    "health":       "clean_emerald",
+    "finance":      "pro_light",          # professional blue — distinct from slate_corporate
     "agency":       "luxury_dark",
-    "education":    "clean_slate",
+    "education":    "clean_emerald",
     "luxury":       "luxury_dark",
-    "food":         "warm_cream",
-    "music":        "neon_noir",
-    "gaming":       "bold_electric",
-    "sports":       "bold_electric",
-    "eco":          "nature_earthy",
-    "architecture": "editorial_mono",
-    "media":        "editorial_mono",
-    "nft":          "neon_noir",
-    "nightlife":    "neon_noir",
-    "agriculture":  "nature_earthy",
-    "tech":         "pro_light",
+    "restaurant":   "warm_amber",
+    "beauty":       "midnight_rose",
+    "real_estate":  "slate_corporate",
+    "travel":       "pro_light",
+    "startup":      "tech_midnight",
+    "developer":    "tech_midnight",
+    "nature":       "forest_green",
+    # Trades & physical services — always professional/corporate
+    "construction": "slate_corporate",    # serious grey — distinct from finance blue
+    "legal":        "slate_corporate",
+    "logistics":    "slate_corporate",
+    "automotive":   "slate_corporate",
+    "nonprofit":    "clean_emerald",
+    "events":       "warm_amber",
 }
 
-
-# ============================================================================
-# DYNAMIC FALLBACK CONTENT — prompt-driven, not generic
-# ============================================================================
-
-INDUSTRY_CONTENT_TEMPLATES = {
-    "saas": {
-        "hero": {"h1": "Ship Faster. Scale Further.", "sub": "The all-in-one platform that eliminates bottlenecks and lets your team focus on what matters.", "cta": "Start Free Trial"},
-        "features": [
-            {"title": "One-Click Deploy", "description": "Push to production in seconds with zero-config pipelines that just work, every time.", "icon": "⚡"},
-            {"title": "Real-Time Analytics", "description": "See exactly what's happening with live dashboards that surface insights automatically.", "icon": "📊"},
-            {"title": "Team Collaboration", "description": "Built-in workflows keep everyone aligned with comments, reviews, and shared workspaces.", "icon": "🤝"},
-        ],
-        "pricing": [
-            {"name": "Starter", "price": "$29", "features": ["Up to 5 users", "10GB storage", "Basic analytics", "Email support", "API access"], "featured": False},
-            {"name": "Growth", "price": "$99", "features": ["Up to 50 users", "100GB storage", "Advanced analytics", "Priority support", "Custom integrations"], "featured": True},
-            {"name": "Enterprise", "price": "Custom", "features": ["Unlimited users", "Unlimited storage", "Dedicated support", "SSO & compliance", "SLA guarantee"], "featured": False},
-        ],
-        "cta_text": "Ready to move at the speed of your ideas?",
-    },
-    "ai": {
-        "hero": {"h1": "Intelligence at Scale.", "sub": "Harness the power of machine learning to automate decisions, predict outcomes, and unlock hidden value.", "cta": "See a Demo"},
-        "features": [
-            {"title": "Predictive Models", "description": "Deploy custom ML models trained on your data — no PhD required.", "icon": "🧠"},
-            {"title": "Natural Language", "description": "Let your team query data in plain English and get instant, accurate results.", "icon": "💬"},
-            {"title": "Auto-Optimization", "description": "The system learns from outcomes and continuously improves every workflow.", "icon": "🔄"},
-        ],
-        "pricing": [
-            {"name": "Explorer", "price": "$49", "features": ["1M API calls/mo", "3 model deployments", "Standard latency", "Community forum", "Basic monitoring"], "featured": False},
-            {"name": "Pro", "price": "$199", "features": ["20M API calls/mo", "Unlimited deployments", "Low latency", "Dedicated support", "Advanced monitoring"], "featured": True},
-            {"name": "Enterprise", "price": "Custom", "features": ["Unlimited calls", "On-prem option", "Sub-10ms latency", "24/7 SLA", "Custom training"], "featured": False},
-        ],
-        "cta_text": "The future runs on intelligence. Make yours.",
-    },
-    "health": {
-        "hero": {"h1": "Better Care Starts Here.", "sub": "A modern health platform that puts patients first and gives clinicians the tools they need.", "cta": "Book a Consultation"},
-        "features": [
-            {"title": "Patient-Centered Records", "description": "Secure, interoperable health records accessible from any device, anytime.", "icon": "🏥"},
-            {"title": "Telehealth Built-In", "description": "HD video consultations with automated scheduling and insurance billing.", "icon": "📱"},
-            {"title": "Care Coordination", "description": "Seamlessly coordinate between specialists, labs, and pharmacies.", "icon": "🔗"},
-        ],
-        "pricing": [
-            {"name": "Solo Practice", "price": "$79", "features": ["1 provider", "Unlimited patients", "Telehealth", "EHR integration", "HIPAA compliant"], "featured": False},
-            {"name": "Group Practice", "price": "$249", "features": ["Up to 10 providers", "Unlimited patients", "Telehealth & billing", "Analytics", "Priority support"], "featured": True},
-            {"name": "Health System", "price": "Custom", "features": ["Unlimited providers", "Custom integrations", "Dedicated CSM", "API access", "Compliance tools"], "featured": False},
-        ],
-        "cta_text": "Healthier patients. Happier clinicians. Better outcomes.",
-    },
-    "food": {
-        "hero": {"h1": "Food That Tells a Story.", "sub": "From farm to table, we source the finest ingredients for an experience you'll never forget.", "cta": "Reserve a Table"},
-        "features": [
-            {"title": "Seasonal Menu", "description": "Our chefs craft new dishes every month using the freshest local and seasonal produce.", "icon": "🌿"},
-            {"title": "Private Dining", "description": "Intimate spaces for celebrations, corporate events, and unforgettable evenings.", "icon": "🕯️"},
-            {"title": "Artisan Drinks", "description": "Hand-selected wine list and craft cocktails created by our award-winning mixologist.", "icon": "🍷"},
-        ],
-        "pricing": [
-            {"name": "Lunch Menu", "price": "$35", "features": ["3-course set menu", "Seasonal ingredients", "Non-alcoholic pairing", "Vegan options", "Reservation required"], "featured": False},
-            {"name": "Dinner Menu", "price": "$85", "features": ["5-course tasting menu", "Premium ingredients", "Wine pairing option", "Chef's table available", "Private room option"], "featured": True},
-            {"name": "Private Event", "price": "Custom", "features": ["Exclusive buyout", "Custom menu design", "Dedicated sommelier", "Event coordinator", "Full AV setup"], "featured": False},
-        ],
-        "cta_text": "Book your unforgettable dining experience.",
-    },
-    "fitness": {
-        "hero": {"h1": "Train Harder. Recover Smarter.", "sub": "Elite coaching, cutting-edge facilities, and a community that pushes you to your best self.", "cta": "Start Your Journey"},
-        "features": [
-            {"title": "1-on-1 Coaching", "description": "Certified coaches who create programs tailored to your exact goals and schedule.", "icon": "💪"},
-            {"title": "Performance Tracking", "description": "Real-time metrics for every session — strength, cardio, recovery, and progress.", "icon": "📈"},
-            {"title": "Recovery Lab", "description": "Ice baths, infrared saunas, and massage therapy for peak physical recovery.", "icon": "🧊"},
-        ],
-        "pricing": [
-            {"name": "Basic", "price": "$49", "features": ["Gym access", "Group classes", "App tracking", "Locker room", "Free parking"], "featured": False},
-            {"name": "Elite", "price": "$149", "features": ["Gym access", "Group classes", "2 PT sessions/month", "Recovery lab", "Nutrition guide"], "featured": True},
-            {"name": "Pro Athlete", "price": "$399", "features": ["Unlimited PT", "Custom program", "Full recovery access", "Performance testing", "Priority booking"], "featured": False},
-        ],
-        "cta_text": "Your strongest self is waiting.",
-    },
-    "agency": {
-        "hero": {"h1": "We Build Brands That Move Markets.", "sub": "Strategy, design, and execution fused into campaigns that stop the scroll and drive results.", "cta": "See Our Work"},
-        "features": [
-            {"title": "Brand Strategy", "description": "Deep research and sharp positioning that makes your brand impossible to ignore.", "icon": "🎯"},
-            {"title": "Creative Execution", "description": "Award-winning design and content production across every channel and format.", "icon": "✏️"},
-            {"title": "Performance Media", "description": "Data-driven paid media that maximizes every dollar and compounds over time.", "icon": "📡"},
-        ],
-        "pricing": [
-            {"name": "Sprint", "price": "$4,500", "features": ["Brand audit", "1 campaign", "Social content", "Monthly report", "Dedicated PM"], "featured": False},
-            {"name": "Retainer", "price": "$12,000", "features": ["Full strategy", "Ongoing campaigns", "Content calendar", "Weekly reporting", "Creative team"], "featured": True},
-            {"name": "Partnership", "price": "Custom", "features": ["Embedded team", "Unlimited output", "Equity alignment", "C-suite access", "Global reach"], "featured": False},
-        ],
-        "cta_text": "Ready to become the brand everyone talks about?",
-    },
-    "luxury": {
-        "hero": {"h1": "Crafted for the Exceptional.", "sub": "Where artisanship meets exclusivity. Every detail considered. Nothing left to chance.", "cta": "Request Access"},
-        "features": [
-            {"title": "Bespoke Design", "description": "Each piece is made to order using materials hand-selected for you alone.", "icon": "💎"},
-            {"title": "White-Glove Delivery", "description": "Personal courier service with real-time tracking and luxury unboxing experience.", "icon": "📦"},
-            {"title": "Lifetime Concierge", "description": "Your dedicated concierge handles modifications, repairs, and special requests forever.", "icon": "🤵"},
-        ],
-        "pricing": [
-            {"name": "Signature", "price": "$2,500", "features": ["Ready-made collection", "Monogramming", "Gift packaging", "1-year warranty", "Free returns"], "featured": False},
-            {"name": "Bespoke", "price": "$8,500", "features": ["Custom design", "Material selection", "3 fittings", "Lifetime warranty", "Personal concierge"], "featured": True},
-            {"name": "Estate", "price": "POA", "features": ["Family commission", "Exclusive materials", "Dedicated atelier", "Heritage certificate", "Private event access"], "featured": False},
-        ],
-        "cta_text": "Some things are worth waiting for.",
-    },
-    "eco": {
-        "hero": {"h1": "Good for You. Good for Earth.", "sub": "Sustainable solutions built from the ground up — because the planet's health and your profits aren't opposites.", "cta": "Join the Movement"},
-        "features": [
-            {"title": "Carbon Neutral", "description": "Every product offsets more than it creates through our certified reforestation partners.", "icon": "🌱"},
-            {"title": "Circular Design", "description": "Built to last and built to return — zero-waste lifecycle from day one.", "icon": "♻️"},
-            {"title": "Transparency Report", "description": "Real-time supply chain data so you always know where your product comes from.", "icon": "🔍"},
-        ],
-        "pricing": [
-            {"name": "Seed", "price": "$29", "features": ["1 product line", "Carbon tracking", "Basic reporting", "Community access", "Eco badge"], "featured": False},
-            {"name": "Grove", "price": "$89", "features": ["5 product lines", "Full carbon offset", "Impact dashboard", "Partner network", "Verified certification"], "featured": True},
-            {"name": "Forest", "price": "Custom", "features": ["Unlimited lines", "B-Corp support", "Dedicated analyst", "Supply audit", "White-label tools"], "featured": False},
-        ],
-        "cta_text": "The most important investment you'll make.",
-    },
+# Per-industry alternate themes (for same-industry diversity)
+INDUSTRY_ALTERNATES: Dict[str, List[str]] = {
+    "saas":         ["pro_light", "tech_midnight"],
+    "agency":       ["luxury_dark", "midnight_rose"],
+    "health":       ["clean_emerald", "pro_light"],
+    "finance":      ["slate_corporate", "pro_light"],
+    "startup":      ["tech_midnight", "luxury_dark"],
+    "ecommerce":    ["warm_amber", "clean_emerald"],
+    "construction": ["slate_corporate"],   # always professional, no alternates
+    "legal":        ["slate_corporate"],
+    "logistics":    ["slate_corporate", "pro_light"],
 }
 
-def get_dynamic_fallback(business_name: str, industry: str, prompt: str) -> Dict:
-    """
-    Build a fully dynamic fallback payload based on business name, industry, and prompt keywords.
-    No two calls should produce the same output.
-    """
-    template = INDUSTRY_CONTENT_TEMPLATES.get(industry, INDUSTRY_CONTENT_TEMPLATES.get("saas", {}))
-
-    # Personalize hero with business name
-    hero_base = template.get("hero", {"h1": "Premium Solution", "sub": "Built for excellence", "cta": "Get Started"})
-    hero = {
-        "h1": hero_base["h1"],
-        "sub": hero_base["sub"],
-        "cta": hero_base["cta"],
-    }
-
-    # Vary nav items by industry type
-    nav_map = {
-        "food": ["Menu", "Events", "Reservations", "About", "Contact"],
-        "fitness": ["Programs", "Coaches", "Pricing", "Results", "Join"],
-        "agency": ["Work", "Services", "About", "Journal", "Contact"],
-        "health": ["Services", "Providers", "Pricing", "Research", "Contact"],
-        "ecommerce": ["Products", "Collections", "About", "Reviews", "Contact"],
-        "luxury": ["Collections", "Bespoke", "Maison", "Stockists", "Contact"],
-        "eco": ["Products", "Impact", "Certifications", "Blog", "Contact"],
-        "music": ["Music", "Shows", "Merch", "Press", "Contact"],
-        "gaming": ["Games", "Community", "Tournaments", "Press", "Contact"],
-    }
-    nav = nav_map.get(industry, ["Features", "Pricing", "FAQ", "About", "Contact"])
-
-    features = template.get("features", [
-        {"title": "Core Capability", "description": "Best-in-class performance and reliability.", "icon": "✨"},
-        {"title": "Deep Integration", "description": "Connects with every tool in your stack.", "icon": "🔗"},
-        {"title": "Expert Support", "description": "Real humans ready to help 24/7.", "icon": "💬"},
-    ])
-
-    pricing = template.get("pricing", [
-        {"name": "Starter", "price": "$29", "features": ["Feature A", "Feature B", "Feature C", "Feature D", "Feature E"], "featured": False},
-        {"name": "Pro", "price": "$99", "features": ["Everything in Starter", "Feature F", "Feature G", "Feature H", "Priority support"], "featured": True},
-        {"name": "Enterprise", "price": "Custom", "features": ["Everything in Pro", "Dedicated account manager", "Custom integrations", "SLA guarantee", "Invoice billing"], "featured": False},
-    ])
-
-    testimonials = [
-        {"name": "Sarah K.", "company": "Growth Co.", "quote": f"Switching to {business_name} was the best decision we made this year. Results speak for themselves."},
-        {"name": "Marcus T.", "company": "Apex Ventures", "quote": f"{business_name} didn't just meet our expectations — they redefined what we thought was possible."},
-    ]
-
-    faq = [
-        {"q": "How quickly can we get started?", "a": "Most customers are up and running within 24 hours. Our onboarding team walks you through every step."},
-        {"q": "Is there a long-term commitment?", "a": "No contracts. You can upgrade, downgrade, or cancel at any time without penalties."},
-        {"q": "What support is included?", "a": "Every plan includes access to our support team. Pro and Enterprise customers get priority response and a dedicated account manager."},
-    ]
-
-    cta_text = template.get("cta_text", f"Ready to experience what {business_name} can do for you?")
-
-    # Image keywords for Unsplash routing
-    unsplash_keywords = {
-        "saas": ["technology", "software", "dashboard", "team", "office"],
-        "ai": ["artificial intelligence", "data", "neural network", "technology", "future"],
-        "food": ["food", "restaurant", "chef", "cuisine", "dining"],
-        "fitness": ["fitness", "gym", "workout", "athlete", "sport"],
-        "health": ["healthcare", "wellness", "medical", "doctor", "clinic"],
-        "agency": ["creative", "design", "team", "office", "brainstorm"],
-        "luxury": ["luxury", "premium", "exclusive", "high-end", "artisan"],
-        "eco": ["nature", "sustainable", "green", "environment", "forest"],
-        "music": ["music", "concert", "studio", "artist", "live"],
-        "gaming": ["gaming", "esports", "controller", "digital", "stream"],
-    }
-
-    return {
-        "nav": nav,
-        "hero": hero,
-        "features": features,
-        "pricing": pricing,
-        "testimonials": testimonials,
-        "faq": faq,
-        "cta_text": cta_text,
-        "unsplash_keywords": unsplash_keywords.get(industry, ["technology", "business", "modern", "team", "office"]),
-    }
+def select_theme(industry: str, seed: str = "") -> Dict:
+    if seed and industry in INDUSTRY_ALTERNATES:
+        alts = INDUSTRY_ALTERNATES[industry]
+        idx = int(hashlib.md5(seed.encode()).hexdigest(), 16) % len(alts)
+        theme_id = alts[idx]
+    else:
+        theme_id = INDUSTRY_THEME_MAP.get(industry, "pro_light")
+    return THEMES.get(theme_id, THEMES["pro_light"])
 
 
 # ============================================================================
-# SECTION VARIANT LIBRARY: Multi-Style Components
+# BUSINESS NAME EXTRACTION
+# ============================================================================
+
+# Phrases that signal "the name follows" vs "a description follows"
+_NAME_PREFIXES = [
+    "my company is called ", "my company is ", "my business is called ", "my business is ",
+    "the company is called ", "the company is ", "company name is ", "business name is ",
+    "called ", "named ", "name is ", "it's called ", "it is called ",
+    "we are ", "we're ", "our company ", "our business ",
+    "i have a company called ", "i have a business called ",
+    "i own ", "i run ", "i started ",
+]
+
+_DESCRIPTION_STARTERS = [
+    "we ", "our ", "a ", "an ", "the ", "i have", "i own", "i run",
+    "this is", "it's a", "it is a",
+]
+
+def extract_business_name(raw_name: str, prompt: str) -> tuple[str, str]:
+    """
+    Separates the actual business name from any descriptive text the user
+    accidentally put in the 'business_name' field.
+
+    Returns (clean_name, augmented_prompt) where any overflow description
+    is appended to the prompt so no info is lost.
+
+    Examples:
+        "i have a construction company" → name="", overflow added to prompt
+        "BuildRight Construction"       → name="BuildRight Construction"
+        "Apex Builders - we do roofing" → name="Apex Builders"
+    """
+    raw = (raw_name or "").strip()
+    if not raw:
+        return "My Business", prompt
+
+    raw_lower = raw.lower()
+
+    # If it starts with a known description-starter phrase, the whole thing
+    # is a description and there's no explicit name.
+    for starter in _DESCRIPTION_STARTERS:
+        if raw_lower.startswith(starter):
+            # Merge into prompt and return empty name (will be derived from prompt)
+            combined_prompt = f"{raw}. {prompt}".strip(" .")
+            return "", combined_prompt
+
+    # If it contains a "called X" or "named X" style prefix, extract what follows
+    for prefix in _NAME_PREFIXES:
+        if raw_lower.startswith(prefix):
+            remainder = raw[len(prefix):].strip()
+            # remainder may still have description after a dash or comma
+            for sep in [" - ", " — ", ", ", ". "]:
+                if sep in remainder:
+                    parts = remainder.split(sep, 1)
+                    name_part = parts[0].strip()
+                    desc_overflow = parts[1].strip()
+                    combined_prompt = f"{desc_overflow}. {prompt}".strip(" .")
+                    return name_part, combined_prompt
+            return remainder.strip(), prompt
+
+    # If it contains separators, split name from description
+    for sep in [" - ", " — ", ": ", ", we ", ". we "]:
+        if sep in raw:
+            parts = raw.split(sep, 1)
+            name_part = parts[0].strip()
+            desc_overflow = parts[1].strip()
+            combined_prompt = f"{desc_overflow}. {prompt}".strip(" .")
+            return name_part, combined_prompt
+
+    # If it's short (≤ 5 words) and has no obvious description language, treat as name
+    words = raw.split()
+    if len(words) <= 5:
+        return raw, prompt  # preserve original casing (e.g. "BuildRight LLC" stays as-is)
+
+    # Long raw name — likely the whole prompt ended up here; extract first 2–3 words as name
+    # and push the rest to the prompt
+    name_candidate = " ".join(words[:3]).rstrip(".,!?")
+    overflow = " ".join(words[3:])
+    combined_prompt = f"{overflow}. {prompt}".strip(" .")
+    logger.info(f"Long business_name split: name='{name_candidate}', overflow merged to prompt")
+    return name_candidate, combined_prompt
+
+
+def derive_name_from_prompt(prompt: str, industry: str) -> str:
+    """Last-resort: generate a plausible business name from the industry."""
+    industry_defaults = {
+        "construction": "BuildRight Group",
+        "legal":        "Sterling Law",
+        "finance":      "Apex Capital",
+        "health":       "Vitalis Health",
+        "restaurant":   "The Kitchen",
+        "beauty":       "Lumière Studio",
+        "ecommerce":    "The Shop",
+        "education":    "Elevate Academy",
+        "real_estate":  "Keystone Realty",
+        "logistics":    "Swift Logistics",
+        "automotive":   "AutoPro",
+        "events":       "Premier Events",
+        "nonprofit":    "Together Foundation",
+        "nature":       "Green Root",
+        "agency":       "Creative Studio",
+        "travel":       "Voyage Co.",
+    }
+    return industry_defaults.get(industry, "My Business")
+
+
+# ============================================================================
+# HERO VARIANTS
 # ============================================================================
 
 class HeroVariant:
-    """5 distinct hero styles for maximum visual variety."""
 
     @staticmethod
-    def split_grid(theme: Dict, data: Dict, industry: str, font_css: str) -> str:
-        """Classic: Text left, dynamic industry image right."""
+    def split_grid(theme: Dict, data: Dict, images: List[str]) -> str:
+        img = images[0] if images else _get_unsplash_url(["business"])
+        badge = data.get("tagline", "Premium Experience")
         try:
-            img_url = get_unsplash_url(industry, index=0, width=900)
             return f"""
-            <section id="hero" class="relative {theme['bg']} {PADDING_SECTION} overflow-hidden pt-32">
-                <div class="container mx-auto {PADDING_CONTAINER}">
-                    <div class="grid lg:grid-cols-2 gap-16 lg:gap-20 items-center min-h-[70vh]">
+            <section id="hero" class="relative {theme['bg']} overflow-hidden pt-40 pb-28">
+                <div class="absolute top-0 right-0 w-1/2 h-full pointer-events-none">
+                    <div class="absolute inset-0 bg-gradient-to-l {theme['grad_subtle']} opacity-60"></div>
+                </div>
+                <div class="container mx-auto {PADDING_CONTAINER} relative z-10">
+                    <div class="grid lg:grid-cols-2 gap-16 items-center">
                         <div class="space-y-8">
-                            <div class="space-y-6">
-                                <span class="inline-block px-4 py-2 rounded-full {theme['glass']} text-sm font-semibold {theme['text']} {theme['card_border']}">
-                                    ✦ {data.get('hero', {}).get('cta', 'Get Started')}
-                                </span>
-                                <h1 class="{HEADING_HERO} {theme['text']}">{data.get('hero', {}).get('h1', 'Premium Solution')}</h1>
-                            </div>
-                            <p class="text-xl md:text-2xl {theme['text_muted']} leading-relaxed max-w-xl">{data.get('hero', {}).get('sub', 'Built for excellence')}</p>
-                            <div class="flex flex-col sm:flex-row gap-4 pt-4">
-                                <a href="#contact" class="px-8 py-5 bg-gradient-to-r {theme['btn_grad']} text-white rounded-full font-bold text-lg {HOVER_LIFT} inline-block text-center shadow-lg">
+                            <span class="inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold uppercase tracking-widest {theme['badge_style']}">
+                                <span class="w-1.5 h-1.5 rounded-full bg-current animate-pulse"></span>
+                                {badge}
+                            </span>
+                            <h1 class="{HEADING_HERO} {theme['text']}">{data.get('hero', {}).get('h1', 'Premium Solution')}</h1>
+                            <p class="text-lg md:text-xl {theme['text_muted']} leading-relaxed max-w-lg">{data.get('hero', {}).get('sub', 'Built for excellence')}</p>
+                            <div class="flex flex-wrap gap-4 pt-2">
+                                <a href="#contact" class="px-8 py-4 bg-gradient-to-r {theme['grad']} text-white rounded-xl font-bold {HOVER_LIFT} shadow-lg">
                                     {data.get('hero', {}).get('cta', 'Get Started')}
                                 </a>
-                                <a href="#features" class="px-8 py-5 {theme['glass']} {theme['text']} rounded-full font-bold {HOVER_GLOW} inline-block text-center {theme['card_border']}">
-                                    Learn More →
+                                <a href="#features" class="{theme['glass']} {theme['text']} px-8 py-4 rounded-xl font-semibold border {theme['border']} {HOVER_GLOW}">
+                                    See how it works →
                                 </a>
                             </div>
+                            <div class="flex items-center gap-3 pt-2">
+                                <div class="flex -space-x-2">
+                                    <div class="w-8 h-8 rounded-full bg-gradient-to-br {theme['grad']} border-2 border-white opacity-80"></div>
+                                    <div class="w-8 h-8 rounded-full bg-gradient-to-br {theme['grad']} border-2 border-white opacity-80"></div>
+                                    <div class="w-8 h-8 rounded-full bg-gradient-to-br {theme['grad']} border-2 border-white opacity-80"></div>
+                                    <div class="w-8 h-8 rounded-full bg-gradient-to-br {theme['grad']} border-2 border-white opacity-80"></div>
+                                </div>
+                                <span class="text-sm {theme['text_muted']}">Join <span class="font-bold {theme['stat_color']}">2,400+</span> businesses already growing</span>
+                            </div>
                         </div>
-                        <div class="relative h-[520px] md:h-[640px] rounded-3xl overflow-hidden shadow-2xl">
-                            <img src="{img_url}" alt="hero" class="w-full h-full object-cover" loading="eager" />
-                            <div class="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent"></div>
+                        <div class="relative h-[420px] md:h-[520px]">
+                            <div class="absolute -inset-4 bg-gradient-to-br {theme['grad']} opacity-15 blur-2xl rounded-3xl"></div>
+                            <img src="{img}" alt="hero visual" class="relative z-10 w-full h-full object-cover rounded-2xl {HOVER_SCALE}" loading="eager" />
                         </div>
                     </div>
                 </div>
             </section>"""
         except Exception as e:
             logger.error(f"split_grid hero error: {e}")
-            return f"<section id='hero' class='{theme['bg']} py-32'><div class='container mx-auto px-6'><h1>Welcome</h1></div></section>"
+            return f"<section id='hero' class='{theme['bg']} py-32'><h1 class='{theme['text']} text-5xl font-bold text-center'>Hero</h1></section>"
 
     @staticmethod
-    def centered_spotlight(theme: Dict, data: Dict, industry: str, font_css: str) -> str:
-        """Bold: Full-width centered with dramatic orb background."""
+    def centered_spotlight(theme: Dict, data: Dict, images: List[str]) -> str:
+        img = images[0] if images else _get_unsplash_url(["luxury"])
         try:
             return f"""
-            <section id="hero" class="relative {theme['bg']} {PADDING_SECTION} overflow-hidden min-h-screen flex items-center">
-                <div class="absolute inset-0 overflow-hidden pointer-events-none">
-                    <div class="absolute top-1/4 left-1/2 -translate-x-1/2 w-[800px] h-[800px] bg-gradient-to-r {theme['grad']} rounded-full blur-3xl opacity-15"></div>
-                    <div class="absolute bottom-0 right-0 w-96 h-96 bg-gradient-to-l {theme['grad']} rounded-full blur-3xl opacity-10"></div>
+            <section id="hero" class="relative {theme['bg']} overflow-hidden min-h-screen flex items-center">
+                <div class="absolute inset-0 pointer-events-none overflow-hidden">
+                    <div class="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-gradient-to-r {theme['grad']} opacity-[0.12] blur-[100px] rounded-full"></div>
+                    <div class="absolute bottom-0 left-0 w-64 h-64 bg-gradient-to-r {theme['grad']} opacity-[0.08] blur-3xl rounded-full"></div>
                 </div>
-                <div class="container mx-auto {PADDING_CONTAINER} relative z-10">
-                    <div class="max-w-5xl mx-auto text-center space-y-10">
-                        <div class="inline-flex items-center gap-2 px-5 py-2.5 {theme['glass']} {theme['card_border']} rounded-full text-sm font-medium {theme['text_muted']}">
-                            <span class="w-2 h-2 rounded-full bg-gradient-to-r {theme['grad']} animate-pulse"></span>
-                            Now available — explore what's possible
-                        </div>
+                <div class="absolute inset-0">
+                    <img src="{img}" alt="" class="w-full h-full object-cover opacity-10" loading="eager" />
+                </div>
+                <div class="container mx-auto {PADDING_CONTAINER} relative z-10 text-center py-40">
+                    <div class="max-w-4xl mx-auto space-y-8">
+                        <p class="text-sm font-semibold uppercase tracking-[0.25em] {theme['text_muted']}">{data.get('tagline', '— Premium Experience —')}</p>
                         <h1 class="{HEADING_HERO} {theme['text']}">{data.get('hero', {}).get('h1', 'Premium Solution')}</h1>
-                        <p class="text-2xl md:text-3xl {theme['text_muted']} font-light leading-relaxed max-w-3xl mx-auto">{data.get('hero', {}).get('sub', 'Built for excellence')}</p>
+                        <p class="text-xl md:text-2xl {theme['text_muted']} font-light leading-relaxed max-w-2xl mx-auto">{data.get('hero', {}).get('sub', 'Built for excellence')}</p>
                         <div class="flex flex-col sm:flex-row gap-4 justify-center pt-4">
-                            <a href="#contact" class="px-10 py-6 bg-gradient-to-r {theme['btn_grad']} text-white rounded-full font-bold text-lg {HOVER_LIFT} inline-block shadow-xl">
+                            <a href="#contact" class="px-10 py-5 bg-gradient-to-r {theme['grad']} text-white rounded-full font-bold text-lg {HOVER_LIFT} shadow-2xl">
                                 {data.get('hero', {}).get('cta', 'Get Started')}
                             </a>
-                            <a href="#features" class="px-10 py-6 {theme['glass']} {theme['text']} rounded-full font-bold {HOVER_GLOW} inline-block {theme['card_border']}">
-                                See How It Works
+                            <a href="#features" class="{theme['glass']} {theme['text']} px-10 py-5 rounded-full font-semibold border {theme['border']} {HOVER_GLOW}">
+                                Discover More ↓
                             </a>
                         </div>
                     </div>
@@ -571,712 +534,786 @@ class HeroVariant:
             </section>"""
         except Exception as e:
             logger.error(f"centered_spotlight hero error: {e}")
-            return f"<section id='hero' class='{theme['bg']} py-32'><div class='container mx-auto px-6 text-center'><h1>Welcome</h1></div></section>"
+            return f"<section id='hero' class='{theme['bg']} py-32'><h1 class='{theme['text']} text-5xl font-bold text-center'>Hero</h1></section>"
 
     @staticmethod
-    def editorial_slash(theme: Dict, data: Dict, industry: str, font_css: str) -> str:
-        """Editorial: Large typography with diagonal image crop."""
+    def editorial_large(theme: Dict, data: Dict, images: List[str]) -> str:
+        img = images[0] if images else _get_unsplash_url(["modern"])
+        h1 = data.get('hero', {}).get('h1', 'Premium Solution')
+        words = h1.split()
+        mid = max(1, len(words) // 2)
+        line1 = " ".join(words[:mid])
+        line2 = " ".join(words[mid:])
         try:
-            img_url = get_unsplash_url(industry, index=1, width=1000)
             return f"""
-            <section id="hero" class="relative {theme['bg']} overflow-hidden min-h-screen">
-                <div class="absolute right-0 top-0 w-1/2 h-full">
-                    <img src="{img_url}" alt="hero" class="w-full h-full object-cover" loading="eager" />
-                    <div class="absolute inset-0 bg-gradient-to-r {theme['bg'].replace('bg-', 'from-').split(' ')[0]} via-transparent to-transparent"></div>
+            <section id="hero" class="relative {theme['bg']} overflow-hidden pt-36 pb-20">
+                <div class="container mx-auto {PADDING_CONTAINER}">
+                    <div class="mb-10">
+                        <h1 class="font-black tracking-tighter leading-[1.05] text-[clamp(3rem,8vw,7rem)] {theme['text']}">
+                            <span class="block">{line1}</span>
+                            <span class="block bg-gradient-to-r {theme['grad']} bg-clip-text text-transparent">{line2}</span>
+                        </h1>
+                    </div>
+                    <div class="grid lg:grid-cols-5 gap-12 items-end">
+                        <div class="lg:col-span-3 h-[400px] md:h-[500px] overflow-hidden rounded-2xl relative">
+                            <img src="{img}" alt="editorial" class="w-full h-full object-cover" loading="eager" />
+                        </div>
+                        <div class="lg:col-span-2 space-y-6">
+                            <p class="text-base md:text-lg {theme['text_muted']} leading-relaxed">{data.get('hero', {}).get('sub', 'Built for excellence')}</p>
+                            <a href="#contact" class="inline-block px-8 py-5 bg-gradient-to-r {theme['grad']} text-white rounded-xl font-bold {HOVER_LIFT}">
+                                {data.get('hero', {}).get('cta', 'Start Now')} →
+                            </a>
+                            <div class="pt-4 border-t {theme['border']}">
+                                <p class="text-xs {theme['text_light']} uppercase tracking-widest mb-3">Trusted by</p>
+                                <p class="text-2xl font-black {theme['stat_color']}">2,400+ businesses</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div class="relative z-10 container mx-auto {PADDING_CONTAINER} min-h-screen flex items-center">
-                    <div class="w-full lg:w-3/5 space-y-10 py-40">
-                        <p class="text-sm font-bold uppercase tracking-[0.3em] {theme['text_muted']}">Est. 2024 · Premium</p>
-                        <h1 class="{HEADING_HERO_EDITORIAL} {theme['text']}">{data.get('hero', {}).get('h1', 'Premium Solution')}</h1>
-                        <div class="w-24 h-0.5 bg-gradient-to-r {theme['grad']}"></div>
-                        <p class="text-xl {theme['text_muted']} leading-relaxed max-w-lg">{data.get('hero', {}).get('sub', 'Built for excellence')}</p>
-                        <a href="#contact" class="inline-block px-10 py-5 bg-gradient-to-r {theme['btn_grad']} text-white font-bold text-lg {HOVER_LIFT} shadow-xl rounded-sm">
-                            {data.get('hero', {}).get('cta', 'Get Started')} →
+            </section>"""
+        except Exception as e:
+            logger.error(f"editorial_large hero error: {e}")
+            return f"<section id='hero' class='{theme['bg']} py-32'><h1 class='{theme['text']} text-5xl font-bold text-center'>Hero</h1></section>"
+
+    @staticmethod
+    def stats_hero(theme: Dict, data: Dict, images: List[str]) -> str:
+        img = images[0] if images else _get_unsplash_url(["business", "finance"])
+        try:
+            return f"""
+            <section id="hero" class="relative {theme['bg']} overflow-hidden pt-36 pb-24">
+                <div class="absolute top-0 right-0 w-1/2 h-full pointer-events-none">
+                    <img src="{img}" alt="" class="w-full h-full object-cover opacity-10" loading="eager" />
+                </div>
+                <div class="container mx-auto {PADDING_CONTAINER} relative z-10">
+                    <div class="max-w-3xl space-y-8">
+                        <h1 class="{HEADING_HERO_ALT} {theme['text']}">{data.get('hero', {}).get('h1', 'Premium Solution')}</h1>
+                        <p class="text-lg {theme['text_muted']} leading-relaxed max-w-xl">{data.get('hero', {}).get('sub', 'Built for excellence')}</p>
+                        <a href="#contact" class="inline-block px-8 py-4 bg-gradient-to-r {theme['grad']} text-white rounded-lg font-bold {HOVER_LIFT} shadow-lg">
+                            {data.get('hero', {}).get('cta', 'Request Demo')}
                         </a>
                     </div>
-                </div>
-            </section>"""
-        except Exception as e:
-            logger.error(f"editorial_slash hero error: {e}")
-            return f"<section id='hero' class='{theme['bg']} py-32'><div class='container mx-auto px-6'><h1>Welcome</h1></div></section>"
-
-    @staticmethod
-    def brutalist_full(theme: Dict, data: Dict, industry: str, font_css: str) -> str:
-        """Brutalist: Oversized type, raw grid, maximum impact."""
-        try:
-            img_url = get_unsplash_url(industry, index=2, width=600)
-            return f"""
-            <section id="hero" class="relative {theme['bg']} pt-32 pb-20 overflow-hidden border-b {theme['card_border']}">
-                <div class="container mx-auto {PADDING_CONTAINER}">
-                    <div class="mb-8">
-                        <span class="text-xs font-mono uppercase tracking-[0.4em] {theme['text_muted']} border {theme['card_border']} px-4 py-2">
-                            ◆ Featured
-                        </span>
-                    </div>
-                    <div class="grid lg:grid-cols-12 gap-8 items-end">
-                        <div class="lg:col-span-8 space-y-8">
-                            <h1 class="{HEADING_HERO_BRUTALIST} {theme['text']} leading-none">
-                                {data.get('hero', {}).get('h1', 'Premium Solution').upper()}
-                            </h1>
-                        </div>
-                        <div class="lg:col-span-4 space-y-6">
-                            <div class="h-px w-full bg-gradient-to-r {theme['grad']} opacity-60"></div>
-                            <p class="text-lg {theme['text_muted']} leading-relaxed">{data.get('hero', {}).get('sub', 'Built for excellence')}</p>
-                            <a href="#contact" class="inline-block px-8 py-5 bg-gradient-to-r {theme['btn_grad']} text-white font-black uppercase tracking-widest {HOVER_LIFT}">
-                                {data.get('hero', {}).get('cta', 'Get Started')}
-                            </a>
-                        </div>
-                    </div>
-                    <div class="mt-16 h-[400px] md:h-[500px] overflow-hidden">
-                        <img src="{img_url}" alt="hero" class="w-full h-full object-cover grayscale hover:grayscale-0 transition-all duration-700" loading="eager" />
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-6 mt-16 pt-12 border-t {theme['border']}">
+                        <div><p class="text-4xl font-black {theme['stat_color']}">98%</p><p class="text-sm {theme['text_muted']} mt-1">Client satisfaction</p></div>
+                        <div><p class="text-4xl font-black {theme['stat_color']}">2.4k</p><p class="text-sm {theme['text_muted']} mt-1">Active customers</p></div>
+                        <div><p class="text-4xl font-black {theme['stat_color']}">$2B</p><p class="text-sm {theme['text_muted']} mt-1">Managed annually</p></div>
+                        <div><p class="text-4xl font-black {theme['stat_color']}">24/7</p><p class="text-sm {theme['text_muted']} mt-1">Expert support</p></div>
                     </div>
                 </div>
             </section>"""
         except Exception as e:
-            logger.error(f"brutalist_full hero error: {e}")
-            return f"<section id='hero' class='{theme['bg']} py-32'><div class='container mx-auto px-6'><h1>Welcome</h1></div></section>"
+            logger.error(f"stats_hero error: {e}")
+            return f"<section id='hero' class='{theme['bg']} py-32'><h1 class='{theme['text']} text-5xl font-bold text-center'>Hero</h1></section>"
 
-    @staticmethod
-    def cinematic_overlay(theme: Dict, data: Dict, industry: str, font_css: str) -> str:
-        """Cinematic: Full-screen image with text overlay and gradient veil."""
-        try:
-            img_url = get_unsplash_url(industry, index=0, width=1400)
-            return f"""
-            <section id="hero" class="relative min-h-screen flex items-center overflow-hidden">
-                <div class="absolute inset-0">
-                    <img src="{img_url}" alt="hero" class="w-full h-full object-cover" loading="eager" />
-                    <div class="absolute inset-0 bg-gradient-to-r from-black/80 via-black/50 to-transparent"></div>
-                    <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>
-                </div>
-                <div class="relative z-10 container mx-auto {PADDING_CONTAINER}">
-                    <div class="max-w-3xl space-y-8">
-                        <p class="text-sm font-semibold uppercase tracking-[0.4em] text-white/60">Premium Experience</p>
-                        <h1 class="{HEADING_HERO} text-white drop-shadow-2xl">{data.get('hero', {}).get('h1', 'Premium Solution')}</h1>
-                        <p class="text-xl md:text-2xl text-white/80 leading-relaxed">{data.get('hero', {}).get('sub', 'Built for excellence')}</p>
-                        <div class="flex flex-col sm:flex-row gap-4 pt-4">
-                            <a href="#contact" class="px-10 py-6 bg-gradient-to-r {theme['btn_grad']} text-white rounded-full font-bold text-lg {HOVER_LIFT} inline-block shadow-2xl">
-                                {data.get('hero', {}).get('cta', 'Get Started')}
-                            </a>
-                            <a href="#features" class="px-10 py-6 bg-white/10 backdrop-blur-xl text-white border border-white/20 rounded-full font-bold {HOVER_GLOW} inline-block">
-                                Explore ↓
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            </section>"""
-        except Exception as e:
-            logger.error(f"cinematic_overlay hero error: {e}")
-            return f"<section id='hero' class='{theme['bg']} py-32'><div class='container mx-auto px-6'><h1>Welcome</h1></div></section>"
 
+# ============================================================================
+# FEATURE VARIANTS
+# ============================================================================
 
 class FeatureVariant:
-    """4 distinct feature section designs."""
 
     @staticmethod
-    def cards_grid(theme: Dict, features: List[Dict], industry: str) -> str:
-        """Classic: 3-column icon card grid."""
+    def cards_grid(theme: Dict, features: List[Dict], images: List[str]) -> str:
+        items = "".join([f"""
+        <div class="{theme['glass']} border {theme['border']} p-8 rounded-2xl {HOVER_LIFT}">
+            <div class="w-12 h-12 mb-5 rounded-xl bg-gradient-to-br {theme['grad']} flex items-center justify-center text-xl shadow-md">
+                {feat.get('icon', '✨')}
+            </div>
+            <h3 class="{HEADING_CARD} {theme['text']} mb-2">{feat.get('title', 'Feature')}</h3>
+            <p class="{theme['text_muted']} text-sm leading-relaxed">{feat.get('description', '')}</p>
+        </div>""" for feat in (features or [])])
         try:
-            items = "".join([f"""
-            <div class="{theme['glass']} {theme['card_border']} p-10 {HOVER_LIFT} flex flex-col gap-6">
-                <div class="w-14 h-14 rounded-2xl bg-gradient-to-br {theme['grad']} flex items-center justify-center text-2xl shadow-lg flex-shrink-0">
-                    {feat.get('icon', '✨')}
-                </div>
-                <div>
-                    <h3 class="{HEADING_CARD} {theme['text']} mb-3">{feat.get('title', 'Feature')}</h3>
-                    <p class="{theme['text_muted']} leading-relaxed text-sm">{feat.get('description', 'Premium feature')}</p>
-                </div>
-            </div>""" for feat in (features or [])])
-
             return f"""
             <section id="features" class="{theme['bg_alt']} {PADDING_SECTION}">
                 <div class="container mx-auto {PADDING_CONTAINER}">
-                    <div class="text-center mb-16 space-y-4">
-                        <h2 class="{HEADING_SECTION} {theme['text']}">Built for Results</h2>
-                        <p class="text-xl {theme['text_muted']} max-w-2xl mx-auto">Everything you need — nothing you don't.</p>
+                    <div class="text-center mb-14 space-y-3">
+                        <p class="text-xs font-semibold uppercase tracking-widest {theme['text_light']}">What we offer</p>
+                        <h2 class="{HEADING_SECTION} {theme['text']}">Powerful Features</h2>
+                        <p class="text-lg {theme['text_muted']} max-w-xl mx-auto">Everything you need, nothing you don't.</p>
                     </div>
-                    <div class="grid md:grid-cols-3 gap-8">
-                        {items}
-                    </div>
+                    <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">{items}</div>
                 </div>
             </section>"""
         except Exception as e:
-            logger.error(f"cards_grid features error: {e}")
+            logger.error(f"cards_grid error: {e}")
             return f"<section id='features' class='{theme['bg_alt']} py-20'><h2 class='text-center text-4xl font-bold'>Features</h2></section>"
 
     @staticmethod
-    def alternating_blocks(theme: Dict, features: List[Dict], industry: str) -> str:
-        """Rich: Alternating text + image blocks with real industry photos."""
+    def alternating_blocks(theme: Dict, features: List[Dict], images: List[str]) -> str:
+        blocks = "".join([f"""
+        <div class="grid lg:grid-cols-2 gap-12 items-center">
+            <div class="space-y-5 {'order-2 lg:order-2' if i % 2 else ''}">
+                <span class="text-3xl">{feat.get('icon', '✨')}</span>
+                <h3 class="{HEADING_FEATURE} {theme['text']}">{feat.get('title', 'Feature')}</h3>
+                <p class="text-base {theme['text_muted']} leading-relaxed">{feat.get('description', '')}</p>
+                <a href="#contact" class="inline-flex items-center gap-2 text-sm font-semibold {theme['stat_color']}">
+                    Learn more <span>→</span>
+                </a>
+            </div>
+            <div class="h-72 md:h-80 rounded-2xl overflow-hidden relative {'order-1 lg:order-1' if i % 2 else ''}">
+                <img src="{images[i % len(images)] if images else ''}" alt="{feat.get('title', '')}" class="w-full h-full object-cover {HOVER_SCALE}" loading="lazy" />
+                <div class="absolute inset-0 bg-gradient-to-br {theme['grad']} opacity-10 mix-blend-multiply"></div>
+            </div>
+        </div>""" for i, feat in enumerate(features or [])])
         try:
-            blocks = "".join([f"""
-            <div class="grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
-                <div class="space-y-6 {'order-2 lg:order-2' if i % 2 else 'order-2 lg:order-1'}">
-                    <div class="w-12 h-12 bg-gradient-to-br {theme['grad']} rounded-xl flex items-center justify-center text-xl shadow-lg">
-                        {feat.get('icon', '✨')}
-                    </div>
-                    <h3 class="{HEADING_FEATURE} {theme['text']}">{feat.get('title', 'Feature')}</h3>
-                    <p class="text-lg {theme['text_muted']} leading-relaxed">{feat.get('description', 'Premium feature')}</p>
-                    <a href="#contact" class="inline-flex items-center gap-2 text-sm font-semibold {theme['text']} {HOVER_SLIDE} opacity-70 hover:opacity-100">
-                        Learn more <span>→</span>
-                    </a>
-                </div>
-                <div class="h-96 rounded-3xl overflow-hidden shadow-xl {'order-1 lg:order-1' if i % 2 else 'order-1 lg:order-2'}">
-                    <img src="{get_unsplash_url(industry, index=i, width=700)}" alt="{feat.get('title', 'Feature')}" class="w-full h-full object-cover {HOVER_SCALE}" loading="lazy" />
-                </div>
-            </div>""" for i, feat in enumerate(features or [])])
-
             return f"""
             <section id="features" class="{theme['bg']} {PADDING_SECTION}">
                 <div class="container mx-auto {PADDING_CONTAINER}">
-                    <h2 class="{HEADING_SECTION} {theme['text']} mb-4 text-center">Why Choose Us</h2>
-                    <p class="text-xl {theme['text_muted']} text-center mb-24 max-w-2xl mx-auto">Every detail designed to give you the advantage.</p>
-                    <div class="space-y-32">
-                        {blocks}
-                    </div>
+                    <h2 class="{HEADING_SECTION} {theme['text']} text-center mb-20">Why It Works</h2>
+                    <div class="space-y-24">{blocks}</div>
                 </div>
             </section>"""
         except Exception as e:
-            logger.error(f"alternating_blocks features error: {e}")
+            logger.error(f"alternating_blocks error: {e}")
             return f"<section id='features' class='{theme['bg']} py-20'><h2 class='text-center text-4xl font-bold'>Features</h2></section>"
 
     @staticmethod
-    def showcase_grid(theme: Dict, features: List[Dict], industry: str) -> str:
-        """Modern: Large cards with accent bar top."""
+    def showcase_bento(theme: Dict, features: List[Dict], images: List[str]) -> str:
+        feats = (features or [])[:4]
+        first = feats[0] if feats else {}
+        rest = feats[1:]
+        rest_items = "".join([f"""
+        <div class="{theme['glass']} border {theme['border']} p-6 rounded-2xl {HOVER_LIFT}">
+            <span class="text-2xl">{f.get('icon', '✨')}</span>
+            <h3 class="text-lg font-bold {theme['text']} mt-3 mb-2">{f.get('title', 'Feature')}</h3>
+            <p class="text-sm {theme['text_muted']} leading-relaxed">{f.get('description', '')}</p>
+        </div>""" for f in rest])
         try:
-            items = "".join([f"""
-            <div class="{theme['glass']} {theme['card_border']} rounded-3xl overflow-hidden {HOVER_LIFT} flex flex-col">
-                <div class="h-1.5 bg-gradient-to-r {theme['grad']}"></div>
-                <div class="p-10 flex flex-col flex-grow">
-                    <div class="w-16 h-16 mb-8 rounded-2xl bg-gradient-to-br {theme['grad']} flex items-center justify-center text-3xl shadow-lg">
-                        {feat.get('icon', '✨')}
-                    </div>
-                    <h3 class="text-2xl font-bold {theme['text']} mb-4">{feat.get('title', 'Feature')}</h3>
-                    <p class="{theme['text_muted']} text-sm leading-relaxed flex-grow">{feat.get('description', 'Premium feature')}</p>
-                    <div class="mt-8 pt-6 border-t {theme['card_border']}">
-                        <a href="#contact" class="text-sm font-bold {theme['text']} hover:opacity-60 transition">
-                            Explore →
-                        </a>
-                    </div>
-                </div>
-            </div>""" for feat in (features or [])])
-
             return f"""
             <section id="features" class="{theme['bg_alt']} {PADDING_SECTION}">
                 <div class="container mx-auto {PADDING_CONTAINER}">
-                    <h2 class="{HEADING_SECTION} {theme['text']} text-center mb-4">Our Solutions</h2>
-                    <p class="text-xl {theme['text_muted']} text-center mb-20 max-w-2xl mx-auto">Powerful, flexible, and built to scale with you.</p>
-                    <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-                        {items}
+                    <h2 class="{HEADING_SECTION} {theme['text']} text-center mb-14">What Makes Us Different</h2>
+                    <div class="grid lg:grid-cols-3 gap-5">
+                        <div class="{theme['glass']} border {theme['border']} p-10 rounded-2xl lg:col-span-2 {HOVER_LIFT} relative overflow-hidden">
+                            <div class="absolute top-0 right-0 w-48 h-48 bg-gradient-to-br {theme['grad']} opacity-10 blur-2xl rounded-full"></div>
+                            <span class="text-4xl">{first.get('icon', '✨')}</span>
+                            <h3 class="{HEADING_FEATURE} {theme['text']} mt-4 mb-3">{first.get('title', 'Feature')}</h3>
+                            <p class="{theme['text_muted']} leading-relaxed">{first.get('description', '')}</p>
+                        </div>
+                        <div class="space-y-5">{rest_items}</div>
                     </div>
                 </div>
             </section>"""
         except Exception as e:
-            logger.error(f"showcase_grid features error: {e}")
+            logger.error(f"showcase_bento error: {e}")
             return f"<section id='features' class='{theme['bg_alt']} py-20'><h2 class='text-center text-4xl font-bold'>Features</h2></section>"
 
     @staticmethod
-    def numbered_list(theme: Dict, features: List[Dict], industry: str) -> str:
-        """Editorial: Numbered feature rows for a refined, linear layout."""
+    def icon_list(theme: Dict, features: List[Dict], images: List[str]) -> str:
+        items = "".join([f"""
+        <div class="flex gap-6 items-start p-6 rounded-xl border {theme['border']} {HOVER_GLOW} transition-colors">
+            <div class="w-10 h-10 shrink-0 rounded-full bg-gradient-to-br {theme['grad']} flex items-center justify-center text-white font-bold text-sm shadow">
+                {str(i+1).zfill(2)}
+            </div>
+            <div>
+                <h3 class="font-bold text-lg {theme['text']} mb-1">{feat.get('title', 'Feature')}</h3>
+                <p class="text-sm {theme['text_muted']} leading-relaxed">{feat.get('description', '')}</p>
+            </div>
+        </div>""" for i, feat in enumerate(features or [])])
+        img = images[0] if images else _get_unsplash_url(["professional", "business"])
         try:
-            items = "".join([f"""
-            <div class="grid md:grid-cols-12 gap-8 py-12 border-b {theme['card_border']} items-center group {HOVER_GLOW}">
-                <div class="md:col-span-1 text-4xl font-black {theme['text_light']} group-hover:opacity-100 transition">
-                    0{i+1}
-                </div>
-                <div class="md:col-span-1 text-3xl">
-                    {feat.get('icon', '✨')}
-                </div>
-                <div class="md:col-span-5">
-                    <h3 class="{HEADING_FEATURE} {theme['text']}">{feat.get('title', 'Feature')}</h3>
-                </div>
-                <div class="md:col-span-5">
-                    <p class="{theme['text_muted']} leading-relaxed">{feat.get('description', '')}</p>
-                </div>
-            </div>""" for i, feat in enumerate(features or [])])
-
             return f"""
             <section id="features" class="{theme['bg']} {PADDING_SECTION}">
                 <div class="container mx-auto {PADDING_CONTAINER}">
-                    <div class="flex items-end justify-between mb-20 border-b-2 {theme['card_border']} pb-8">
-                        <h2 class="{HEADING_SECTION} {theme['text']}">What We Do</h2>
-                        <a href="#contact" class="text-sm font-bold {theme['text_muted']} {HOVER_SLIDE}">See all services →</a>
-                    </div>
-                    <div>
-                        {items}
+                    <div class="grid lg:grid-cols-2 gap-16 items-center">
+                        <div>
+                            <p class="text-xs font-semibold uppercase tracking-widest {theme['text_light']} mb-4">How it works</p>
+                            <h2 class="{HEADING_SECTION} {theme['text']} mb-10">Built for Real Results</h2>
+                            <div class="space-y-3">{items}</div>
+                        </div>
+                        <div class="h-[480px] rounded-2xl overflow-hidden relative">
+                            <img src="{img}" alt="features" class="w-full h-full object-cover" loading="lazy" />
+                        </div>
                     </div>
                 </div>
             </section>"""
         except Exception as e:
-            logger.error(f"numbered_list features error: {e}")
+            logger.error(f"icon_list error: {e}")
             return f"<section id='features' class='{theme['bg']} py-20'><h2 class='text-center text-4xl font-bold'>Features</h2></section>"
 
+
+# ============================================================================
+# PRICING VARIANTS
+# ============================================================================
 
 class PricingVariant:
-    """3 distinct pricing layouts."""
 
     @staticmethod
     def tiered_cards(theme: Dict, tiers: List[Dict]) -> str:
-        """Classic: 3 cards, middle featured."""
+        def card(tier: Dict) -> str:
+            featured = tier.get('featured', False)
+            feats = "".join([f"""
+            <li class="flex items-start gap-2 text-sm {theme['text_muted']}">
+                <span class="mt-0.5 text-green-500 shrink-0">✓</span>
+                <span>{f}</span>
+            </li>""" for f in (tier.get('features', []) or [])])
+            border_class = f"border-2" if featured else f"border {theme['border']}"
+            return f"""
+            <div class="{theme['glass']} {border_class} rounded-2xl p-8 {HOVER_LIFT} flex flex-col relative overflow-hidden">
+                {'<div class="absolute top-4 right-4 px-3 py-1 bg-gradient-to-r ' + theme["grad"] + ' text-white text-xs font-bold rounded-full">Most Popular</div>' if featured else ''}
+                <h3 class="text-lg font-bold {theme['text']} mb-1">{tier.get('name', 'Plan')}</h3>
+                <p class="text-xs {theme['text_light']} mb-6">{tier.get('description', '')}</p>
+                <div class="mb-6">
+                    <span class="text-5xl font-black {theme['text']}">{tier.get('price', '$0')}</span>
+                    <span class="text-sm {theme['text_muted']}"> /month</span>
+                </div>
+                <ul class="space-y-3 mb-8 flex-grow">{feats}</ul>
+                <button class="w-full py-3.5 rounded-xl font-bold transition-all {'bg-gradient-to-r ' + theme['grad'] + ' text-white shadow-lg ' + HOVER_LIFT if featured else theme['glass'] + ' ' + theme['text'] + ' border ' + theme['border']}">
+                    Get Started
+                </button>
+            </div>"""
+        try:
+            cards = "".join([card(t) for t in (tiers or [])])
+            return f"""
+            <section id="pricing" class="{theme['bg_alt']} {PADDING_SECTION}">
+                <div class="container mx-auto {PADDING_CONTAINER}">
+                    <div class="text-center mb-14 space-y-3">
+                        <p class="text-xs font-semibold uppercase tracking-widest {theme['text_light']}">Pricing</p>
+                        <h2 class="{HEADING_SECTION} {theme['text']}">Simple, Honest Pricing</h2>
+                        <p class="text-lg {theme['text_muted']}">No hidden fees. Cancel anytime.</p>
+                    </div>
+                    <div class="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">{cards}</div>
+                </div>
+            </section>"""
+        except Exception as e:
+            logger.error(f"tiered_cards error: {e}")
+            return f"<section id='pricing' class='{theme['bg_alt']} py-20'><h2 class='text-center text-4xl font-bold'>Pricing</h2></section>"
+
+    @staticmethod
+    def two_column_highlight(theme: Dict, tiers: List[Dict]) -> str:
+        tiers = tiers or []
+        simple = tiers[0] if tiers else {}
+        pro = tiers[1] if len(tiers) > 1 else {}
+        def feat_list(tier: Dict) -> str:
+            return "".join([f'<li class="flex items-center gap-2 text-sm"><span class="text-green-400">✓</span>{f}</li>' for f in (tier.get('features', []) or [])])
+        try:
+            return f"""
+            <section id="pricing" class="{theme['bg']} {PADDING_SECTION}">
+                <div class="container mx-auto {PADDING_CONTAINER}">
+                    <h2 class="{HEADING_SECTION} {theme['text']} text-center mb-14">Choose Your Plan</h2>
+                    <div class="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+                        <div class="{theme['glass']} border {theme['border']} p-10 rounded-2xl">
+                            <h3 class="text-xl font-bold {theme['text']} mb-2">{simple.get('name', 'Starter')}</h3>
+                            <p class="text-5xl font-black {theme['text']} my-5">{simple.get('price', 'Free')}</p>
+                            <ul class="space-y-2 mb-8 {theme['text_muted']}">{feat_list(simple)}</ul>
+                            <button class="{theme['glass']} {theme['text']} border {theme['border']} w-full py-3 rounded-xl font-bold">Get Started</button>
+                        </div>
+                        <div class="bg-gradient-to-br {theme['grad']} p-10 rounded-2xl text-white relative overflow-hidden {HOVER_LIFT} shadow-2xl">
+                            <div class="absolute top-0 right-0 w-32 h-32 bg-white/10 blur-2xl rounded-full"></div>
+                            <span class="px-3 py-1 bg-white/20 text-white text-xs font-bold rounded-full">RECOMMENDED</span>
+                            <h3 class="text-xl font-bold mt-4 mb-2">{pro.get('name', 'Pro')}</h3>
+                            <p class="text-5xl font-black my-5">{pro.get('price', '$99')}</p>
+                            <ul class="space-y-2 mb-8">{feat_list(pro)}</ul>
+                            <button class="bg-white text-gray-900 w-full py-3 rounded-xl font-bold hover:bg-gray-100 transition">Upgrade Now</button>
+                        </div>
+                    </div>
+                </div>
+            </section>"""
+        except Exception as e:
+            logger.error(f"two_column_highlight error: {e}")
+            return f"<section id='pricing' class='{theme['bg']} py-20'><h2 class='text-center text-4xl font-bold'>Pricing</h2></section>"
+
+    @staticmethod
+    def project_based(theme: Dict, tiers: List[Dict]) -> str:
+        """
+        For construction, trades, legal, logistics — no monthly tiers.
+        Shows service packages with 'Get a Quote' CTAs instead of prices.
+        The 'tiers' list is reused as service packages (name + features).
+        """
+        tiers = tiers or []
+        icons = ["🏗️", "🔨", "🏢"]
         try:
             cards = "".join([f"""
-            <div class="{'bg-gradient-to-b ' + theme['grad'] + ' p-px rounded-3xl shadow-2xl' if tier.get('featured') else ''}">
-                <div class="{'' if tier.get('featured') else theme['glass'] + ' ' + theme['card_border']} {'bg-' + theme['bg'].replace('bg-', '') + ' ' if tier.get('featured') else ''}rounded-3xl p-10 flex flex-col h-full {'bg-black/20 backdrop-blur-xl text-white' if tier.get('featured') else ''}">
-                    {'<div class="text-xs font-bold uppercase tracking-[0.2em] mb-4 opacity-60">Most Popular</div>' if tier.get('featured') else '<div class="mb-10"></div>'}
-                    <h3 class="{HEADING_CARD} {'' if tier.get('featured') else theme['text']} mb-2">{tier.get('name', 'Plan')}</h3>
-                    <div class="mb-8 mt-4">
-                        <span class="text-5xl font-black {'' if tier.get('featured') else theme['text']}">{tier.get('price', '$0')}</span>
-                        <span class="{'opacity-60' if tier.get('featured') else theme['text_muted']}">/month</span>
-                    </div>
-                    <ul class="space-y-4 mb-10 flex-grow">
-                        {chr(10).join([f'<li class="{"opacity-80" if tier.get("featured") else theme["text_muted"]} text-sm flex items-center gap-3"><span class="w-5 h-5 rounded-full bg-gradient-to-br {theme["grad"]} flex items-center justify-center text-white text-xs flex-shrink-0">✓</span>{feat}</li>' for feat in (tier.get('features', []) or [])])}
-                    </ul>
-                    <a href="#contact" class="block w-full py-4 text-center rounded-xl font-bold transition-all duration-300 {'bg-white text-gray-900 hover:bg-gray-100' if tier.get('featured') else 'bg-gradient-to-r ' + theme['btn_grad'] + ' text-white ' + HOVER_LIFT}">
-                        Get Started
-                    </a>
-                </div>
-            </div>""" for tier in (tiers or [])])
+            <div class="{theme['glass']} border {theme['border']} p-8 rounded-2xl {HOVER_LIFT} flex flex-col">
+                <div class="text-3xl mb-4">{icons[i % len(icons)]}</div>
+                <h3 class="text-xl font-bold {theme['text']} mb-2">{t.get('name', 'Package')}</h3>
+                <p class="text-sm {theme['text_muted']} mb-6 leading-relaxed">{t.get('description', '')}</p>
+                <ul class="space-y-2 mb-8 flex-grow">
+                    {"".join([f'<li class="flex items-start gap-2 text-sm {theme["text_muted"]}"><span class="mt-0.5 {theme["stat_color"]} shrink-0">✓</span><span>{f}</span></li>' for f in (t.get("features", []) or [])])}
+                </ul>
+                <a href="#contact" class="w-full py-3 text-center rounded-xl font-bold border {theme['border']} {theme['text']} {theme['glass']} {HOVER_GLOW}">
+                    Get a Quote →
+                </a>
+            </div>""" for i, t in enumerate(tiers)])
 
             return f"""
             <section id="pricing" class="{theme['bg_alt']} {PADDING_SECTION}">
                 <div class="container mx-auto {PADDING_CONTAINER}">
-                    <div class="text-center mb-16 space-y-4">
-                        <h2 class="{HEADING_SECTION} {theme['text']}">Simple, Transparent Pricing</h2>
-                        <p class="text-xl {theme['text_muted']}">Pay for what you need. Scale when you're ready.</p>
+                    <div class="text-center mb-14 space-y-3">
+                        <p class="text-xs font-semibold uppercase tracking-widest {theme['text_light']}">Our Services</p>
+                        <h2 class="{HEADING_SECTION} {theme['text']}">What We Offer</h2>
+                        <p class="text-lg {theme['text_muted']}">Every project is unique. Contact us for a custom quote.</p>
                     </div>
-                    <div class="grid md:grid-cols-3 gap-6 max-w-6xl mx-auto items-stretch">
-                        {cards}
+                    <div class="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto mb-12">{cards}</div>
+                    <!-- CTA strip -->
+                    <div class="{theme['glass']} border {theme['border']} rounded-2xl p-8 max-w-2xl mx-auto text-center">
+                        <p class="text-lg font-semibold {theme['text']} mb-2">Not sure which service fits?</p>
+                        <p class="text-sm {theme['text_muted']} mb-6">We'll assess your needs and give you a transparent, no-obligation quote.</p>
+                        <a href="#contact" class="inline-block px-8 py-4 bg-gradient-to-r {theme['grad']} text-white rounded-xl font-bold {HOVER_LIFT} shadow-lg">
+                            Request a Free Estimate
+                        </a>
                     </div>
                 </div>
             </section>"""
         except Exception as e:
-            logger.error(f"tiered_cards pricing error: {e}")
-            return f"<section id='pricing' class='{theme['bg_alt']} py-20'><h2 class='text-center text-4xl font-bold'>Pricing</h2></section>"
+            logger.error(f"project_based pricing error: {e}")
+            return f"<section id='pricing' class='{theme['bg_alt']} py-20'><h2 class='text-center text-4xl font-bold'>Services</h2></section>"
 
     @staticmethod
-    def comparison_table(theme: Dict, tiers: List[Dict]) -> str:
-        """Enterprise: Feature comparison table."""
+    def services_list(theme: Dict, tiers: List[Dict]) -> str:
+        """
+        For legal, consulting, nonprofits — horizontal service rows with
+        'Schedule a Consultation' as the CTA instead of a Buy button.
+        """
+        tiers = tiers or []
         try:
-            tier_headers = "".join([f'<th class="{theme["text"]} font-bold text-right px-4 py-3 text-sm">{t.get("name", "Plan")}<br><span class="text-2xl font-black">{t.get("price", "Custom")}</span></th>' for t in (tiers or [])])
-            all_features = []
-            seen = set()
-            for t in (tiers or []):
-                for f in (t.get('features', []) or []):
-                    if f not in seen:
-                        all_features.append(f)
-                        seen.add(f)
-
-            feature_rows = "".join([f"""
-            <tr class="border-b {theme['card_border']} hover:{theme['bg_alt'].replace('bg-', 'bg-')} transition">
-                <td class="{theme['text']} py-4 pr-4 text-sm">{feat}</td>
-                {chr(10).join([f'<td class="text-right px-4 py-4 text-sm"><span class="{"text-green-500 font-bold" if feat in (tiers[i].get("features", []) or []) else theme["text_light"]}">{"✓" if feat in (tiers[i].get("features", []) or []) else "—"}</span></td>' for i in range(len(tiers or []))])}
-            </tr>""" for feat in all_features])
+            rows = "".join([f"""
+            <div class="grid md:grid-cols-3 gap-6 items-center py-8 border-b {theme['border']}">
+                <div>
+                    <h3 class="text-lg font-bold {theme['text']}">{t.get('name', 'Service')}</h3>
+                    <p class="text-sm {theme['text_muted']} mt-1">{t.get('description', '')}</p>
+                </div>
+                <ul class="space-y-1 md:col-span-1">
+                    {"".join([f'<li class="flex items-center gap-2 text-sm {theme["text_muted"]}"><span class="{theme["stat_color"]}">✓</span>{f}</li>' for f in (t.get("features", []) or [])[:3]])}
+                </ul>
+                <div class="text-right">
+                    <a href="#contact" class="inline-block px-6 py-3 bg-gradient-to-r {theme['grad']} text-white rounded-lg font-semibold text-sm {HOVER_LIFT}">
+                        Book Consultation
+                    </a>
+                </div>
+            </div>""" for t in tiers])
 
             return f"""
             <section id="pricing" class="{theme['bg']} {PADDING_SECTION}">
                 <div class="container mx-auto {PADDING_CONTAINER}">
-                    <h2 class="{HEADING_SECTION} {theme['text']} text-center mb-4">Compare Plans</h2>
-                    <p class="text-xl {theme['text_muted']} text-center mb-16">Full transparency. No hidden fees.</p>
-                    <div class="overflow-x-auto {theme['glass']} {theme['card_border']} p-8 rounded-3xl">
-                        <table class="w-full">
-                            <thead>
-                                <tr class="border-b-2 {theme['card_border']}">
-                                    <th class="{theme['text']} font-bold text-left pb-6 text-sm">Feature</th>
-                                    {tier_headers}
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {feature_rows}
-                            </tbody>
-                        </table>
+                    <div class="mb-12">
+                        <p class="text-xs font-semibold uppercase tracking-widest {theme['text_light']} mb-3">Our Services</p>
+                        <h2 class="{HEADING_SECTION} {theme['text']}">How We Can Help</h2>
+                        <p class="text-lg {theme['text_muted']} mt-4 max-w-xl">All engagements begin with a complimentary consultation to understand your needs.</p>
+                    </div>
+                    <div class="divide-y {theme['border']}">{rows}</div>
+                    <div class="mt-10 text-center">
+                        <a href="#contact" class="inline-block px-10 py-5 bg-gradient-to-r {theme['grad']} text-white rounded-xl font-bold {HOVER_LIFT} shadow-xl">
+                            Schedule Your Free Consultation
+                        </a>
                     </div>
                 </div>
             </section>"""
         except Exception as e:
-            logger.error(f"comparison_table pricing error: {e}")
-            return f"<section id='pricing' class='{theme['bg']} py-20'><h2 class='text-center text-4xl font-bold'>Pricing</h2></section>"
-
-    @staticmethod
-    def two_option_split(theme: Dict, tiers: List[Dict]) -> str:
-        """Clean: Two main options side by side — great for simpler offerings."""
-        try:
-            top_two = (tiers or [])[:2]
-            cards = "".join([f"""
-            <div class="{theme['glass']} {theme['card_border']} p-12 rounded-3xl {HOVER_LIFT} flex flex-col gap-8">
-                <div>
-                    <h3 class="text-3xl font-black {theme['text']}">{tier.get('name', 'Plan')}</h3>
-                    <p class="text-6xl font-black {theme['text']} mt-4">{tier.get('price', '$0')}<span class="text-lg font-normal {theme['text_muted']}">/mo</span></p>
-                </div>
-                <ul class="space-y-3 flex-grow">
-                    {chr(10).join([f'<li class="flex items-center gap-3 {theme["text_muted"]} text-sm"><span class="text-green-500">✓</span>{feat}</li>' for feat in (tier.get("features", []) or [])])}
-                </ul>
-                <a href="#contact" class="block py-5 text-center font-bold rounded-2xl bg-gradient-to-r {theme['btn_grad']} text-white {HOVER_LIFT} shadow-lg">
-                    Get {tier.get('name', 'Started')}
-                </a>
-            </div>""" for tier in top_two])
-
-            return f"""
-            <section id="pricing" class="{theme['bg_alt']} {PADDING_SECTION}">
-                <div class="container mx-auto {PADDING_CONTAINER}">
-                    <h2 class="{HEADING_SECTION} {theme['text']} text-center mb-16">Your Plan</h2>
-                    <div class="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-                        {cards}
-                    </div>
-                    <p class="text-center {theme['text_muted']} mt-10 text-sm">Need something custom? <a href="#contact" class="{theme['text']} font-bold underline">Talk to us →</a></p>
-                </div>
-            </section>"""
-        except Exception as e:
-            logger.error(f"two_option_split pricing error: {e}")
-            return f"<section id='pricing' class='{theme['bg_alt']} py-20'><h2 class='text-center text-4xl font-bold'>Pricing</h2></section>"
+            logger.error(f"services_list pricing error: {e}")
+            return f"<section id='pricing' class='{theme['bg']} py-20'><h2 class='text-center text-4xl font-bold'>Services</h2></section>"
 
 
 # ============================================================================
-# MASTER ARCHITECT: Main Generator
+# MASTER ARCHITECT
 # ============================================================================
 
 class MasterArchitect:
-    """
-    Enterprise-grade website generator with industry-aware styling,
-    section variants, professional defaults, and elite design principles.
-    """
 
     def __init__(self, business_name: str, prompt: str, version: int = 1):
-        try:
-            self.name = business_name or "Business"
-            self.prompt = prompt or ""
-            self.version = version
-            self.industry = detect_industry(self.prompt)
-            self.theme = self._select_theme()
-            self.font_family, self.font_url = FONT_STACKS.get(self.theme.get("font", "geometric"), FONT_STACKS["geometric"])
-            self.data = {}
-            # Deterministic-but-varied seed based on name + prompt hash
-            seed_str = f"{self.name}{self.prompt}{version}"
-            self.seed = int(hashlib.md5(seed_str.encode()).hexdigest(), 16) % (2**32)
-            random.seed(self.seed)
-            logger.info(f"MasterArchitect initialized: {self.name}, industry: {self.industry}, theme: {self.theme['id']}, seed: {self.seed}")
-        except Exception as e:
-            logger.error(f"Error initializing MasterArchitect: {e}")
-            self.name = business_name or "Business"
-            self.prompt = prompt or ""
-            self.version = version
-            self.industry = "tech"
-            self.theme = THEMES.get("pro_light", {})
-            self.font_family, self.font_url = FONT_STACKS["geometric"]
-            self.data = {}
-            self.seed = 42
+        raw_name = (business_name or "").strip()
+        raw_prompt = (prompt or "").strip()
 
-    def _select_theme(self) -> Dict:
-        """Select theme based on industry."""
-        try:
-            theme_id = INDUSTRY_THEME_MAP.get(self.industry, "pro_light")
-            return THEMES.get(theme_id, THEMES["pro_light"])
-        except Exception as e:
-            logger.warning(f"Error selecting theme: {e}")
-            return THEMES.get("pro_light", {})
+        # Step 1: extract the real name and recover any description overflow
+        clean_name, clean_prompt = extract_business_name(raw_name, raw_prompt)
+
+        # Step 2: detect industry early (needed for name fallback)
+        self.industry = detect_industry(clean_prompt or raw_prompt)
+
+        # Step 3: if name is still empty, derive a placeholder from industry
+        if not clean_name:
+            clean_name = derive_name_from_prompt(clean_prompt, self.industry)
+            logger.info(f"No explicit business name found; derived: '{clean_name}'")
+
+        self.name = clean_name
+        self.prompt = clean_prompt
+        self.version = version
+        self.seed = f"{self.name}::{self.prompt}"
+        self.theme = select_theme(self.industry, seed=self.seed)
+        self.data: Dict = {}
+        self.images: List[str] = []
+        logger.info(f"MasterArchitect: name='{self.name}', industry={self.industry}, theme={self.theme['id']}")
 
     def get_ai_payload(self) -> Dict:
-        """Orchestrate single AI call to generate all website content."""
+        # Determine what kind of "pricing" makes sense for this industry
+        project_based_industries = {"construction", "logistics", "automotive", "events"}
+        services_industries      = {"legal", "nonprofit"}
+        no_price_industries      = project_based_industries | services_industries
+
+        if self.industry in project_based_industries:
+            pricing_instruction = """  "pricing": [   // 3 service PACKAGES (not monthly tiers — this is a project/trade business)
+    // Do NOT use monthly prices. Instead describe what each package covers.
+    // Use names like "Small Projects", "Commercial Work", "Enterprise Contracts"
+    // Set "price" to "Get a Quote" or "From $X,XXX" — realistic for this trade
+    {"name": "...", "price": "From $X,XXX", "description": "1 sentence about scope", "features": ["...", "...", "...", "...", "..."], "featured": false},
+    {"name": "...", "price": "From $X,XXX", "description": "1 sentence about scope", "features": ["...", "...", "...", "...", "..."], "featured": true},
+    {"name": "...", "price": "Get a Quote", "description": "1 sentence about scope", "features": ["...", "...", "...", "...", "..."], "featured": false}
+  ],"""
+        elif self.industry in services_industries:
+            pricing_instruction = """  "pricing": [   // 3 service OFFERINGS (no monthly pricing — this is a professional service)
+    // Use names like "Initial Consultation", "Ongoing Retainer", "Full Representation"
+    // Set "price" to "Complimentary" / "From $X/hr" / "Custom Engagement"
+    {"name": "...", "price": "Complimentary", "description": "1 sentence", "features": ["...", "...", "...", "...", "..."], "featured": false},
+    {"name": "...", "price": "From $X/hr", "description": "1 sentence", "features": ["...", "...", "...", "...", "..."], "featured": true},
+    {"name": "...", "price": "Custom", "description": "1 sentence", "features": ["...", "...", "...", "...", "..."], "featured": false}
+  ],"""
+        else:
+            pricing_instruction = """  "pricing": [   // 3 pricing tiers realistic for this industry
+    {"name": "...", "price": "$X", "description": "1 sentence", "features": ["...", "...", "...", "...", "..."], "featured": false},
+    {"name": "...", "price": "$X", "description": "1 sentence", "features": ["...", "...", "...", "...", "..."], "featured": true},
+    {"name": "...", "price": "Custom", "description": "1 sentence", "features": ["...", "...", "...", "...", "..."], "featured": false}
+  ],"""
+
+        system_msg = (
+            "You are an elite conversion copywriter and brand strategist. "
+            "Generate SPECIFIC, vivid, industry-tailored website content. "
+            "Avoid all generic filler phrases. Output ONLY valid JSON — no markdown, no prose."
+        )
+        user_msg = f"""Create website content for '{self.name}'.
+Business description: {self.prompt}
+Detected industry: {self.industry}
+
+CRITICAL RULES:
+- Write headlines SPECIFIC to this exact business — not generic SaaS copy
+- Use the business's actual domain language (construction = builds, delivers, installs; legal = advises, represents, protects)
+- Features must reflect what THIS business actually does, not generic tech features
+- Tone must match the industry: formal for legal, direct for construction, warm for food, bold for startups
+
+Return ONLY this JSON (no backticks, no preamble):
+{{
+  "nav": ["string", "string", "string", "string"],
+  "hero": {{
+    "h1": "max 8 words, punchy headline specific to this business",
+    "sub": "1 sentence value proposition using this industry's language",
+    "cta": "action verb + short phrase appropriate for this industry"
+  }},
+  "tagline": "2-5 word brand slogan",
+  "brand_voice": "one word: professional|bold|warm|playful|luxurious|technical",
+  "features": [
+    {{"title": "...", "description": "2 sentence description specific to what this business actually does", "icon": "emoji"}}
+  ],
+{pricing_instruction}
+  "testimonials": [
+    {{"name": "...", "role": "...", "company": "...", "quote": "specific 1-2 sentence testimonial about real results"}}
+  ],
+  "faq": [
+    {{"q": "...", "a": "..."}}
+  ],
+  "cta_text": "closing CTA headline appropriate for this industry",
+  "unsplash_keywords": ["keyword1", "keyword2", "keyword3", "keyword4", "keyword5"]
+}}"""
+        if not AI_AVAILABLE:
+            logger.warning("AI client unavailable; using fallback")
+            return self._get_fallback_payload()
         try:
-            system_msg = (
-                "You are an elite Web Architect designing premium, conversion-optimized websites. "
-                "Output ONLY valid JSON. No markdown, no preamble, no trailing text."
-            )
-
-            user_msg = f"""
-Create premium, specific website content for '{self.name}'.
-Business Context: {self.prompt}
-Industry: {self.industry}
-
-Generate a JSON object with EXACTLY these keys:
-- nav: array of 5 short navigation link labels relevant to this business
-- hero: {{h1: (bold, punchy headline under 8 words), sub: (compelling 1-2 sentence subtitle), cta: (action button text, 2-4 words)}}
-- features: array of exactly 3 objects, each: {{title: (feature name), description: (2-sentence specific benefit), icon: (relevant emoji)}}
-- pricing: array of exactly 3 objects: {{name, price (e.g. "$49" or "Custom"), features: array of 5 specific strings, featured: boolean (true only for middle)}}
-- testimonials: array of 2 objects: {{name, company, quote (specific, not generic)}}
-- faq: array of 3 objects: {{q, a}} — answer common objections specific to this business
-- cta_text: one powerful closing sentence for the final CTA section
-- unsplash_keywords: array of 5 relevant image search terms
-
-IMPORTANT: Make ALL content specific to '{self.name}' and '{self.prompt}'. Do NOT use generic filler text.
-            """
-
-            if not AI_AVAILABLE:
-                logger.warning("AI client not available, using dynamic fallback payload")
-                return get_dynamic_fallback(self.name, self.industry, self.prompt)
-
-            res = chat_completion(system=system_msg, user=user_msg, temperature=0.8)
+            res = chat_completion(system=system_msg, user=user_msg, temperature=0.75)
             cleaned = res.strip().replace("```json", "").replace("```", "").strip()
             payload = json.loads(cleaned)
-            logger.info(f"AI payload generated successfully for {self.name}")
+            logger.info("AI payload generated successfully")
             return payload
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON parse error in AI payload: {e}")
-            return get_dynamic_fallback(self.name, self.industry, self.prompt)
         except Exception as e:
-            logger.error(f"Error getting AI payload: {e}\n{traceback.format_exc()}")
-            return get_dynamic_fallback(self.name, self.industry, self.prompt)
+            logger.error(f"AI payload error: {e}")
+            return self._get_fallback_payload()
 
-    # ------------------------------------------------------------------
-    # Section renderers
-    # ------------------------------------------------------------------
+    def _get_fallback_payload(self) -> Dict:
+        return {
+            "nav": ["Features", "Pricing", "FAQ", "Contact"],
+            "hero": {"h1": f"Welcome to {self.name}", "sub": "Premium solutions built for your needs.", "cta": "Get Started"},
+            "tagline": "Built for the bold.",
+            "brand_voice": "professional",
+            "features": [
+                {"title": "Speed & Reliability", "description": "Industry-leading uptime with blazing performance. Never miss a beat.", "icon": "⚡"},
+                {"title": "Seamless Integration", "description": "Connects with your existing stack in minutes. No dev required.", "icon": "🔗"},
+                {"title": "Powerful Analytics", "description": "Real-time insights to drive smarter decisions every day.", "icon": "📊"},
+            ],
+            "pricing": [
+                {"name": "Starter", "price": "$29", "description": "Perfect for individuals.", "features": ["5 projects", "1GB storage", "Email support", "API access", "Monthly reports"], "featured": False},
+                {"name": "Pro", "price": "$99", "description": "For growing teams.", "features": ["Unlimited projects", "50GB storage", "Priority support", "Advanced analytics", "Custom integrations"], "featured": True},
+                {"name": "Enterprise", "price": "Custom", "description": "For large organisations.", "features": ["Everything in Pro", "Dedicated manager", "SLA guarantee", "Custom contracts", "On-premise option"], "featured": False},
+            ],
+            "testimonials": [
+                {"name": "Sarah Chen", "role": "CEO", "company": "NexusCorp", "quote": "Completely transformed our workflow. We saved 20 hours per week."},
+                {"name": "Marcus Webb", "role": "CTO", "company": "LaunchpadAI", "quote": "The best platform investment we've made. ROI was visible within weeks."},
+            ],
+            "faq": [
+                {"q": "How quickly can I get started?", "a": "You'll be fully set up in under 10 minutes with our guided onboarding."},
+                {"q": "What support do you provide?", "a": "All plans include email support. Pro and Enterprise get 24/7 priority access."},
+                {"q": "Is there a free trial?", "a": "Yes — a full 14-day free trial, no credit card required."},
+            ],
+            "cta_text": f"Ready to take {self.name} to the next level?",
+            "unsplash_keywords": ["technology", "business", "modern", "team", "workspace"],
+        }
+
+    def _pick_hero_variant(self) -> Callable:
+        mapping = {
+            "luxury":       HeroVariant.centered_spotlight,
+            "agency":       HeroVariant.centered_spotlight,
+            "beauty":       HeroVariant.centered_spotlight,
+            "finance":      HeroVariant.stats_hero,
+            "real_estate":  HeroVariant.stats_hero,
+            "legal":        HeroVariant.stats_hero,
+            "saas":         HeroVariant.split_grid,
+            "ecommerce":    HeroVariant.editorial_large,
+            "restaurant":   HeroVariant.editorial_large,
+            "education":    HeroVariant.split_grid,
+            "developer":    HeroVariant.split_grid,
+            # Trades: split with a strong job-site photo
+            "construction": HeroVariant.split_grid,
+            "logistics":    HeroVariant.stats_hero,
+            "automotive":   HeroVariant.split_grid,
+            "events":       HeroVariant.editorial_large,
+            "nonprofit":    HeroVariant.centered_spotlight,
+        }
+        default_pool = [HeroVariant.split_grid, HeroVariant.centered_spotlight, HeroVariant.editorial_large]
+        if self.industry in mapping:
+            return mapping[self.industry]
+        idx = int(hashlib.md5(self.seed.encode()).hexdigest(), 16) % len(default_pool)
+        return default_pool[idx]
+
+    def _pick_feature_variant(self) -> Callable:
+        mapping = {
+            "luxury":       FeatureVariant.showcase_bento,
+            "agency":       FeatureVariant.showcase_bento,
+            "beauty":       FeatureVariant.showcase_bento,
+            "finance":      FeatureVariant.icon_list,
+            "real_estate":  FeatureVariant.icon_list,
+            "legal":        FeatureVariant.icon_list,
+            "health":       FeatureVariant.alternating_blocks,
+            "travel":       FeatureVariant.alternating_blocks,
+            "restaurant":   FeatureVariant.alternating_blocks,
+            "saas":         FeatureVariant.cards_grid,
+            "ecommerce":    FeatureVariant.cards_grid,
+            "developer":    FeatureVariant.cards_grid,
+            # Trades: alternating blocks shows real job-site photos per service
+            "construction": FeatureVariant.alternating_blocks,
+            "logistics":    FeatureVariant.icon_list,
+            "automotive":   FeatureVariant.alternating_blocks,
+            "events":       FeatureVariant.showcase_bento,
+            "nonprofit":    FeatureVariant.alternating_blocks,
+        }
+        default_pool = [FeatureVariant.cards_grid, FeatureVariant.showcase_bento, FeatureVariant.alternating_blocks]
+        if self.industry in mapping:
+            return mapping[self.industry]
+        idx = int(hashlib.md5((self.seed + "features").encode()).hexdigest(), 16) % len(default_pool)
+        return default_pool[idx]
+
+    def _pick_pricing_variant(self) -> Callable:
+        # Physical trades and project-based work — no monthly tiers, quote-driven
+        project_industries = {"construction", "logistics", "automotive", "events"}
+        # Professional services — consultation-based, no visible prices
+        services_industries = {"legal", "nonprofit"}
+        # Luxury/premium — two bold columns
+        premium_industries  = {"luxury", "agency", "beauty", "finance", "real_estate"}
+
+        if self.industry in project_industries:
+            return PricingVariant.project_based
+        if self.industry in services_industries:
+            return PricingVariant.services_list
+        if self.industry in premium_industries:
+            return PricingVariant.two_column_highlight
+        return PricingVariant.tiered_cards
 
     def render_nav(self) -> str:
-        """Fixed navigation with smooth scroll and professional styling."""
+        nav_items = "".join([
+            f'<li><a href="#{link.lower().replace(" ", "")}" class="{self.theme["text_muted"]} hover:{self.theme["primary"]}-500 transition-colors duration-200 text-sm font-medium">{link}</a></li>'
+            for link in (self.data.get('nav', []) or [])
+        ])
         try:
-            nav_items = "".join([
-                f'<li><a href="#{link.lower().replace(" ", "").replace("/", "")}" class="{self.theme.get("text_muted")} hover:{self.theme.get("text", "text-gray-900").replace("text-", "")} transition-colors duration-300 font-medium text-sm">{link}</a></li>'
-                for link in (self.data.get('nav', []) or [])
-            ])
-            mode_class = "border-white/10" if self.theme.get("mode") == "dark" else "border-gray-200/60"
-
             return f"""
-            <nav class="fixed top-0 w-full z-50 {self.theme.get('glass')} border-b {mode_class} py-4">
-                <div class="container mx-auto {PADDING_CONTAINER} flex justify-between items-center gap-8">
-                    <a href="#" class="text-2xl font-black tracking-tighter {self.theme.get('text')} flex-shrink-0">{self.name}</a>
+            <nav class="fixed top-0 w-full z-50 {self.theme['nav_bg']} backdrop-blur-xl py-4">
+                <div class="container mx-auto {PADDING_CONTAINER} flex justify-between items-center">
+                    <a href="#" class="text-xl font-black tracking-tight {self.theme['text']}">{self.name}</a>
                     <ul class="hidden md:flex gap-8">{nav_items}</ul>
-                    <a href="#contact" class="flex-shrink-0 px-6 py-3 bg-gradient-to-r {self.theme.get('btn_grad')} text-white rounded-full font-bold text-sm {HOVER_LIFT} shadow-lg">
+                    <a href="#contact" class="px-5 py-2.5 bg-gradient-to-r {self.theme['grad']} text-white rounded-lg font-semibold text-sm {HOVER_LIFT} shadow-md">
                         {self.data.get('hero', {}).get('cta', 'Get Started')}
                     </a>
                 </div>
             </nav>"""
         except Exception as e:
-            logger.error(f"Error rendering nav: {e}")
-            return f"<nav class='fixed top-0 w-full z-50 bg-white border-b py-4'><div class='container mx-auto px-6 flex justify-between items-center'><a href='#' class='text-2xl font-bold'>{self.name}</a></div></nav>"
+            logger.error(f"nav error: {e}")
+            return f"<nav class='fixed top-0 w-full z-50 bg-white/90 backdrop-blur py-4 border-b'><div class='container mx-auto px-6'><a href='#' class='text-xl font-bold'>{self.name}</a></div></nav>"
 
     def render_hero(self) -> str:
-        """Select hero variant based on industry and theme."""
         try:
-            # Deterministic but varied selection
-            HERO_MAP = {
-                "luxury":       HeroVariant.cinematic_overlay,
-                "food":         HeroVariant.cinematic_overlay,
-                "fitness":      HeroVariant.cinematic_overlay,
-                "agency":       HeroVariant.editorial_slash,
-                "media":        HeroVariant.editorial_slash,
-                "architecture": HeroVariant.editorial_slash,
-                "gaming":       HeroVariant.brutalist_full,
-                "sports":       HeroVariant.brutalist_full,
-                "music":        HeroVariant.brutalist_full,
-                "nft":          HeroVariant.centered_spotlight,
-                "ai":           HeroVariant.centered_spotlight,
-                "saas":         HeroVariant.split_grid,
-                "finance":      HeroVariant.split_grid,
-                "health":       HeroVariant.split_grid,
-            }
-            variant_fn = HERO_MAP.get(self.industry, HeroVariant.split_grid)
-            return variant_fn(self.theme, self.data, self.industry, self.font_url)
+            return self._pick_hero_variant()(self.theme, self.data, self.images)
         except Exception as e:
-            logger.error(f"Error rendering hero: {e}")
-            return f"<section id='hero' class='{self.theme.get('bg')} py-32'><div class='container mx-auto px-6 text-center'><h1 class='text-6xl font-bold'>{self.name}</h1></div></section>"
+            logger.error(f"hero error: {e}")
+            return f"<section id='hero' class='{self.theme['bg']} py-32'><div class='container mx-auto px-6 text-center'><h1 class='{self.theme['text']} text-5xl font-bold'>Welcome</h1></div></section>"
 
     def render_features(self) -> str:
-        """Select feature variant based on industry."""
         try:
-            FEATURE_MAP = {
-                "ecommerce":    FeatureVariant.showcase_grid,
-                "saas":         FeatureVariant.cards_grid,
-                "agency":       FeatureVariant.numbered_list,
-                "media":        FeatureVariant.numbered_list,
-                "architecture": FeatureVariant.numbered_list,
-                "luxury":       FeatureVariant.alternating_blocks,
-                "food":         FeatureVariant.alternating_blocks,
-                "health":       FeatureVariant.alternating_blocks,
-                "eco":          FeatureVariant.alternating_blocks,
-                "gaming":       FeatureVariant.showcase_grid,
-                "sports":       FeatureVariant.showcase_grid,
-                "fitness":      FeatureVariant.showcase_grid,
-            }
-            variant_fn = FEATURE_MAP.get(self.industry, FeatureVariant.cards_grid)
-            return variant_fn(self.theme, self.data.get('features', []), self.industry)
+            return self._pick_feature_variant()(self.theme, self.data.get('features', []), self.images)
         except Exception as e:
-            logger.error(f"Error rendering features: {e}")
-            return f"<section id='features' class='{self.theme.get('bg_alt')} py-20'><h2 class='text-center text-4xl font-bold'>Features</h2></section>"
+            logger.error(f"features error: {e}")
+            return f"<section id='features' class='{self.theme['bg_alt']} py-20'><h2 class='{self.theme['text']} text-4xl font-bold text-center'>Features</h2></section>"
 
     def render_pricing(self) -> str:
-        """Select pricing variant based on industry."""
         try:
-            PRICING_MAP = {
-                "finance":   PricingVariant.comparison_table,
-                "saas":      PricingVariant.comparison_table,
-                "ai":        PricingVariant.comparison_table,
-                "food":      PricingVariant.two_option_split,
-                "fitness":   PricingVariant.two_option_split,
-                "luxury":    PricingVariant.two_option_split,
-            }
-            variant_fn = PRICING_MAP.get(self.industry, PricingVariant.tiered_cards)
-            return variant_fn(self.theme, self.data.get('pricing', []))
+            return self._pick_pricing_variant()(self.theme, self.data.get('pricing', []))
         except Exception as e:
-            logger.error(f"Error rendering pricing: {e}")
-            return f"<section id='pricing' class='{self.theme.get('bg_alt')} py-20'><h2 class='text-center text-4xl font-bold'>Pricing</h2></section>"
+            logger.error(f"pricing error: {e}")
+            return f"<section id='pricing' class='{self.theme['bg_alt']} py-20'><h2 class='{self.theme['text']} text-4xl font-bold text-center'>Pricing</h2></section>"
 
     def render_testimonials(self) -> str:
-        """Client testimonials with glassmorphism cards."""
+        testimonials = self.data.get('testimonials', [])
+        if not testimonials:
+            return ""
+        cards = "".join([f"""
+        <div class="{self.theme['glass']} border {self.theme['border']} p-8 rounded-2xl {HOVER_LIFT}">
+            <div class="flex gap-1 mb-4">{''.join(['<span class="text-amber-400 text-sm">★</span>' for _ in range(5)])}</div>
+            <p class="{self.theme['text_muted']} text-base italic leading-relaxed mb-6">"{t.get('quote', '')}"</p>
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-gradient-to-br {self.theme['grad']} flex items-center justify-center text-white font-bold text-sm">
+                    {t.get('name', 'C')[0]}
+                </div>
+                <div>
+                    <p class="{self.theme['text']} font-bold text-sm">{t.get('name', 'Client')}</p>
+                    <p class="{self.theme['text_light']} text-xs">{t.get('role', '')} · {t.get('company', 'Company')}</p>
+                </div>
+            </div>
+        </div>""" for t in testimonials])
         try:
-            testimonials = self.data.get('testimonials', [])
-            if not testimonials:
-                return ""
-
-            testimonial_cards = "".join([f"""
-            <div class="{self.theme.get('glass')} {self.theme.get('card_border')} p-10 rounded-2xl {HOVER_LIFT} flex flex-col gap-6">
-                <div class="flex gap-1">
-                    {''.join(['<span class="text-amber-400">★</span>'] * 5)}
-                </div>
-                <p class="{self.theme.get('text')} text-lg leading-relaxed">"{t.get('quote', '')}"</p>
-                <div class="flex items-center gap-4 mt-auto pt-4 border-t {self.theme.get('card_border')}">
-                    <div class="w-10 h-10 rounded-full bg-gradient-to-br {self.theme.get('grad')} flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-                        {t.get('name', 'C')[0].upper()}
-                    </div>
-                    <div>
-                        <p class="{self.theme.get('text')} font-bold text-sm">{t.get('name', 'Client')}</p>
-                        <p class="{self.theme.get('text_light')} text-xs">{t.get('company', 'Company')}</p>
-                    </div>
-                </div>
-            </div>""" for t in testimonials])
-
             return f"""
-            <section id="testimonials" class="{self.theme.get('bg_alt')} {PADDING_SECTION}">
+            <section id="testimonials" class="{self.theme['bg']} {PADDING_SECTION}">
                 <div class="container mx-auto {PADDING_CONTAINER}">
-                    <h2 class="{HEADING_SECTION} {self.theme.get('text')} text-center mb-4">What People Say</h2>
-                    <p class="text-xl {self.theme.get('text_muted')} text-center mb-16">Real results from real customers.</p>
-                    <div class="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-                        {testimonial_cards}
+                    <div class="text-center mb-12">
+                        <p class="text-xs font-semibold uppercase tracking-widest {self.theme['text_light']} mb-3">Testimonials</p>
+                        <h2 class="{HEADING_SECTION} {self.theme['text']}">Trusted by Leaders</h2>
                     </div>
+                    <div class="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">{cards}</div>
                 </div>
             </section>"""
         except Exception as e:
-            logger.error(f"Error rendering testimonials: {e}")
+            logger.error(f"testimonials error: {e}")
             return ""
 
     def render_faq(self) -> str:
-        """FAQ section with clean accordion-style cards."""
+        faqs = self.data.get('faq', [])
+        if not faqs:
+            return ""
+        items = "".join([f"""
+        <details class="{self.theme['glass']} border {self.theme['border']} rounded-xl overflow-hidden group">
+            <summary class="flex justify-between items-center p-6 cursor-pointer font-semibold {self.theme['text']} list-none hover:opacity-80 transition">
+                {faq.get('q', '')}
+                <span class="ml-4 shrink-0 w-5 h-5 rounded-full border {self.theme['border']} flex items-center justify-center text-xs group-open:rotate-45 transition-transform duration-300">+</span>
+            </summary>
+            <div class="px-6 pb-6">
+                <p class="{self.theme['text_muted']} text-sm leading-relaxed">{faq.get('a', '')}</p>
+            </div>
+        </details>""" for faq in faqs])
         try:
-            faqs = self.data.get('faq', [])
-            if not faqs:
-                return ""
-
-            faq_items = "".join([f"""
-            <div class="{self.theme.get('glass')} {self.theme.get('card_border')} p-8 rounded-2xl {HOVER_GLOW} group cursor-pointer">
-                <div class="flex items-start justify-between gap-4">
-                    <h3 class="text-lg font-bold {self.theme.get('text')} leading-snug">{faq.get('q', '')}</h3>
-                    <span class="{self.theme.get('text_light')} text-xl font-light flex-shrink-0">+</span>
-                </div>
-                <p class="{self.theme.get('text_muted')} leading-relaxed mt-4 text-sm">{faq.get('a', '')}</p>
-            </div>""" for faq in faqs])
-
             return f"""
-            <section id="faq" class="{self.theme.get('bg')} {PADDING_SECTION}">
+            <section id="faq" class="{self.theme['bg_alt']} {PADDING_SECTION}">
                 <div class="container mx-auto {PADDING_CONTAINER}">
-                    <div class="max-w-3xl mx-auto">
-                        <h2 class="{HEADING_SECTION} {self.theme.get('text')} text-center mb-4">Common Questions</h2>
-                        <p class="text-xl {self.theme.get('text_muted')} text-center mb-16">Everything you need to know before you start.</p>
-                        <div class="space-y-4">
-                            {faq_items}
-                        </div>
-                    </div>
+                    <h2 class="{HEADING_SECTION} {self.theme['text']} text-center mb-10">Frequently Asked</h2>
+                    <div class="space-y-3 max-w-2xl mx-auto">{items}</div>
                 </div>
             </section>"""
         except Exception as e:
-            logger.error(f"Error rendering FAQ: {e}")
+            logger.error(f"faq error: {e}")
             return ""
 
-    def render_trust_cloud(self) -> str:
-        """Social proof / logo cloud."""
+    def render_trust_band(self) -> str:
+        industry_trust = {
+            "finance":    ["SOC 2 Certified", "256-bit Encryption", "GDPR Compliant", "FINRA Member", "ISO 27001"],
+            "health":     ["HIPAA Compliant", "FDA Registered", "ISO 13485", "ADA Accessible", "HITRUST CSF"],
+            "saas":       ["SOC 2 Type II", "99.99% Uptime SLA", "GDPR Ready", "24/7 Monitoring", "Zero-downtime deploys"],
+            "ecommerce":  ["PCI-DSS Compliant", "SSL Secured", "Money-back Guarantee", "Trusted Reviews", "Secure Checkout"],
+            "education":  ["FERPA Compliant", "COPPA Safe", "Accredited Provider", "ADA Accessible", "Secure Platform"],
+            "developer":  ["SOC 2 Type II", "Open Source Core", "99.9% Uptime", "GDPR Ready", "Enterprise SLA"],
+            "restaurant": ["Health Inspected ✓", "Locally Sourced", "5-Star Rated", "Est. 2018", "Award Winning"],
+        }
+        badges = industry_trust.get(self.industry, ["ISO 9001", "SOC 2", "GDPR Compliant", "256-bit SSL", "Award Winner 2024"])
+        badge_html = "".join([f'<span class="px-3 py-1.5 rounded-full text-xs font-semibold {self.theme["badge_style"]}">{b}</span>' for b in badges])
         try:
-            brand_names = ["TechCorp", "Nexus Group", "Atlas Co.", "Vertex Inc.", "Luminary"]
-            brands_html = "".join([f'<span class="{self.theme.get("text_muted")} font-bold text-sm tracking-wide opacity-50 hover:opacity-80 transition">✦ {b}</span>' for b in brand_names])
             return f"""
-            <section class="{self.theme.get('bg_alt')} py-16 border-t border-b {self.theme.get('card_border')}">
+            <div class="{self.theme['bg_alt']} border-y {self.theme['border']} py-8">
                 <div class="container mx-auto {PADDING_CONTAINER}">
-                    <p class="{self.theme.get('text_light')} text-xs text-center mb-8 uppercase tracking-[0.3em]">Trusted by innovative companies worldwide</p>
-                    <div class="flex flex-wrap justify-center gap-8 md:gap-16">
-                        {brands_html}
+                    <div class="flex flex-wrap items-center justify-center gap-3">
+                        <span class="text-xs {self.theme['text_light']} uppercase tracking-widest mr-4">Verified &amp; Trusted</span>
+                        {badge_html}
                     </div>
                 </div>
-            </section>"""
+            </div>"""
         except Exception as e:
-            logger.error(f"Error rendering trust cloud: {e}")
+            logger.error(f"trust band error: {e}")
             return ""
 
     def render_cta_section(self) -> str:
-        """Final CTA before footer."""
+        cta_text = self.data.get('cta_text', 'Ready to get started?')
+        img = self.images[2] if len(self.images) > 2 else _get_unsplash_url(["business", "team"])
         try:
-            cta_text = self.data.get('cta_text', f'Ready to experience {self.name}?')
             return f"""
-            <section id="contact" class="relative {self.theme.get('bg')} {PADDING_SECTION} overflow-hidden">
-                <div class="absolute inset-0 pointer-events-none overflow-hidden">
-                    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-r {self.theme.get('grad')} rounded-full blur-3xl opacity-10"></div>
+            <section id="contact" class="relative {self.theme['bg']} {PADDING_SECTION} overflow-hidden">
+                <div class="absolute inset-0">
+                    <img src="{img}" alt="" class="w-full h-full object-cover opacity-[0.07]" loading="lazy" />
                 </div>
+                <div class="absolute inset-0 bg-gradient-to-br {self.theme['grad_subtle']} opacity-40"></div>
+                <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-gradient-to-r {self.theme['grad']} opacity-10 blur-[80px] rounded-full"></div>
                 <div class="container mx-auto {PADDING_CONTAINER} relative z-10 text-center">
-                    <h2 class="{HEADING_SECTION} {self.theme.get('text')} mb-6 max-w-3xl mx-auto">{cta_text}</h2>
-                    <p class="text-xl {self.theme.get('text_muted')} mb-12 max-w-xl mx-auto">Join the businesses already winning with {self.name}.</p>
+                    <h2 class="{HEADING_SECTION} {self.theme['text']} mb-6">{cta_text}</h2>
+                    <p class="text-lg {self.theme['text_muted']} mb-10 max-w-xl mx-auto">{self.data.get('hero', {}).get('sub', '')}</p>
                     <div class="flex flex-col sm:flex-row gap-4 justify-center">
-                        <a href="mailto:info@example.com" class="px-10 py-6 bg-gradient-to-r {self.theme.get('btn_grad')} text-white rounded-full font-bold text-lg {HOVER_LIFT} shadow-xl">
-                            {self.data.get('hero', {}).get('cta', 'Get Started')}
+                        <a href="mailto:hello@{self.name.lower().replace(' ', '')}.com" class="px-10 py-5 bg-gradient-to-r {self.theme['grad']} text-white rounded-xl font-bold {HOVER_LIFT} shadow-2xl">
+                            Book a Demo
                         </a>
-                        <a href="tel:+1234567890" class="px-10 py-6 {self.theme.get('glass')} {self.theme.get('card_border')} {self.theme.get('text')} rounded-full font-bold {HOVER_GLOW}">
-                            Book a Call →
+                        <a href="tel:+12345678900" class="{self.theme['glass']} border {self.theme['border']} {self.theme['text']} px-10 py-5 rounded-xl font-bold {HOVER_GLOW}">
+                            Talk to Sales
                         </a>
                     </div>
                 </div>
             </section>"""
         except Exception as e:
-            logger.error(f"Error rendering CTA: {e}")
-            return f"<section id='contact' class='{self.theme.get('bg')} py-20 text-center'><h2 class='text-4xl font-bold'>Get Started</h2></section>"
+            logger.error(f"cta error: {e}")
+            return f"<section id='contact' class='{self.theme['bg']} py-24 text-center'><h2 class='{self.theme['text']} text-4xl font-bold'>Get In Touch</h2></section>"
 
     def render_footer(self) -> str:
-        """Professional multi-column footer."""
+        nav_links = "".join([
+            f'<li><a href="#{link.lower().replace(" ", "")}" class="{self.theme["text_muted"]} hover:opacity-70 text-sm transition">{link}</a></li>'
+            for link in (self.data.get('nav', []) or [])
+        ])
         try:
-            nav_links = "".join([
-                f'<li><a href="#{link.lower().replace(" ", "").replace("/", "")}" class="{self.theme.get("text_muted")} hover:{self.theme.get("text", "text-gray-900").replace("text-", "")} text-sm transition">{link}</a></li>'
-                for link in (self.data.get('nav', []) or [])
-            ])
-
             return f"""
-            <footer class="{self.theme.get('bg_alt')} border-t {self.theme.get('card_border')} py-16">
+            <footer class="{self.theme['bg_alt']} border-t {self.theme['border']} py-14">
                 <div class="container mx-auto {PADDING_CONTAINER}">
-                    <div class="grid md:grid-cols-4 gap-12 mb-12">
-                        <div class="md:col-span-1">
-                            <h3 class="font-black text-xl {self.theme.get('text')} mb-4 tracking-tight">{self.name}</h3>
-                            <p class="{self.theme.get('text_muted')} text-sm leading-relaxed">Premium solutions for businesses that demand the best.</p>
+                    <div class="grid md:grid-cols-4 gap-10 mb-10">
+                        <div class="md:col-span-2">
+                            <h3 class="font-black text-xl {self.theme['text']} mb-3">{self.name}</h3>
+                            <p class="{self.theme['text_muted']} text-sm max-w-xs leading-relaxed">{self.data.get('hero', {}).get('sub', 'Premium solutions for modern businesses.')}</p>
+                            <p class="text-xs {self.theme['text_light']} mt-4 italic">{self.data.get('tagline', '')}</p>
                         </div>
                         <div>
-                            <h4 class="font-bold text-sm uppercase tracking-widest {self.theme.get('text')} mb-5 opacity-60">Product</h4>
-                            <ul class="space-y-3">{nav_links}</ul>
+                            <h4 class="font-bold text-sm {self.theme['text']} mb-4 uppercase tracking-widest">Navigation</h4>
+                            <ul class="space-y-2">{nav_links}</ul>
                         </div>
                         <div>
-                            <h4 class="font-bold text-sm uppercase tracking-widest {self.theme.get('text')} mb-5 opacity-60">Company</h4>
-                            <ul class="space-y-3 text-sm">
-                                <li><a href="#" class="{self.theme.get('text_muted')} hover:{self.theme.get('text', 'text-gray-900').replace('text-', '')} transition">About Us</a></li>
-                                <li><a href="#" class="{self.theme.get('text_muted')} hover:{self.theme.get('text', 'text-gray-900').replace('text-', '')} transition">Blog</a></li>
-                                <li><a href="#" class="{self.theme.get('text_muted')} hover:{self.theme.get('text', 'text-gray-900').replace('text-', '')} transition">Careers</a></li>
-                            </ul>
-                        </div>
-                        <div>
-                            <h4 class="font-bold text-sm uppercase tracking-widest {self.theme.get('text')} mb-5 opacity-60">Legal</h4>
-                            <ul class="space-y-3 text-sm">
-                                <li><a href="#" class="{self.theme.get('text_muted')} transition">Privacy Policy</a></li>
-                                <li><a href="#" class="{self.theme.get('text_muted')} transition">Terms of Service</a></li>
-                                <li><a href="mailto:hello@example.com" class="{self.theme.get('text_muted')} transition">hello@example.com</a></li>
+                            <h4 class="font-bold text-sm {self.theme['text']} mb-4 uppercase tracking-widest">Legal</h4>
+                            <ul class="space-y-2 text-sm">
+                                <li><a href="#" class="{self.theme['text_muted']} hover:opacity-70 transition">Privacy Policy</a></li>
+                                <li><a href="#" class="{self.theme['text_muted']} hover:opacity-70 transition">Terms of Service</a></li>
+                                <li><a href="mailto:hello@example.com" class="{self.theme['text_muted']} hover:opacity-70 transition">Contact</a></li>
                             </ul>
                         </div>
                     </div>
-                    <div class="border-t {self.theme.get('card_border')} pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
-                        <p class="{self.theme.get('text_light')} text-sm">&copy; 2026 {self.name}. All rights reserved.</p>
-                        <p class="{self.theme.get('text_light')} text-xs font-mono">v{self.version} · {self.theme.get('id')} · {self.industry}</p>
+                    <div class="border-t {self.theme['border']} pt-6 flex flex-col md:flex-row justify-between items-center gap-4">
+                        <p class="{self.theme['text_light']} text-xs">&copy; 2026 {self.name}. All rights reserved.</p>
+                        <p class="{self.theme['text_light']} text-xs">v{self.version}</p>
                     </div>
                 </div>
             </footer>"""
         except Exception as e:
-            logger.error(f"Error rendering footer: {e}")
-            return f"<footer class='{self.theme.get('bg_alt')} py-8'><div class='container mx-auto px-6 text-center text-sm'>&copy; 2026 {self.name}.</div></footer>"
+            logger.error(f"footer error: {e}")
+            return f"<footer class='py-8 text-center text-sm text-gray-500'>&copy; 2026 {self.name}</footer>"
 
     def build(self) -> Dict[str, Any]:
-        """Assemble complete website with all sections."""
         try:
             self.data = self.get_ai_payload()
+            keywords = self.data.get('unsplash_keywords', ['business', 'team', 'modern'])
+            self.images = _get_img_set(keywords, count=6)
 
             sections = [
                 self.render_nav(),
                 self.render_hero(),
-                self.render_trust_cloud(),
+                self.render_trust_band(),
                 self.render_features(),
                 self.render_pricing(),
                 self.render_testimonials(),
@@ -1285,72 +1322,58 @@ IMPORTANT: Make ALL content specific to '{self.name}' and '{self.prompt}'. Do NO
                 self.render_footer(),
             ]
 
-            extra_css = self.theme.get("extra_css", "")
+            animations_css = """
+                @keyframes fadeInUp {
+                    from { opacity: 0; transform: translateY(24px); }
+                    to   { opacity: 1; transform: translateY(0); }
+                }
+                @keyframes floatY {
+                    0%, 100% { transform: translateY(0); }
+                    50%       { transform: translateY(-10px); }
+                }
+                section > .container { animation: fadeInUp 0.8s ease-out; }
+                details > summary::-webkit-details-marker { display: none; }
+            """
 
             html = f"""<!DOCTYPE html>
 <html lang="en" style="scroll-behavior: smooth;">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{self.name} — Official Site</title>
+    <title>{self.name}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="{self.font_url}" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="{self.theme['font_url']}">
     <style>
-        * {{ font-family: {self.font_family}; }}
-        
-        {extra_css}
-        
-        @keyframes fadeInUp {{
-            from {{ opacity: 0; transform: translateY(24px); }}
-            to   {{ opacity: 1; transform: translateY(0); }}
-        }}
-        @keyframes fadeInLeft {{
-            from {{ opacity: 0; transform: translateX(-24px); }}
-            to   {{ opacity: 1; transform: translateX(0); }}
-        }}
-        
-        #hero {{ animation: fadeInUp 0.9s ease-out forwards; }}
-        #features {{ animation: fadeInUp 0.9s 0.15s ease-out both; }}
-        #pricing  {{ animation: fadeInUp 0.9s 0.3s  ease-out both; }}
-        
-        html {{ scroll-behavior: smooth; }}
-        
-        ::-webkit-scrollbar {{ width: 6px; }}
-        ::-webkit-scrollbar-track {{ background: transparent; }}
-        ::-webkit-scrollbar-thumb {{ background: linear-gradient(to bottom, {self.theme.get('primary_hex', '#6366f1')}, transparent); border-radius: 999px; }}
+        *, *::before, *::after {{ box-sizing: border-box; }}
+        body {{ font-family: {self.theme['fonts']}; }}
+        {animations_css}
     </style>
 </head>
-<body class="{self.theme.get('bg')} {self.theme.get('text')} antialiased">
+<body class="{self.theme['bg']} {self.theme['text']}">
     {"".join(sections)}
 </body>
 </html>"""
 
-            logger.info(f"Website built successfully for {self.name} [{self.industry}/{self.theme.get('id')}]")
+            logger.info(f"Website built: {self.name}, industry={self.industry}, theme={self.theme['id']}")
             return {
                 "html": html,
                 "metadata": {
                     "business_name": self.name,
                     "industry": self.industry,
-                    "theme": self.theme.get('id', 'unknown'),
-                    "font": self.theme.get("font", "geometric"),
+                    "theme": self.theme["id"],
                     "version": self.version,
+                    "hero_variant": self._pick_hero_variant().__name__,
+                    "feature_variant": self._pick_feature_variant().__name__,
                     "status": "success",
                 }
             }
         except Exception as e:
-            logger.error(f"Error building website: {e}\n{traceback.format_exc()}")
+            logger.error(f"Build error: {e}\n{traceback.format_exc()}")
             return {
-                "html": f"<html><body><h1>Build Error</h1><pre>{str(e)}</pre></body></html>",
-                "metadata": {
-                    "business_name": self.name,
-                    "industry": self.industry,
-                    "theme": self.theme.get('id', 'unknown'),
-                    "version": self.version,
-                    "status": "error",
-                    "error": str(e),
-                }
+                "html": f"<html><body><h1>Build Error</h1><p>{e}</p></body></html>",
+                "metadata": {"status": "error", "error": str(e)}
             }
 
 
@@ -1361,77 +1384,61 @@ IMPORTANT: Make ALL content specific to '{self.name}' and '{self.prompt}'. Do NO
 def generate_ai_plan(ai_input: Dict[str, Any], version: int = 1, **kwargs) -> Dict[str, Any]:
     """
     Main entry point for website generation.
-
     Args:
         ai_input: {"business_name": str, "prompt": str}
-        version:  API version for future compatibility
-        **kwargs: Additional configuration (reserved)
-
+        version:  API version
     Returns:
-        Complete website data with HTML and metadata
+        {"html": str, "metadata": dict}
     """
     try:
         business_name = ai_input.get("business_name", "Business")
         prompt = ai_input.get("prompt", "")
-
-        logger.info(f"generate_ai_plan called: business_name={business_name}")
-
+        logger.info(f"generate_ai_plan: business_name={business_name}")
         architect = MasterArchitect(business_name, prompt, version=version)
-        result = architect.build()
-
-        logger.info(f"Website generation completed for {business_name} — theme: {result['metadata'].get('theme')}, industry: {result['metadata'].get('industry')}")
-        return result
+        return architect.build()
     except Exception as e:
-        logger.error(f"Error in generate_ai_plan: {e}\n{traceback.format_exc()}")
+        logger.error(f"generate_ai_plan error: {e}\n{traceback.format_exc()}")
         return {
-            "html": f"<html><body><h1>Error</h1><p>{str(e)}</p></body></html>",
-            "metadata": {
-                "business_name": ai_input.get("business_name", "Unknown"),
-                "status": "error",
-                "error": str(e),
-            }
+            "html": f"<html><body><h1>Error</h1><p>{e}</p></body></html>",
+            "metadata": {"status": "error", "error": str(e)}
         }
 
 
 def rewrite_content(original_text: str, tone: str = "professional", business_context: str = "") -> List[str]:
-    """AI-powered content rewriting with fallback."""
+    """Return 3 rewrites of original_text using AI, with fallback."""
+    if not AI_AVAILABLE:
+        return [original_text] * 3
     try:
-        if not AI_AVAILABLE:
-            return [original_text] * 3
-
-        system = "You are a world-class copywriter. Output ONLY valid JSON array."
+        system = "You are a world-class copywriter. Output ONLY valid JSON — no preamble."
         user = (
-            f"Rewrite '{original_text}' exactly 3 times in {tone} tone for context: {business_context}. "
-            f"Output JSON array: [\"version1\", \"version2\", \"version3\"]"
+            f"Rewrite this text exactly 3 times in a '{tone}' tone for context: '{business_context}'.\n"
+            f"Text: '{original_text}'\n"
+            f'Output a JSON array: ["version1", "version2", "version3"]'
         )
-
         res = chat_completion(system=system, user=user, temperature=0.8)
         result = json.loads(res.strip().replace("```json", "").replace("```", ""))
         return result if isinstance(result, list) and len(result) >= 3 else [original_text] * 3
     except Exception as e:
-        logger.warning(f"Error rewriting content: {e}")
+        logger.warning(f"rewrite_content error: {e}")
         return [original_text] * 3
 
 
 def get_design_tokens() -> Dict[str, Any]:
-    """Export design tokens for external use."""
+    """Export design tokens for external consumption."""
     return {
         "themes": THEMES,
         "spacing": {"section": PADDING_SECTION, "container": PADDING_CONTAINER},
         "typography": {
             "hero": HEADING_HERO,
+            "hero_alt": HEADING_HERO_ALT,
             "section": HEADING_SECTION,
             "feature": HEADING_FEATURE,
             "card": HEADING_CARD,
-            "fonts": FONT_STACKS,
         },
         "animations": {
-            "hover_lift":  HOVER_LIFT,
-            "hover_glow":  HOVER_GLOW,
+            "hover_lift": HOVER_LIFT,
+            "hover_glow": HOVER_GLOW,
             "hover_scale": HOVER_SCALE,
-            "hover_slide": HOVER_SLIDE,
         },
         "glass": {"dark": GLASS_DARK, "light": GLASS_LIGHT},
-        "industry_theme_map": INDUSTRY_THEME_MAP,
-        "industry_keywords": INDUSTRY_KEYWORDS,
     }
