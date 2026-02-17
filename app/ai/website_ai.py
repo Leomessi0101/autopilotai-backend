@@ -364,66 +364,81 @@ _DESCRIPTION_STARTERS = [
 
 def extract_business_name(raw_name: str, prompt: str) -> tuple[str, str]:
     """
-    Separates the actual business name from any descriptive text the user
-    accidentally put in the 'business_name' field.
-
-    Returns (clean_name, augmented_prompt) where any overflow description
-    is appended to the prompt so no info is lost.
-
-    Examples:
-        "i have a construction company" → name="", overflow added to prompt
-        "BuildRight Construction"       → name="BuildRight Construction"
-        "Apex Builders - we do roofing" → name="Apex Builders"
+    Extracts business name from EITHER the business_name field OR the prompt text.
+    
+    Handles:
+    - business_name="", prompt="The company name is BuildRight. We do roofing."
+    - business_name="i have a construction company", prompt="..."
+    - business_name="BuildRight LLC", prompt="..."
+    
+    Returns (clean_name, augmented_prompt)
     """
     raw = (raw_name or "").strip()
+    prompt_text = (prompt or "").strip()
+    
+    # STEP 1: Check if prompt contains explicit name declaration
+    prompt_lower = prompt_text.lower()
+    name_indicators = [
+        "the company name is ", "the business name is ", "our company name is ",
+        "company name: ", "business name: ", "we're called ", "we are called ",
+        "it's called ", "it is called ", "my company is called ", "my business is called ",
+    ]
+    
+    for indicator in name_indicators:
+        if indicator in prompt_lower:
+            idx = prompt_lower.index(indicator)
+            after = prompt_text[idx + len(indicator):].strip()
+            # Extract name until first terminator
+            name_end = len(after)
+            for sep in [".", ",", ";", " -", " and we", " that ", " which "]:
+                pos = after.find(sep)
+                if pos > 0 and pos < name_end:
+                    name_end = pos
+            name_from_prompt = after[:name_end].strip()
+            # Remove the declaration from prompt
+            before = prompt_text[:idx].strip()
+            remainder = prompt_text[idx + len(indicator) + name_end:].strip(" .,;")
+            cleaned_prompt = f"{before} {remainder}".strip()
+            logger.info(f"Extracted name from prompt: '{name_from_prompt}'")
+            return name_from_prompt, cleaned_prompt
+    
+    # STEP 2: If no prompt name, parse business_name field
     if not raw:
-        return "My Business", prompt
-
+        return "", prompt_text  # Will derive later
+    
     raw_lower = raw.lower()
-
-    # If it starts with a known description-starter phrase, the whole thing
-    # is a description and there's no explicit name.
+    
+    # Description starters → no explicit name
     for starter in _DESCRIPTION_STARTERS:
         if raw_lower.startswith(starter):
-            # Merge into prompt and return empty name (will be derived from prompt)
-            combined_prompt = f"{raw}. {prompt}".strip(" .")
-            return "", combined_prompt
-
-    # If it contains a "called X" or "named X" style prefix, extract what follows
+            combined = f"{raw}. {prompt_text}".strip(" .")
+            return "", combined
+    
+    # "called X" or "named X" prefixes
     for prefix in _NAME_PREFIXES:
         if raw_lower.startswith(prefix):
             remainder = raw[len(prefix):].strip()
-            # remainder may still have description after a dash or comma
             for sep in [" - ", " — ", ", ", ". "]:
                 if sep in remainder:
                     parts = remainder.split(sep, 1)
-                    name_part = parts[0].strip()
-                    desc_overflow = parts[1].strip()
-                    combined_prompt = f"{desc_overflow}. {prompt}".strip(" .")
-                    return name_part, combined_prompt
-            return remainder.strip(), prompt
-
-    # If it contains separators, split name from description
+                    return parts[0].strip(), f"{parts[1].strip()}. {prompt_text}".strip(" .")
+            return remainder.strip(), prompt_text
+    
+    # Separators
     for sep in [" - ", " — ", ": ", ", we ", ". we "]:
         if sep in raw:
             parts = raw.split(sep, 1)
-            name_part = parts[0].strip()
-            desc_overflow = parts[1].strip()
-            combined_prompt = f"{desc_overflow}. {prompt}".strip(" .")
-            return name_part, combined_prompt
-
-    # If it's short (≤ 5 words) and has no obvious description language, treat as name
+            return parts[0].strip(), f"{parts[1].strip()}. {prompt_text}".strip(" .")
+    
+    # Short clean name
+    if len(raw.split()) <= 5:
+        return raw, prompt_text
+    
+    # Long — split
     words = raw.split()
-    if len(words) <= 5:
-        return raw, prompt  # preserve original casing (e.g. "BuildRight LLC" stays as-is)
-
-    # Long raw name — likely the whole prompt ended up here; extract first 2–3 words as name
-    # and push the rest to the prompt
-    name_candidate = " ".join(words[:3]).rstrip(".,!?")
+    name = " ".join(words[:3]).rstrip(".,!?")
     overflow = " ".join(words[3:])
-    combined_prompt = f"{overflow}. {prompt}".strip(" .")
-    logger.info(f"Long business_name split: name='{name_candidate}', overflow merged to prompt")
-    return name_candidate, combined_prompt
+    return name, f"{overflow}. {prompt_text}".strip(" .")
 
 
 def derive_name_from_prompt(prompt: str, industry: str) -> str:
@@ -743,7 +758,7 @@ class PricingVariant:
             featured = tier.get('featured', False)
             feats = "".join([f"""
             <li class="flex items-start gap-2 text-sm {theme['text_muted']}">
-                <span class="mt-0.5 text-green-500 shrink-0">✓</span>
+                <span class="mt-0.5 {theme['stat_color']} shrink-0">✓</span>
                 <span>{f}</span>
             </li>""" for f in (tier.get('features', []) or [])])
             border_class = f"border-2" if featured else f"border {theme['border']}"
@@ -784,7 +799,7 @@ class PricingVariant:
         simple = tiers[0] if tiers else {}
         pro = tiers[1] if len(tiers) > 1 else {}
         def feat_list(tier: Dict) -> str:
-            return "".join([f'<li class="flex items-center gap-2 text-sm"><span class="text-green-400">✓</span>{f}</li>' for f in (tier.get('features', []) or [])])
+            return "".join([f'<li class="flex items-center gap-2 text-sm">{theme["stat_color"]}</span>{f}</li>' for f in (tier.get('features', []) or [])])
         try:
             return f"""
             <section id="pricing" class="{theme['bg']} {PADDING_SECTION}">
@@ -1008,13 +1023,208 @@ Return ONLY this JSON (no backticks, no preamble):
             res = chat_completion(system=system_msg, user=user_msg, temperature=0.75)
             cleaned = res.strip().replace("```json", "").replace("```", "").strip()
             payload = json.loads(cleaned)
+            
+            # CRITICAL: Sanitize AI response to prevent theme leaks
+            payload = self._sanitize_ai_payload(payload)
+            
             logger.info("AI payload generated successfully")
             return payload
         except Exception as e:
             logger.error(f"AI payload error: {e}")
             return self._get_fallback_payload()
+    
+    def _sanitize_ai_payload(self, payload: Dict) -> Dict:
+        """
+        Clean AI-generated content to prevent theme leaks and ensure consistency.
+        
+        Issues this catches:
+        1. Wrong unsplash_keywords (e.g. AI returns 'luxury spa' for construction)
+        2. Color mentions in text ('our purple logo', 'blue website')
+        3. Generic SaaS language for non-SaaS businesses
+        """
+        # Fix 1: Validate unsplash_keywords match the industry
+        keywords = payload.get('unsplash_keywords', [])
+        if keywords:
+            # Check if keywords are completely off-industry
+            kw_text = " ".join(keywords).lower()
+            industry_kw = " ".join(INDUSTRY_KEYWORD_MAP.get(self.industry, [])).lower()
+            
+            # If there's < 10% overlap, replace with industry defaults
+            overlap = sum(1 for word in keywords if any(ind in word.lower() or word.lower() in ind for ind in INDUSTRY_KEYWORD_MAP.get(self.industry, [])))
+            if overlap == 0:
+                logger.warning(f"AI returned off-industry keywords {keywords} for {self.industry}; fixing")
+                payload['unsplash_keywords'] = self._get_default_keywords()
+        else:
+            payload['unsplash_keywords'] = self._get_default_keywords()
+        
+        # Fix 2: Strip color mentions from all text content to prevent theme leaks
+        # (e.g. "our vibrant purple brand" would inject purple into a grey theme)
+        color_words = ['purple', 'violet', 'fuchsia', 'rose', 'pink', 'blue', 'cyan', 'indigo',
+                       'amber', 'orange', 'emerald', 'teal', 'green', 'slate', 'gray']
+        
+        def strip_colors(text: str) -> str:
+            if not isinstance(text, str):
+                return text
+            for color in color_words:
+                # Remove phrases like "purple brand", "blue logo", but preserve "blueberry" or "violet flowers"
+                text = text.replace(f"{color} brand", "distinctive brand")
+                text = text.replace(f"{color} logo", "unique logo")
+                text = text.replace(f"{color} website", "modern website")
+                text = text.replace(f"{color} design", "custom design")
+            return text
+        
+        # Apply to all text fields
+        if 'hero' in payload:
+            for key in ['h1', 'sub', 'cta']:
+                if key in payload['hero']:
+                    payload['hero'][key] = strip_colors(payload['hero'][key])
+        
+        if 'tagline' in payload:
+            payload['tagline'] = strip_colors(payload['tagline'])
+        
+        if 'features' in payload:
+            for feat in payload['features']:
+                if 'title' in feat:
+                    feat['title'] = strip_colors(feat['title'])
+                if 'description' in feat:
+                    feat['description'] = strip_colors(feat['description'])
+        
+        if 'testimonials' in payload:
+            for t in payload['testimonials']:
+                if 'quote' in t:
+                    t['quote'] = strip_colors(t['quote'])
+        
+        if 'faq' in payload:
+            for faq in payload['faq']:
+                if 'q' in faq:
+                    faq['q'] = strip_colors(faq['q'])
+                if 'a' in faq:
+                    faq['a'] = strip_colors(faq['a'])
+        
+        if 'cta_text' in payload:
+            payload['cta_text'] = strip_colors(payload['cta_text'])
+        
+        return payload
+    
+    def _get_default_keywords(self) -> List[str]:
+        """Return safe, industry-appropriate unsplash keywords"""
+        defaults = {
+            "construction": ["construction", "building", "contractor", "architecture", "renovation"],
+            "legal": ["legal", "law", "professional", "office", "business"],
+            "finance": ["finance", "business", "professional", "office", "investment"],
+            "health": ["health", "wellness", "medical", "fitness", "clinic"],
+            "restaurant": ["food", "restaurant", "dining", "chef", "cuisine"],
+            "beauty": ["beauty", "spa", "wellness", "aesthetic", "luxury"],
+            "ecommerce": ["shop", "retail", "product", "ecommerce", "store"],
+            "saas": ["technology", "business", "software", "modern", "team"],
+            "agency": ["creative", "design", "studio", "brand", "marketing"],
+            "real_estate": ["property", "real estate", "architecture", "modern", "home"],
+            "logistics": ["logistics", "shipping", "warehouse", "transport", "business"],
+            "automotive": ["auto", "car", "vehicle", "mechanic", "garage"],
+            "events": ["event", "celebration", "venue", "party", "wedding"],
+            "nonprofit": ["community", "nonprofit", "people", "volunteer", "charity"],
+            "nature": ["nature", "organic", "farm", "green", "sustainable"],
+            "education": ["education", "learning", "school", "training", "students"],
+            "travel": ["travel", "hotel", "vacation", "destination", "tourism"],
+            "luxury": ["luxury", "premium", "elegant", "exclusive", "high-end"],
+            "ai": ["technology", "ai", "data", "innovation", "futuristic"],
+            "developer": ["code", "developer", "technology", "software", "programming"],
+            "startup": ["startup", "innovation", "technology", "entrepreneurship", "modern"],
+        }
+        return defaults.get(self.industry, ["business", "professional", "modern", "team", "office"])
 
     def _get_fallback_payload(self) -> Dict:
+        """Industry-aware fallback when AI is unavailable"""
+        
+        # Industry-specific defaults
+        if self.industry == "construction":
+            return {
+                "nav": ["Services", "Projects", "About", "Contact"],
+                "hero": {"h1": f"Professional {self.industry.title()} Services", "sub": "Quality craftsmanship. On time, on budget.", "cta": "Request a Quote"},
+                "tagline": "Built to last.",
+                "brand_voice": "professional",
+                "features": [
+                    {"title": "Licensed & Insured", "description": "Fully licensed contractors with comprehensive insurance coverage for your peace of mind.", "icon": "🛡️"},
+                    {"title": "Quality Workmanship", "description": "Skilled tradespeople delivering superior results on every project, large or small.", "icon": "🔨"},
+                    {"title": "Transparent Pricing", "description": "Detailed estimates with no hidden fees. You'll know exactly what to expect.", "icon": "📋"},
+                ],
+                "pricing": [
+                    {"name": "Residential", "price": "Get a Quote", "description": "Home renovations and repairs", "features": ["Kitchen & bathroom remodels", "Roofing & siding", "Flooring installation", "Painting", "Minor repairs"], "featured": False},
+                    {"name": "Commercial", "price": "Get a Quote", "description": "Business construction projects", "features": ["Office build-outs", "Retail spaces", "Warehouse work", "ADA compliance", "Ongoing maintenance"], "featured": True},
+                    {"name": "Emergency", "price": "24/7 Available", "description": "Urgent repair services", "features": ["Storm damage", "Water damage mitigation", "Structural issues", "Same-day service", "Direct insurance billing"], "featured": False},
+                ],
+                "testimonials": [
+                    {"name": "Michael Torres", "role": "Homeowner", "company": "Brooklyn, NY", "quote": "They completely renovated our kitchen on schedule and within budget. Excellent craftsmanship."},
+                    {"name": "Lisa Chen", "role": "Property Manager", "company": "Manhattan", "quote": "We've used them for 5+ years across multiple properties. Always reliable and professional."},
+                ],
+                "faq": [
+                    {"q": "Are you licensed and insured?", "a": "Yes, we carry full licensing and comprehensive liability and workers' compensation insurance."},
+                    {"q": "Do you offer free estimates?", "a": "Absolutely. We provide detailed, no-obligation estimates for all projects."},
+                    {"q": "What's your typical timeline?", "a": "It varies by project scope, but we'll give you a clear timeline upfront and keep you updated throughout."},
+                ],
+                "cta_text": "Ready to start your project?",
+                "unsplash_keywords": ["construction", "building", "contractor", "renovation", "architecture"],
+            }
+        
+        elif self.industry == "legal":
+            return {
+                "nav": ["Practice Areas", "Our Team", "Resources", "Contact"],
+                "hero": {"h1": f"Trusted Legal Counsel", "sub": "Protecting your interests with expertise and integrity.", "cta": "Schedule Consultation"},
+                "tagline": "Your advocate.",
+                "brand_voice": "professional",
+                "features": [
+                    {"title": "Experienced Attorneys", "description": "Decades of combined experience across multiple practice areas. We know the law.", "icon": "⚖️"},
+                    {"title": "Client-Focused Approach", "description": "Your goals are our priority. We listen, strategize, and fight for your best outcome.", "icon": "🤝"},
+                    {"title": "Clear Communication", "description": "No legal jargon. We explain your options in plain English so you can make informed decisions.", "icon": "💬"},
+                ],
+                "pricing": [
+                    {"name": "Initial Consultation", "price": "Complimentary", "description": "30-minute case review", "features": ["Case assessment", "Legal options overview", "Fee structure discussion", "No obligation", "Confidential"], "featured": False},
+                    {"name": "Hourly Representation", "price": "From $300/hr", "description": "Pay as you go", "features": ["Experienced attorneys", "Flexible engagement", "Detailed billing", "Case strategy", "Court representation"], "featured": True},
+                    {"name": "Flat Fee Services", "price": "Custom", "description": "Fixed-price matters", "features": ["Contract review", "Business formation", "Estate planning", "Trademark filing", "Predictable costs"], "featured": False},
+                ],
+                "testimonials": [
+                    {"name": "Robert Kim", "role": "CEO", "company": "TechStart Inc", "quote": "They guided us through a complex acquisition with skill and professionalism. Couldn't recommend them more highly."},
+                    {"name": "Jennifer Adams", "role": "Client", "company": "Chicago, IL", "quote": "After years of frustration with my previous attorney, their team resolved my case in months. Exceptional service."},
+                ],
+                "faq": [
+                    {"q": "What practice areas do you cover?", "a": "We handle corporate law, employment matters, real estate transactions, and civil litigation."},
+                    {"q": "How do consultations work?", "a": "We offer a complimentary 30-minute consultation to assess your case and discuss how we can help."},
+                    {"q": "Do you take contingency cases?", "a": "It depends on the matter. We'll discuss fee arrangements during your consultation."},
+                ],
+                "cta_text": "Need legal guidance?",
+                "unsplash_keywords": ["legal", "law", "attorney", "professional", "office"],
+            }
+        
+        elif self.industry in ["restaurant", "food"]:
+            return {
+                "nav": ["Menu", "About", "Catering", "Contact"],
+                "hero": {"h1": f"Authentic Flavors", "sub": "Made fresh daily with locally-sourced ingredients.", "cta": "View Menu"},
+                "tagline": "Taste the difference.",
+                "brand_voice": "warm",
+                "features": [
+                    {"title": "Fresh Ingredients", "description": "We source locally whenever possible and prepare everything fresh in-house daily.", "icon": "🥗"},
+                    {"title": "Family Recipes", "description": "Passed down through generations, our recipes bring authentic flavor to every dish.", "icon": "👨‍🍳"},
+                    {"title": "Warm Atmosphere", "description": "Cozy dining room perfect for date nights, family dinners, or celebrations.", "icon": "🏡"},
+                ],
+                "pricing": [
+                    {"name": "Lunch", "price": "$15-25", "description": "Daily specials", "features": ["Soup & salad combos", "Sandwiches", "Light entrees", "Fresh bread", "Quick service"], "featured": False},
+                    {"name": "Dinner", "price": "$25-45", "description": "Full menu", "features": ["Signature entrees", "Pasta dishes", "Fresh seafood", "Wine pairings", "Desserts"], "featured": True},
+                    {"name": "Catering", "price": "Custom", "description": "Events & parties", "features": ["Corporate events", "Family gatherings", "Drop-off or full service", "Customizable menus", "Dietary accommodations"], "featured": False},
+                ],
+                "testimonials": [
+                    {"name": "Maria Gonzalez", "role": "Local Resident", "company": "Yelp Elite", "quote": "Best Italian food outside of Italy! The pasta is always perfectly cooked and the portions are generous."},
+                    {"name": "David Park", "role": "Food Blogger", "company": "NYC Eats", "quote": "A hidden gem. Everything is made with love and you can taste it in every bite."},
+                ],
+                "faq": [
+                    {"q": "Do you take reservations?", "a": "Yes, we recommend reservations for dinner, especially on weekends. Walk-ins are always welcome for lunch."},
+                    {"q": "Can you accommodate dietary restrictions?", "a": "Absolutely. We offer vegetarian, vegan, and gluten-free options. Just let us know when ordering."},
+                    {"q": "Do you offer takeout?", "a": "Yes, full menu available for takeout and we also partner with major delivery services."},
+                ],
+                "cta_text": "Come taste the difference",
+                "unsplash_keywords": ["food", "restaurant", "dining", "cuisine", "chef"],
+            }
+        
+        # Default SaaS-style fallback for tech industries
         return {
             "nav": ["Features", "Pricing", "FAQ", "Contact"],
             "hero": {"h1": f"Welcome to {self.name}", "sub": "Premium solutions built for your needs.", "cta": "Get Started"},
