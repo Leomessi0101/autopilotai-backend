@@ -1229,6 +1229,16 @@ class PricingVariant:
     def project_based(theme: Dict, tiers: List[Dict]) -> str:
         tiers = tiers or []
         icons = ["🏗️", "🔨", "🏢"]
+
+        def _feat_items_project(t: Dict) -> str:
+            tm, cc = theme["text_muted"], theme["check_color"]
+            return "".join(
+                f'<li class="flex items-start gap-2 text-sm {tm}">'
+                f'<span class="mt-0.5 {cc} shrink-0 font-bold">✓</span>'
+                f'<span>{feat}</span></li>'
+                for feat in (t.get("features", []) or [])
+            )
+
         cards_html = "".join([f"""
         <div class="{theme['glass']} border {theme['border']} p-8 rounded-2xl {HOVER_LIFT} flex flex-col">
             <div class="text-3xl mb-5">{icons[i % len(icons)]}</div>
@@ -1238,7 +1248,7 @@ class PricingVariant:
                 <span class="text-2xl font-black {theme['stat_color']}">{t.get('price', 'Get a Quote')}</span>
             </div>
             <ul class="space-y-2.5 mb-8 flex-grow">
-                {"".join([f'<li class=\"flex items-start gap-2 text-sm {theme[\"text_muted\"]}\"><span class=\"mt-0.5 {theme[\"check_color\"]} shrink-0 font-bold\">✓</span><span>{f}</span></li>' for f in (t.get('features', []) or [])])}
+                {_feat_items_project(t)}
             </ul>
             <a href="#contact" class="w-full py-3.5 text-center rounded-xl font-semibold border {theme['border']} {theme['text']} {theme['glass']} {HOVER_GLOW} block">
                 Request a Quote →
@@ -1269,6 +1279,15 @@ class PricingVariant:
     @staticmethod
     def services_list(theme: Dict, tiers: List[Dict]) -> str:
         tiers = tiers or []
+
+        def _feat_items_services(t: Dict) -> str:
+            tm, cc = theme["text_muted"], theme["check_color"]
+            return "".join(
+                f'<li class="flex items-center gap-2 text-sm {tm}">'
+                f'<span class="{cc} font-bold">✓</span>{feat}</li>'
+                for feat in (t.get("features", []) or [])[:4]
+            )
+
         rows = "".join([f"""
         <div class="grid md:grid-cols-3 gap-6 items-center py-8">
             <div>
@@ -1276,7 +1295,7 @@ class PricingVariant:
                 <p class="text-sm {theme['text_muted']} mt-1 leading-relaxed">{t.get('description', '')}</p>
             </div>
             <ul class="space-y-1.5">
-                {"".join([f'<li class=\"flex items-center gap-2 text-sm {theme[\"text_muted\"]}\"><span class=\"{theme[\"check_color\"]} font-bold\">✓</span>{f}</li>' for f in (t.get('features', []) or [])[:4]])}
+                {_feat_items_services(t)}
             </ul>
             <div class="md:text-right">
                 <span class="text-lg font-black {theme['stat_color']} block mb-3">{t.get('price', 'Custom')}</span>
@@ -1784,14 +1803,18 @@ Return ONLY this JSON (no backticks, no preamble):
         cta_text = self.data.get("cta_text", "Ready to get started?")
         sub      = self.data.get("hero", {}).get("sub", "")
         img_url  = self.images[2] if len(self.images) > 2 else self.images[0] if self.images else ""
-        cta_label = self.data.get("hero", {}).get("cta", "Get Started")
+        cta_label   = self.data.get("hero", {}).get("cta", "Get Started")
+        sub_html    = f'<p class="text-lg {self.theme["text_muted"]} leading-relaxed">{sub}</p>' if sub else ""
+        img_opacity = "opacity-[0.05]" if self.theme["mode"] == "light" else "opacity-[0.08]"
+        bg_overlay  = "bg-white/80"    if self.theme["mode"] == "light" else "bg-black/70"
+        mailto      = f"mailto:hello@{self.name.lower().replace(' ', '')}.com"
         try:
             return f"""
             <section id="contact" class="relative {self.theme['bg']} {PADDING_SECTION} overflow-hidden">
                 <!-- Background image overlay -->
                 <div class="absolute inset-0 pointer-events-none">
-                    <img src="{img_url}" alt="" class="w-full h-full object-cover {'opacity-[0.05]' if self.theme['mode'] == 'light' else 'opacity-[0.08]'}" loading="lazy" />
-                    <div class="absolute inset-0 {'bg-white/80' if self.theme['mode'] == 'light' else 'bg-black/70'}"></div>
+                    <img src="{img_url}" alt="" class="w-full h-full object-cover {img_opacity}" loading="lazy" />
+                    <div class="absolute inset-0 {bg_overlay}"></div>
                 </div>
                 <!-- Gradient tint -->
                 <div class="absolute inset-0 bg-gradient-to-br {self.theme['grad_cta_bg']} pointer-events-none"></div>
@@ -1801,9 +1824,9 @@ Return ONLY this JSON (no backticks, no preamble):
                 <div class="container mx-auto {PADDING_CONTAINER} relative z-10 text-center">
                     <div class="max-w-3xl mx-auto space-y-6">
                         <h2 class="{HEADING_SECTION} {self.theme['text']}">{cta_text}</h2>
-                        {f'<p class="text-lg {self.theme[\"text_muted\"]} leading-relaxed">{sub}</p>' if sub else ''}
+                        {sub_html}
                         <div class="flex flex-col sm:flex-row gap-4 justify-center pt-4">
-                            {_gradient_btn(self.theme, cta_label, f"mailto:hello@{self.name.lower().replace(' ', '')}.com", "text-base px-10 py-5")}
+                            {_gradient_btn(self.theme, cta_label, mailto, "text-base px-10 py-5")}
                             <a href="tel:+10000000000" class="{self.theme['glass']} border {self.theme['border']} {self.theme['text']} px-10 py-5 rounded-xl font-bold {HOVER_GLOW} text-base">
                                 📞 Call Us
                             </a>
