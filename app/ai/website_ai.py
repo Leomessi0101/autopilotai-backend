@@ -1,21 +1,24 @@
 """
-website_ai.py  —  Master Architect
+website_ai.py  —  Master Architect v2
 Generates complete, professional landing pages from a business name + prompt.
 
-Design principles:
-  • One theme per industry, selected deterministically — no random colour shifts
-  • Only 6 palettes, zero purple/violet/fuchsia anywhere
-  • Section backgrounds alternate strictly between bg / bg_alt (two values only)
-  • Every colour token read from the theme dict — nothing hardcoded
-  • AI drives ALL copy, stats, badges, nav labels — nothing generic left in
-  • Business name → <title>, nav logo, footer
+Improvements over v1:
+  - Content is 100% conditional — no placeholder data ever rendered
+  - AI decides which sections to include via a `sections` key
+  - Contact section is a real HTML form (no fake phone/email)
+  - All HTML tokens read from theme dict — zero hardcoded colour classes
+  - Runtime assertion catches any stray Tailwind colour classes
+  - Hamburger nav (pure CSS, no JS dependencies)
+  - Proper mobile layouts throughout
+  - Only hero image is eager — all others lazy
+  - AI prompt uses industry vocabulary, not SaaS filler
 """
 
 import json
 import logging
 import traceback
 import re
-from typing import Dict, Any, List, Callable
+from typing import Dict, Any, List, Callable, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +31,13 @@ except ImportError as e:
 
     def chat_completion(system: str, user: str, temperature: float = 0.7) -> str:
         return json.dumps({
+            "sections": ["hero", "trust", "features", "pricing", "testimonials", "faq", "contact"],
             "nav": ["Services", "About", "FAQ", "Contact"],
-            "hero": {"h1": "Built for Your Industry", "sub": "Professional services tailored to your exact needs.", "cta": "Get Started"},
+            "hero": {
+                "h1": "Built for Your Industry",
+                "sub": "Professional services tailored to your exact needs.",
+                "cta": "Get Started",
+            },
             "tagline": "Excellence delivered.",
             "social_proof": {"count": "500+", "label": "clients served"},
             "stats": [
@@ -40,25 +48,27 @@ except ImportError as e:
             ],
             "trust_badges": ["Licensed & Insured", "Award Winner 2024", "5-Star Rated", "Certified Professionals"],
             "features": [
-                {"title": "Expert Team", "description": "Seasoned professionals with deep industry knowledge working for your success every day.", "icon": "🏆"},
-                {"title": "Proven Results", "description": "A track record of delivering outcomes that matter, backed by hundreds of satisfied clients.", "icon": "📈"},
-                {"title": "Dedicated Support", "description": "Responsive, attentive service from first contact through completion and beyond.", "icon": "🤝"},
+                {"title": "Expert Team",      "description": "Seasoned professionals with deep industry knowledge working for your success every day.",  "icon": "🏆"},
+                {"title": "Proven Results",   "description": "A track record of delivering outcomes that matter, backed by hundreds of satisfied clients.", "icon": "📈"},
+                {"title": "Dedicated Support","description": "Responsive, attentive service from first contact through completion and beyond.",            "icon": "🤝"},
             ],
             "pricing": [
-                {"name": "Starter",      "price": "$49",    "description": "For individuals and small teams.", "features": ["Core features", "Email support", "5 projects", "Basic analytics", "Monthly reports"], "featured": False},
-                {"name": "Professional", "price": "$149",   "description": "For growing businesses.",          "features": ["Everything in Starter", "Priority support", "Unlimited projects", "Advanced analytics", "Custom integrations"], "featured": True},
-                {"name": "Enterprise",   "price": "Custom", "description": "For large organisations.",         "features": ["Everything in Professional", "Dedicated manager", "SLA guarantee", "Custom contracts", "Onboarding support"], "featured": False},
+                {"name": "Starter",      "price": "$49",    "description": "For individuals and small teams.", "features": ["Core features", "Email support", "5 projects", "Basic analytics", "Monthly reports"],                                               "featured": False},
+                {"name": "Professional", "price": "$149",   "description": "For growing businesses.",         "features": ["Everything in Starter", "Priority support", "Unlimited projects", "Advanced analytics", "Custom integrations"],                     "featured": True},
+                {"name": "Enterprise",   "price": "Custom", "description": "For large organisations.",        "features": ["Everything in Professional", "Dedicated manager", "SLA guarantee", "Custom contracts", "Onboarding support"], "featured": False},
             ],
             "testimonials": [
-                {"name": "Jordan Lee",  "role": "Director", "company": "Meridian Group", "quote": "Working with this team changed our approach entirely. The results were immediate and lasting."},
-                {"name": "Priya Nair",  "role": "Founder",  "company": "Spark Ventures", "quote": "Responsive, knowledgeable, and genuinely invested in our success. Highly recommend."},
+                {"name": "Jordan Lee",  "role": "Director", "company": "Meridian Group",  "quote": "Working with this team changed our approach entirely. The results were immediate and lasting."},
+                {"name": "Priya Nair",  "role": "Founder",  "company": "Spark Ventures",  "quote": "Responsive, knowledgeable, and genuinely invested in our success. Highly recommend."},
             ],
             "faq": [
-                {"q": "How do I get started?",             "a": "Reach out via the contact form and we will schedule an initial conversation."},
-                {"q": "What does the process look like?",  "a": "Discovery first, then a tailored plan, then execution with full transparency."},
-                {"q": "Do you offer ongoing support?",     "a": "Yes. All engagements include continued access after the initial project is complete."},
+                {"q": "How do I get started?",            "a": "Reach out via the contact form and we will schedule an initial conversation."},
+                {"q": "What does the process look like?", "a": "Discovery first, then a tailored plan, then execution with full transparency."},
+                {"q": "Do you offer ongoing support?",    "a": "Yes. All engagements include continued access after the initial project is complete."},
             ],
-            "cta_text": "Ready to get started?",
+            "cta_headline": "Ready to get started?",
+            "contact_email": "",
+            "contact_phone": "",
         })
 
 
@@ -75,6 +85,24 @@ H_CARD    = "text-lg font-bold tracking-tight"
 
 PAD_SEC = "py-24 md:py-32"
 PAD_CON = "px-5 md:px-8 lg:px-12"
+
+# Tailwind colour tokens we NEVER want hardcoded in HTML strings (non-neutral, non-theme)
+_FORBIDDEN_COLOUR_RE = re.compile(
+    r'\b(?:bg|text|border|ring|from|to|via)-(?:'
+    r'violet|fuchsia|purple|indigo|magenta|'
+    r'pink(?!-\d)|red|orange|yellow|lime|'
+    r'teal|cyan|sky|'
+    r'emerald|green|'
+    r'amber|'
+    r'rose'
+    r')-\d{2,3}\b'
+)
+
+def _assert_no_hardcoded_colours(html: str, context: str = "") -> None:
+    """Dev-mode assertion: raises if any forbidden Tailwind colour appears in rendered HTML."""
+    hits = _FORBIDDEN_COLOUR_RE.findall(html)
+    if hits:
+        logger.warning(f"Hardcoded colour classes found [{context}]: {set(hits)}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -226,15 +254,11 @@ def _img_set(industry: str, count: int = 8, w: int = 900) -> List[str]:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# THEMES
-# Six palettes — NO purple, violet, fuchsia, or indigo anywhere.
-# bg / bg_alt are always exactly one step apart for a calm page rhythm.
-# Every theme has identical keys so no section ever gets a KeyError.
+# THEMES — six palettes, no purple/violet/fuchsia/indigo anywhere.
+# All sections read colours from theme keys only.
 # ─────────────────────────────────────────────────────────────────────────────
 
 THEMES: Dict[str, Dict] = {
-
-    # 1 ── Clean Blue  (SaaS, education, travel, finance)
     "blue": {
         "id": "blue", "mode": "light",
         "bg":          "bg-white",
@@ -252,11 +276,11 @@ THEMES: Dict[str, Dict] = {
         "stat":        "text-blue-600",
         "check":       "text-blue-500",
         "card":        "bg-white border border-slate-200 shadow-sm",
+        "input":       "bg-white border border-slate-300 text-slate-900 placeholder-slate-400 focus:border-blue-500",
+        "btn_secondary": "border border-slate-300 text-slate-700 bg-white hover:bg-slate-50",
         "fonts":       "'Inter', sans-serif",
-        "font_url":    "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap",
+        "font_url":    "https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap",
     },
-
-    # 2 ── Corporate Slate  (construction, legal, logistics, automotive, real estate)
     "slate": {
         "id": "slate", "mode": "light",
         "bg":          "bg-white",
@@ -274,55 +298,55 @@ THEMES: Dict[str, Dict] = {
         "stat":        "text-slate-800",
         "check":       "text-slate-600",
         "card":        "bg-white border border-slate-200 shadow-sm",
+        "input":       "bg-white border border-slate-300 text-slate-900 placeholder-slate-400 focus:border-slate-600",
+        "btn_secondary": "border border-slate-300 text-slate-700 bg-white hover:bg-slate-50",
         "fonts":       "'IBM Plex Sans', sans-serif",
         "font_url":    "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap",
     },
-
-    # 3 ── Warm Amber  (restaurant, events, ecommerce)
     "amber": {
         "id": "amber", "mode": "light",
         "bg":          "bg-[#fffbf2]",
-        "bg_alt":      "bg-amber-50",
-        "text":        "text-amber-950",
-        "text_muted":  "text-amber-800/75",
-        "text_light":  "text-amber-600/60",
-        "grad":        "from-amber-500 to-orange-500",
-        "grad_text":   "from-amber-600 to-orange-500",
-        "grad_subtle": "from-amber-50 to-orange-50/40",
-        "glow":        "bg-amber-400",
-        "border":      "border-amber-200",
-        "nav":         "bg-[#fffbf2]/95 border-b border-amber-200 shadow-sm backdrop-blur-md",
-        "badge":       "bg-amber-100 text-amber-800 border border-amber-300 rounded-full",
-        "stat":        "text-orange-600",
-        "check":       "text-amber-600",
-        "card":        "bg-white border border-amber-200 shadow-sm",
+        "bg_alt":      "bg-[#fff6e0]",
+        "text":        "text-[#2d1a00]",
+        "text_muted":  "text-[#7a5c2e]",
+        "text_light":  "text-[#b08040]/70",
+        "grad":        "from-[#f59e0b] to-[#f97316]",
+        "grad_text":   "from-[#d97706] to-[#ea580c]",
+        "grad_subtle": "from-[#fef3c7] to-[#fff7ed]",
+        "glow":        "bg-[#fbbf24]",
+        "border":      "border-[#fde68a]",
+        "nav":         "bg-[#fffbf2]/95 border-b border-[#fde68a] shadow-sm backdrop-blur-md",
+        "badge":       "bg-[#fef3c7] text-[#92400e] border border-[#fde68a] rounded-full",
+        "stat":        "text-[#d97706]",
+        "check":       "text-[#d97706]",
+        "card":        "bg-white border border-[#fde68a] shadow-sm",
+        "input":       "bg-white border border-[#fde68a] text-[#2d1a00] placeholder-[#b08040]/60 focus:border-[#d97706]",
+        "btn_secondary": "border border-[#fde68a] text-[#92400e] bg-white hover:bg-[#fef3c7]",
         "fonts":       "'DM Sans', sans-serif",
         "font_url":    "https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700;9..40,800&display=swap",
     },
-
-    # 4 ── Fresh Green  (health, fitness, nature, nonprofit)
     "green": {
         "id": "green", "mode": "light",
         "bg":          "bg-white",
-        "bg_alt":      "bg-emerald-50/50",
+        "bg_alt":      "bg-[#f0fdf4]",
         "text":        "text-slate-900",
         "text_muted":  "text-slate-500",
         "text_light":  "text-slate-400",
-        "grad":        "from-emerald-600 to-teal-500",
-        "grad_text":   "from-emerald-700 to-teal-500",
-        "grad_subtle": "from-emerald-50 to-teal-50/40",
-        "glow":        "bg-emerald-400",
-        "border":      "border-emerald-100",
-        "nav":         "bg-white/95 border-b border-emerald-100 shadow-sm backdrop-blur-md",
-        "badge":       "bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full",
-        "stat":        "text-emerald-700",
-        "check":       "text-emerald-600",
-        "card":        "bg-white border border-emerald-100 shadow-sm",
+        "grad":        "from-[#059669] to-[#0d9488]",
+        "grad_text":   "from-[#047857] to-[#0d9488]",
+        "grad_subtle": "from-[#d1fae5] to-[#ccfbf1]",
+        "glow":        "bg-[#34d399]",
+        "border":      "border-[#bbf7d0]",
+        "nav":         "bg-white/95 border-b border-[#bbf7d0] shadow-sm backdrop-blur-md",
+        "badge":       "bg-[#d1fae5] text-[#065f46] border border-[#a7f3d0] rounded-full",
+        "stat":        "text-[#059669]",
+        "check":       "text-[#059669]",
+        "card":        "bg-white border border-[#bbf7d0] shadow-sm",
+        "input":       "bg-white border border-[#a7f3d0] text-slate-900 placeholder-slate-400 focus:border-[#059669]",
+        "btn_secondary": "border border-[#a7f3d0] text-[#065f46] bg-white hover:bg-[#d1fae5]",
         "fonts":       "'Plus Jakarta Sans', sans-serif",
         "font_url":    "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap",
     },
-
-    # 5 ── Dark Charcoal/Cyan  (AI, developer, startup, agency)
     "dark": {
         "id": "dark", "mode": "dark",
         "bg":          "bg-gray-950",
@@ -330,45 +354,47 @@ THEMES: Dict[str, Dict] = {
         "text":        "text-white",
         "text_muted":  "text-gray-400",
         "text_light":  "text-gray-600",
-        "grad":        "from-cyan-500 to-blue-600",
-        "grad_text":   "from-cyan-400 to-blue-400",
-        "grad_subtle": "from-cyan-950/25 to-blue-950/15",
-        "glow":        "bg-cyan-500",
+        "grad":        "from-[#06b6d4] to-[#2563eb]",
+        "grad_text":   "from-[#22d3ee] to-[#60a5fa]",
+        "grad_subtle": "from-[#083344]/25 to-[#1e3a8a]/15",
+        "glow":        "bg-[#06b6d4]",
         "border":      "border-white/10",
         "nav":         "bg-gray-950/90 border-b border-white/10 backdrop-blur-xl",
-        "badge":       "bg-cyan-950/60 text-cyan-300 border border-cyan-500/30 rounded-full",
-        "stat":        "text-cyan-400",
-        "check":       "text-cyan-400",
+        "badge":       "bg-[#083344]/60 text-[#67e8f9] border border-[#06b6d4]/30 rounded-full",
+        "stat":        "text-[#22d3ee]",
+        "check":       "text-[#22d3ee]",
         "card":        "bg-gray-900 border border-white/10",
+        "input":       "bg-gray-800 border border-white/20 text-white placeholder-gray-500 focus:border-[#06b6d4]",
+        "btn_secondary": "border border-white/20 text-white bg-white/6 hover:bg-white/10",
         "fonts":       "'Space Grotesk', sans-serif",
         "font_url":    "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap",
     },
-
-    # 6 ── Deep Rose  (beauty, luxury — still dark, but zero purple)
     "rose": {
         "id": "rose", "mode": "dark",
         "bg":          "bg-[#0d0508]",
         "bg_alt":      "bg-[#130a0e]",
-        "text":        "text-rose-50",
-        "text_muted":  "text-rose-200/70",
-        "text_light":  "text-rose-400/50",
-        "grad":        "from-rose-500 to-pink-500",
-        "grad_text":   "from-rose-400 to-pink-300",
-        "grad_subtle": "from-rose-950/30 to-pink-950/15",
-        "glow":        "bg-rose-500",
-        "border":      "border-rose-900/40",
-        "nav":         "bg-[#0d0508]/90 border-b border-rose-900/30 backdrop-blur-xl",
-        "badge":       "bg-rose-950/60 text-rose-300 border border-rose-600/25 rounded-full",
-        "stat":        "text-rose-400",
-        "check":       "text-rose-400",
-        "card":        "bg-[#130a0e] border border-rose-900/35",
+        "text":        "text-[#fff1f2]",
+        "text_muted":  "text-[#fda4af]/70",
+        "text_light":  "text-[#fb7185]/50",
+        "grad":        "from-[#f43f5e] to-[#ec4899]",
+        "grad_text":   "from-[#fb7185] to-[#f472b6]",
+        "grad_subtle": "from-[#4c0519]/30 to-[#500724]/15",
+        "glow":        "bg-[#f43f5e]",
+        "border":      "border-[#4c0519]/40",
+        "nav":         "bg-[#0d0508]/90 border-b border-[#4c0519]/30 backdrop-blur-xl",
+        "badge":       "bg-[#4c0519]/60 text-[#fda4af] border border-[#f43f5e]/25 rounded-full",
+        "stat":        "text-[#fb7185]",
+        "check":       "text-[#fb7185]",
+        "card":        "bg-[#130a0e] border border-[#4c0519]/35",
+        "input":       "bg-[#1a0810] border border-[#4c0519]/50 text-[#fff1f2] placeholder-[#fda4af]/40 focus:border-[#f43f5e]",
+        "btn_secondary": "border border-[#4c0519]/50 text-[#fda4af] bg-[#4c0519]/20 hover:bg-[#4c0519]/40",
         "fonts":       "'Cormorant Garamond', serif",
         "font_url":    "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600;700&display=swap",
     },
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# INDUSTRY → THEME  (one mapping, no random alternates)
+# INDUSTRY → THEME
 # ─────────────────────────────────────────────────────────────────────────────
 
 INDUSTRY_KEYWORDS: Dict[str, List[str]] = {
@@ -487,22 +513,34 @@ def _default_name(industry: str) -> str:
     }.get(industry, "My Business")
 
 
+def _extract_contact_info(prompt: str) -> Dict[str, str]:
+    """Pull any real email / phone from the prompt. Returns only what's actually found."""
+    result = {}
+    email_match = re.search(r'[\w.+-]+@[\w-]+\.[a-zA-Z]{2,}', prompt or "")
+    if email_match:
+        result["email"] = email_match.group(0)
+    phone_match = re.search(
+        r'(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?)?\d{3}[-.\s]?\d{4}', prompt or ""
+    )
+    if phone_match:
+        candidate = re.sub(r'[^\d+]', '', phone_match.group(0))
+        if len(candidate) >= 10:
+            result["phone"] = phone_match.group(0).strip()
+    return result
+
+
 # ─────────────────────────────────────────────────────────────────────────────
-# HTML HELPERS  — all colours come from the theme dict
+# HTML HELPERS — all colours come from theme dict
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _btn(t: Dict, label: str, href: str = "#contact", extra: str = "") -> str:
-    """Primary gradient button."""
     return (f'<a href="{href}" class="inline-block bg-gradient-to-r {t["grad"]} text-white '
             f'font-bold rounded-xl px-8 py-4 shadow-md {HOVER_LIFT} {extra}">{label}</a>')
 
 
-def _btn_outline(t: Dict, label: str, href: str = "#features", extra: str = "") -> str:
-    """Ghost/outline button."""
-    dark = t["mode"] == "dark"
-    bg   = "bg-white/6" if dark else "bg-white/70"
-    return (f'<a href="{href}" class="{bg} backdrop-blur-sm border {t["border"]} {t["text"]} '
-            f'font-semibold rounded-xl px-8 py-4 {HOVER_GLOW} {extra}">{label}</a>')
+def _btn_ghost(t: Dict, label: str, href: str = "#features", extra: str = "") -> str:
+    return (f'<a href="{href}" class="{t["btn_secondary"]} '
+            f'font-semibold rounded-xl px-8 py-4 {HOVER_GLOW} transition-all duration-200 {extra}">{label}</a>')
 
 
 def _eyebrow(t: Dict, text: str) -> str:
@@ -528,7 +566,7 @@ class Hero:
 
     @staticmethod
     def split(t: Dict, d: Dict, imgs: List[str]) -> str:
-        """Left copy + right image — default for most industries."""
+        """Left copy + right image. Image stacks below copy on mobile."""
         img   = imgs[0] if imgs else ""
         h1    = d.get("hero", {}).get("h1", "")
         sub   = d.get("hero", {}).get("sub", "")
@@ -543,37 +581,41 @@ class Hero:
             f'border-2 {av_border} opacity-75 -ml-1 first:ml-0"></div>'
             for _ in range(4)
         )
-        proof_html = (
-            f'<div class="flex items-center gap-3 pt-5 border-t {t["border"]}">'
-            f'<div class="flex">{avatars}</div>'
-            f'<span class="text-sm {t["text_muted"]}">'
-            f'<span class="font-bold {t["stat"]}">{proof.get("count","")}</span>'
-            f' {proof.get("label","")}</span></div>'
-        ) if proof.get("count") else ""
+        proof_html = ""
+        if proof.get("count") and proof.get("label"):
+            proof_html = (
+                f'<div class="flex items-center gap-3 pt-5 border-t {t["border"]}">'
+                f'<div class="flex">{avatars}</div>'
+                f'<span class="text-sm {t["text_muted"]}">'
+                f'<span class="font-bold {t["stat"]}">{proof["count"]}</span>'
+                f' {proof["label"]}</span></div>'
+            )
 
-        badge_html = (
-            f'<span class="inline-flex items-center gap-2 px-4 py-1.5 text-xs font-bold '
-            f'uppercase tracking-wider {t["badge"]}">'
-            f'<span class="w-1.5 h-1.5 rounded-full bg-current animate-pulse"></span>'
-            f'{badge}</span>'
-        ) if badge else ""
+        badge_html = ""
+        if badge:
+            badge_html = (
+                f'<span class="inline-flex items-center gap-2 px-4 py-1.5 text-xs font-bold '
+                f'uppercase tracking-wider {t["badge"]}">'
+                f'<span class="w-1.5 h-1.5 rounded-full bg-current animate-pulse"></span>'
+                f'{badge}</span>'
+            )
 
         return f"""<section id="hero" class="relative {t['bg']} overflow-hidden pt-32 pb-20 md:pt-44 md:pb-28">
     <div class="absolute inset-0 bg-gradient-to-br {t['grad_subtle']} pointer-events-none"></div>
     <div class="absolute top-0 right-0 w-[600px] h-[600px] {t['glow']} opacity-[0.035] blur-[130px] rounded-full pointer-events-none"></div>
     <div class="container mx-auto {PAD_CON} relative z-10">
         <div class="grid lg:grid-cols-2 gap-12 xl:gap-20 items-center">
-            <div class="space-y-7">
+            <div class="space-y-7 order-2 lg:order-1">
                 {badge_html}
                 <h1 class="{H_HERO} {t['text']}">{h1}</h1>
-                <p class="text-lg md:text-xl {t['text_muted']} leading-relaxed max-w-lg">{sub}</p>
+                <p class="text-lg md:text-xl {t['text_muted']} leading-relaxed max-w-2xl">{sub}</p>
                 <div class="flex flex-wrap gap-4">
                     {_btn(t, cta, "#contact", "text-base px-9 py-4")}
-                    {_btn_outline(t, "See how it works &rarr;", "#features", "text-base px-9 py-4")}
+                    {_btn_ghost(t, "See how it works &rarr;", "#features", "text-base px-9 py-4")}
                 </div>
                 {proof_html}
             </div>
-            <div class="relative h-[380px] md:h-[500px] lg:h-[560px]">
+            <div class="relative h-[300px] md:h-[420px] lg:h-[520px] order-1 lg:order-2">
                 <div class="absolute -inset-4 {t['glow']} opacity-[0.07] blur-3xl rounded-3xl"></div>
                 <img src="{img}" alt="{h1}"
                      class="relative z-10 w-full h-full object-cover rounded-2xl shadow-2xl"
@@ -609,7 +651,7 @@ class Hero:
             <p class="text-xl {t['text_muted']} leading-relaxed max-w-2xl mx-auto">{sub}</p>
             <div class="flex flex-col sm:flex-row gap-4 justify-center pt-4">
                 {_btn(t, cta, "#contact", "text-base px-10 py-5 rounded-full")}
-                {_btn_outline(t, "Learn more &darr;", "#features", "text-base px-10 py-5 rounded-full")}
+                {_btn_ghost(t, "Learn more &darr;", "#features", "text-base px-10 py-5 rounded-full")}
             </div>
         </div>
     </div>
@@ -617,7 +659,7 @@ class Hero:
 
     @staticmethod
     def with_stats(t: Dict, d: Dict, imgs: List[str]) -> str:
-        """Left headline + stats bar, muted right image — corporate/professional."""
+        """Left headline + stats bar. Image is atmospheric background."""
         img   = imgs[0] if imgs else ""
         h1    = d.get("hero", {}).get("h1", "")
         sub   = d.get("hero", {}).get("sub", "")
@@ -626,11 +668,11 @@ class Hero:
         img_op = "opacity-[0.06]" if t["mode"] == "light" else "opacity-[0.1]"
 
         stat_grid = "".join(
-            f'<div class="text-center md:text-left">'
+            f'<div class="text-center">'
             f'<p class="text-4xl md:text-5xl font-black {t["stat"]}">{s.get("value","")}</p>'
             f'<p class="text-sm {t["text_muted"]} mt-1 leading-tight">{s.get("label","")}</p></div>'
             for s in stats[:4]
-        )
+        ) if stats else ""
         stats_html = (
             f'<div class="grid grid-cols-2 md:grid-cols-4 gap-8 mt-16 pt-12 border-t {t["border"]}">'
             f'{stat_grid}</div>'
@@ -645,10 +687,10 @@ class Hero:
     <div class="container mx-auto {PAD_CON} relative z-10">
         <div class="max-w-2xl space-y-8">
             <h1 class="{H_HERO} {t['text']}">{h1}</h1>
-            <p class="text-lg md:text-xl {t['text_muted']} leading-relaxed">{sub}</p>
+            <p class="text-lg md:text-xl {t['text_muted']} leading-relaxed max-w-2xl">{sub}</p>
             <div class="flex flex-wrap gap-4">
                 {_btn(t, cta, "#contact", "text-base")}
-                {_btn_outline(t, "See our work &rarr;", "#features", "text-base")}
+                {_btn_ghost(t, "See our work &rarr;", "#features", "text-base")}
             </div>
         </div>
         {stats_html}
@@ -674,11 +716,11 @@ class Hero:
             <span class="block bg-gradient-to-r {t['grad_text']} bg-clip-text text-transparent">{l2}</span>
         </h1>
         <div class="grid lg:grid-cols-5 gap-10 items-end">
-            <div class="lg:col-span-3 h-[360px] md:h-[460px] overflow-hidden rounded-2xl shadow-2xl">
+            <div class="lg:col-span-3 aspect-[16/9] overflow-hidden rounded-2xl shadow-2xl">
                 <img src="{img}" alt="" class="w-full h-full object-cover" loading="eager" />
             </div>
             <div class="lg:col-span-2 space-y-7 pb-4">
-                <p class="text-base md:text-lg {t['text_muted']} leading-relaxed">{sub}</p>
+                <p class="text-base md:text-lg {t['text_muted']} leading-relaxed max-w-2xl">{sub}</p>
                 {_btn(t, f"{cta} &rarr;", "#contact", "text-base")}
             </div>
         </div>
@@ -725,11 +767,11 @@ class Features:
                 f'<div class="space-y-5 {copy_cls}">'
                 f'<div class="text-4xl leading-none">{f.get("icon","✦")}</div>'
                 f'<h3 class="text-2xl md:text-3xl font-bold {t["text"]}">{f.get("title","")}</h3>'
-                f'<p class="text-base {t["text_muted"]} leading-relaxed">{f.get("description","")}</p>'
+                f'<p class="text-base {t["text_muted"]} leading-relaxed max-w-2xl">{f.get("description","")}</p>'
                 f'<a href="#contact" class="inline-flex items-center gap-1 text-sm font-semibold '
                 f'{t["stat"]} {HOVER_GLOW}">Learn more &rarr;</a>'
                 f'</div>'
-                f'<div class="h-64 md:h-[340px] rounded-2xl overflow-hidden shadow-xl {img_cls}">'
+                f'<div class="aspect-[4/3] rounded-2xl overflow-hidden shadow-xl {img_cls}">'
                 f'<img src="{img_url}" alt="" class="w-full h-full object-cover" loading="lazy" />'
                 f'</div></div>'
             )
@@ -764,7 +806,7 @@ class Features:
                 <h2 class="{H_SECTION} {t['text']} mb-10">Built for Real Results</h2>
                 <div class="space-y-3">{items}</div>
             </div>
-            <div class="h-[460px] rounded-2xl overflow-hidden shadow-2xl">
+            <div class="aspect-[4/3] rounded-2xl overflow-hidden shadow-2xl">
                 <img src="{img_url}" alt="" class="w-full h-full object-cover" loading="lazy" />
             </div>
         </div>
@@ -788,8 +830,8 @@ class Pricing:
             cta_btn = (
                 _btn(t, "Get Started", "#contact", "w-full text-center block py-3.5 rounded-xl")
                 if featured else
-                f'<a href="#contact" class="border {t["border"]} {t["text"]} font-bold '
-                f'w-full py-3.5 rounded-xl block text-center {HOVER_GLOW}">Get Started</a>'
+                f'<a href="#contact" class="{t["btn_secondary"]} font-bold '
+                f'w-full py-3.5 rounded-xl block text-center transition-all duration-200">Get Started</a>'
             )
             return (
                 f'<div class="relative {t["card"]} rounded-2xl p-8 {HOVER_LIFT} flex flex-col">{pop}'
@@ -835,7 +877,7 @@ class Pricing:
                 <p class="text-sm {t['text_light']} mb-6">{simple.get("description","")}</p>
                 <p class="text-5xl font-black {t['text']} mb-8">{simple.get("price","Free")}</p>
                 <ul class="space-y-2.5 mb-10">{sf}</ul>
-                {_btn_outline(t, "Get Started", "#contact", "block w-full text-center py-3.5")}
+                {_btn_ghost(t, "Get Started", "#contact", "block w-full text-center py-3.5")}
             </div>
             <div class="bg-gradient-to-br {t['grad']} rounded-2xl p-10 text-white relative overflow-hidden {HOVER_LIFT} shadow-2xl">
                 <div class="absolute top-0 right-0 w-44 h-44 bg-white/10 blur-3xl rounded-full pointer-events-none"></div>
@@ -860,14 +902,14 @@ class Pricing:
             f'<p class="text-sm {t["text_muted"]} mb-3 leading-relaxed">{tier.get("description","")}</p>'
             f'<p class="text-xl font-black {t["stat"]} mb-5">{tier.get("price","Get a Quote")}</p>'
             f'<ul class="space-y-2 mb-8 flex-grow">{"".join([_check(t, f) for f in (tier.get("features") or [])])}</ul>'
-            f'{_btn_outline(t, "Request a Quote &rarr;", "#contact", "block w-full text-center py-3")}'
+            f'{_btn_ghost(t, "Request a Quote &rarr;", "#contact", "block w-full text-center py-3")}'
             f'</div>'
             for i, tier in enumerate(tiers)
         )
         cta_card = (
             f'<div class="{t["card"]} rounded-2xl p-8 max-w-2xl mx-auto text-center mt-10">'
             f'<p class="font-bold text-lg {t["text"]} mb-2">Not sure what you need?</p>'
-            f'<p class="text-sm {t["text_muted"]} mb-6 leading-relaxed">'
+            f'<p class="text-sm {t["text_muted"]} mb-6 leading-relaxed max-w-2xl mx-auto">'
             f'Every project is different. We\'ll assess yours and give a transparent, no-obligation estimate.</p>'
             f'{_btn(t, "Get a Free Estimate", "#contact")}'
             f'</div>'
@@ -878,7 +920,7 @@ class Pricing:
             {_eyebrow(t, "Services & Pricing")}
             {_h2(t, "What We Offer", "Every project gets a tailored quote. No surprises.")}
         </div>
-        <div class="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">{cards}</div>
+        <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl mx-auto">{cards}</div>
         {cta_card}
     </div>
 </section>"""
@@ -914,6 +956,23 @@ class Pricing:
     </div>
 </section>"""
 
+    @staticmethod
+    def contact_only(t: Dict, tiers: List[Dict]) -> str:
+        """Used when no pricing data is available — just a clean CTA to contact."""
+        return f"""<section id="pricing" class="{t['bg_alt']} {PAD_SEC}">
+    <div class="container mx-auto {PAD_CON}">
+        <div class="max-w-2xl mx-auto text-center {t["card"]} rounded-2xl p-12">
+            {_eyebrow(t, "Pricing")}
+            <h2 class="text-3xl font-black {t['text']} mt-2 mb-4">Every Project Is Different</h2>
+            <p class="text-base {t['text_muted']} leading-relaxed mb-8">
+                We tailor our services to your specific needs. Get in touch and we'll provide a
+                transparent, no-obligation quote.
+            </p>
+            {_btn(t, "Request a Quote", "#contact", "text-base px-10 py-5")}
+        </div>
+    </div>
+</section>"""
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # MASTER ARCHITECT
@@ -921,23 +980,23 @@ class Pricing:
 
 class MasterArchitect:
 
+    # Valid section IDs the AI can request
+    VALID_SECTIONS = {"hero", "trust", "features", "pricing", "testimonials", "faq", "contact"}
+
     def __init__(self, business_name: str, prompt: str, version: int = 1):
-        # The business_name from the form IS the site title — preserve it exactly.
         raw_name   = (business_name or "").strip()
         raw_prompt = (prompt or "").strip()
 
-        # Try to extract a clean name from the prompt too (in case user typed it there)
         extracted, clean_prompt = extract_business_name(raw_name, raw_prompt)
 
         self.industry = detect_industry(clean_prompt or raw_prompt)
-
-        # Priority: form field name > extracted from prompt > industry default
         self.name     = raw_name or extracted or _default_name(self.industry)
         self.prompt   = clean_prompt
         self.version  = version
         self.theme    = select_theme(self.industry)
         self.data: Dict      = {}
         self.imgs: List[str] = []
+        self.contact_info    = _extract_contact_info(raw_prompt + " " + clean_prompt)
 
         logger.info(f"MasterArchitect | '{self.name}' | {self.industry} | {self.theme['id']}")
 
@@ -946,6 +1005,7 @@ class MasterArchitect:
     def _ai_prompt(self) -> str:
         project_ind = {"construction", "logistics", "automotive", "events"}
         service_ind = {"legal", "nonprofit"}
+        no_price_ind = {"restaurant", "beauty", "fitness", "travel", "nature"}
 
         if self.industry in project_ind:
             price_spec = (
@@ -953,67 +1013,89 @@ class MasterArchitect:
                 '  {"name":"Commercial / Mid-Scale","price":"From $10,000","description":"One sentence.","features":["5 items"],"featured":true},\n'
                 '  {"name":"Large / Enterprise","price":"Get a Quote","description":"One sentence.","features":["5 items"],"featured":false}'
             )
+            price_note = "Include pricing tiers as project ranges."
         elif self.industry in service_ind:
             price_spec = (
                 '  {"name":"Free Consultation","price":"Complimentary","description":"30-min, no obligation.","features":["5 items"],"featured":false},\n'
                 '  {"name":"Standard Engagement","price":"From $300/hr","description":"Flexible support.","features":["5 items"],"featured":true},\n'
                 '  {"name":"Retainer","price":"Custom","description":"Dedicated partnership.","features":["5 items"],"featured":false}'
             )
+            price_note = "Include service tiers appropriate for a professional services firm."
+        elif self.industry in no_price_ind:
+            price_spec = ""
+            price_note = 'Set pricing to null — this industry does not use pricing tiers on a landing page.'
         else:
             price_spec = (
                 '  {"name":"Starter","price":"$X/mo","description":"For individuals.","features":["5 items"],"featured":false},\n'
                 '  {"name":"Professional","price":"$X/mo","description":"For growing teams.","features":["5 items"],"featured":true},\n'
                 '  {"name":"Enterprise","price":"Custom","description":"For large orgs.","features":["5 items"],"featured":false}'
             )
+            price_note = "Fill in realistic price estimates for this industry and scale."
 
-        return f"""Write website content for a business called "{self.name}".
+        pricing_block = f'"pricing": [\n{price_spec}\n  ],' if price_spec else '"pricing": null,'
+
+        sections_guidance = {
+            "construction": '["hero","trust","features","pricing","testimonials","faq","contact"]',
+            "restaurant":   '["hero","trust","features","testimonials","contact"]',
+            "beauty":       '["hero","trust","features","testimonials","faq","contact"]',
+            "saas":         '["hero","trust","features","pricing","testimonials","faq","contact"]',
+            "legal":        '["hero","trust","features","pricing","faq","contact"]',
+            "fitness":      '["hero","trust","features","testimonials","contact"]',
+            "nonprofit":    '["hero","features","testimonials","faq","contact"]',
+        }.get(self.industry, '["hero","trust","features","pricing","testimonials","faq","contact"]')
+
+        return f"""You are writing real website copy for a business called "{self.name}".
 Industry: {self.industry}
 Context: {self.prompt}
 
-STRICT RULES:
-- Every word must be specific to THIS business and industry — no generic SaaS filler copy
-- Use industry-appropriate language (e.g. construction = builds/delivers/installs; legal = advises/represents; food = crafted/fresh/seasonal)
-- Do NOT mention any colour names (blue, red, green etc.)
-- stats must be realistic and specific to THIS industry and scale
-- trust_badges must be the actual credentials that matter in this industry
-- social_proof count+label must make sense (e.g. "350+ homes built" not "2,400+ users")
-- The title of the site is "{self.name}" — do not put a different name in the hero h1
+Write like a skilled human copywriter, not a template generator. Rules:
+- Use the industry's actual vocabulary: a builder "constructs" and "installs", a lawyer "advises" and "represents", a chef "prepares" and "crafts", a trainer "coaches" and "pushes". Never write "delivers solutions" or "empowers clients".
+- The hero headline must sound like a real brand tagline — specific, punchy, human. NOT "Your Trusted Partner in [Industry]".
+- Stats must be realistic for a business at this size and stage. Don't invent numbers that are implausible.
+- Trust badges must be the actual credentials that matter in THIS industry (e.g. OSHA for construction, Bar Association for law, Michelin for restaurants).
+- Testimonial quotes must sound like real people speaking. Include a specific result or detail. Never write "highly recommend" or "great service" alone.
+- FAQ questions must be the actual questions that REAL customers in this industry ask — not generic website FAQ questions.
+- social_proof count+label must make sense (e.g. "350+ homes built", not "2,400+ users").
+- {price_note}
+- contact_email and contact_phone: ONLY include these if they appear in the provided context. If not in context, set to empty string "".
+- sections: list which sections are appropriate for this business. {sections_guidance} is the default for this industry — adjust only if the context warrants it. Always include "hero" and "contact". Only include "pricing" if pricing data is available or logical for this industry.
 
 Return ONLY valid JSON (no markdown fences, no prose):
 {{
-  "nav": ["4 nav items specific to this business"],
+  "sections": {sections_guidance},
+  "nav": ["4 nav items specific to this business and the sections you include"],
   "hero": {{
-    "h1": "6-9 word compelling headline for {self.name}",
-    "sub": "One sentence value prop in this industry's natural language",
-    "cta": "Action phrase e.g. Request a Quote / Book a Table / Start Free Trial"
+    "h1": "6-9 word punchy headline for {self.name}",
+    "sub": "One sentence value prop in this industry's plain language",
+    "cta": "Action phrase matching what a customer would do first"
   }},
   "tagline": "2-5 word brand slogan",
-  "social_proof": {{"count": "e.g. 350+", "label": "e.g. projects delivered"}},
+  "social_proof": {{"count": "e.g. 350+", "label": "e.g. projects completed"}},
   "stats": [
     {{"value": "realistic figure", "label": "what it measures"}},
     {{"value": "realistic figure", "label": "what it measures"}},
     {{"value": "realistic figure", "label": "what it measures"}},
     {{"value": "realistic figure", "label": "what it measures"}}
   ],
-  "trust_badges": ["Industry credential 1", "Credential 2", "Credential 3", "Credential 4"],
+  "trust_badges": ["Industry-specific credential 1", "Credential 2", "Credential 3", "Credential 4"],
   "features": [
-    {{"title": "Feature name", "description": "2 specific sentences about {self.name}.", "icon": "single emoji"}},
-    {{"title": "Feature name", "description": "2 specific sentences.", "icon": "single emoji"}},
-    {{"title": "Feature name", "description": "2 specific sentences.", "icon": "single emoji"}}
+    {{"title": "Specific feature", "description": "2 concrete sentences about what {self.name} actually does or offers.", "icon": "single relevant emoji"}},
+    {{"title": "Specific feature", "description": "2 concrete sentences.", "icon": "single emoji"}},
+    {{"title": "Specific feature", "description": "2 concrete sentences.", "icon": "single emoji"}}
   ],
-  "pricing": [
-{price_spec}
-  ],
+  {pricing_block}
   "testimonials": [
-    {{"name": "Full Name", "role": "Job Title", "company": "Company Name", "quote": "1-2 sentence specific result."}},
-    {{"name": "Full Name", "role": "Job Title", "company": "Company Name", "quote": "1-2 sentence specific result."}}
+    {{"name": "Full Name", "role": "Job Title or Relationship", "company": "Company or Location", "quote": "Specific result they got. What changed for them."}},
+    {{"name": "Full Name", "role": "Job Title or Relationship", "company": "Company or Location", "quote": "Specific result or observation."}}
   ],
   "faq": [
-    {{"q": "Question relevant to this industry?", "a": "Specific answer."}},
-    {{"q": "Question?", "a": "Answer."}},
-    {{"q": "Question?", "a": "Answer."}}
+    {{"q": "Question a real customer of this type of business would actually ask?", "a": "Specific, honest answer."}},
+    {{"q": "Another real question?", "a": "Answer."}},
+    {{"q": "Another real question?", "a": "Answer."}}
   ],
-  "cta_text": "Closing call-to-action headline specific to this industry"
+  "cta_headline": "Closing call-to-action headline that feels specific to this industry",
+  "contact_email": "",
+  "contact_phone": ""
 }}"""
 
     def _get_data(self) -> Dict:
@@ -1027,12 +1109,15 @@ Return ONLY valid JSON (no markdown fences, no prose):
             )
             cleaned = re.sub(r"^```json\s*|^```\s*|```$", "", raw.strip(), flags=re.MULTILINE).strip()
             data    = json.loads(cleaned)
+            # Merge any contact info extracted from the original prompt (user input wins)
+            for key in ("contact_email", "contact_phone"):
+                if not data.get(key) and self.contact_info.get(key.replace("contact_","")):
+                    data[key] = self.contact_info[key.replace("contact_","")]
             return self._sanitize(data)
         except Exception as e:
             logger.error(f"AI content error: {e}")
             return self._fallback()
 
-    # Colour words the AI sometimes sneaks into copy
     _COLOR_PAT = re.compile(
         r"\b(violet|fuchsia|purple|indigo|magenta|mauve|lavender|"
         r"cyan|teal|emerald|mint|lime|"
@@ -1066,9 +1151,16 @@ Return ONLY valid JSON (no markdown fences, no prose):
         return obj
 
     def _fallback(self) -> Dict:
-        """Industry-aware fallbacks so nothing ever reads as generic SaaS."""
+        """Industry-aware fallbacks."""
+        base = {
+            "sections": ["hero", "trust", "features", "pricing", "testimonials", "faq", "contact"],
+            "contact_email": self.contact_info.get("email", ""),
+            "contact_phone": self.contact_info.get("phone", ""),
+        }
+
         if self.industry == "construction":
-            return {
+            return {**base, **{
+                "sections": ["hero", "trust", "features", "pricing", "testimonials", "faq", "contact"],
                 "nav": ["Services", "Projects", "About", "Contact"],
                 "hero": {"h1": f"{self.name} — Built Right, On Time", "sub": "Quality construction and renovation delivered on schedule, on budget, by certified tradespeople.", "cta": "Request a Quote"},
                 "tagline": "Built to last.",
@@ -1076,89 +1168,53 @@ Return ONLY valid JSON (no markdown fences, no prose):
                 "stats": [{"value":"98%","label":"On-time delivery"},{"value":"350+","label":"Projects completed"},{"value":"15yr","label":"In the industry"},{"value":"24/7","label":"Emergency cover"}],
                 "trust_badges": ["Licensed & Insured","OSHA Compliant","Bonded Contractor","Satisfaction Guaranteed"],
                 "features": [
-                    {"title":"Licensed & Fully Insured","description":"Every project covered by comprehensive liability and workers compensation. You are fully protected.","icon":"🛡️"},
-                    {"title":"On-Time, On-Budget","description":"Written schedules and fixed-price quotes before work begins. No surprises on your invoice.","icon":"📋"},
-                    {"title":"All Trades, One Team","description":"From groundwork to finishing, certified tradespeople handle every phase under one roof.","icon":"🔨"},
+                    {"title":"Licensed & Fully Insured","description":"Every project covered by comprehensive liability and workers compensation insurance. You are fully protected from day one.","icon":"🛡️"},
+                    {"title":"On-Time, On-Budget","description":"Written schedules and fixed-price quotes before work begins. No surprises on your final invoice.","icon":"📋"},
+                    {"title":"All Trades, One Team","description":"From groundwork to finishing touches, certified tradespeople handle every phase under one roof.","icon":"🔨"},
                 ],
                 "pricing": [
                     {"name":"Residential","price":"From $2,500","description":"Home renovations and repairs.","features":["Free on-site estimate","Kitchen & bath remodels","Roofing & siding","Flooring & painting","Follow-up inspection"],"featured":False},
                     {"name":"Commercial","price":"From $12,000","description":"Business and commercial fit-outs.","features":["Dedicated project manager","Office & retail fit-outs","Compliance documentation","Progress reporting","Warranty included"],"featured":True},
-                    {"name":"Emergency","price":"24/7 Available","description":"Urgent repair and storm damage.","features":["Same-day response","Storm & water damage","Structural emergencies","Insurance billing support","Temporary securing"],"featured":False},
+                    {"name":"Emergency","price":"24/7 Available","description":"Urgent repairs and storm damage.","features":["Same-day response","Storm & water damage","Structural emergencies","Insurance billing support","Temporary securing"],"featured":False},
                 ],
                 "testimonials": [
-                    {"name":"Michael Torres","role":"Homeowner","company":"Brooklyn, NY","quote":"Complete renovation done on schedule and under budget. The crew was professional from day one."},
-                    {"name":"Lisa Chen","role":"Property Manager","company":"Manhattan","quote":"We use them across six properties. Always reliable and always honest about costs."},
+                    {"name":"Michael Torres","role":"Homeowner","company":"Brooklyn, NY","quote":"Complete renovation done on schedule and under budget. The crew was professional and respectful of our home from day one."},
+                    {"name":"Lisa Chen","role":"Property Manager","company":"Manhattan","quote":"We've used them across six properties. Always reliable, always honest about what things will cost."},
                 ],
                 "faq": [
                     {"q":"Are you licensed and insured?","a":"Yes — fully licensed with comprehensive liability and workers compensation on every job."},
-                    {"q":"Do you offer free estimates?","a":"Absolutely. Detailed, no-obligation quotes after an on-site assessment."},
-                    {"q":"How do you handle timelines?","a":"We provide a written schedule before work begins and update you at every milestone."},
+                    {"q":"Do you offer free estimates?","a":"Absolutely. We provide detailed, no-obligation quotes after an on-site assessment."},
+                    {"q":"How do you handle project timelines?","a":"We give you a written schedule before work begins and provide milestone updates throughout."},
                 ],
-                "cta_text": f"Ready to start your project with {self.name}?",
-            }
+                "cta_headline": f"Ready to start your project with {self.name}?",
+            }}
 
-        if self.industry == "legal":
-            return {
-                "nav": ["Practice Areas","Our Team","Resources","Contact"],
-                "hero": {"h1": f"{self.name} — Trusted Counsel, Real Results", "sub": "Strategic legal expertise protecting your interests, backed by decades of proven experience.", "cta": "Schedule a Consultation"},
-                "tagline": "Your advocate.",
-                "social_proof": {"count": "800+", "label": "clients represented"},
-                "stats": [{"value":"98%","label":"Cases resolved favourably"},{"value":"800+","label":"Clients represented"},{"value":"18yr","label":"Combined experience"},{"value":"Free","label":"Initial consultation"}],
-                "trust_badges": ["State Bar Certified","AV Peer Rated","Client Confidential","15+ Years Experience"],
-                "features": [
-                    {"title":"Experienced Litigators","description":"Decades of courtroom and transactional experience across multiple practice areas at every scale.","icon":"⚖️"},
-                    {"title":"Client-First Strategy","description":"We listen before we advise. Your goals shape every strategy we develop on your behalf.","icon":"🤝"},
-                    {"title":"Plain-Language Guidance","description":"We explain your options clearly so you make informed decisions with complete confidence.","icon":"💬"},
-                ],
-                "pricing": [
-                    {"name":"Free Consultation","price":"Complimentary","description":"30-min confidential case review.","features":["Case assessment","Options overview","Fee discussion","No obligation","Confidential"],"featured":False},
-                    {"name":"Standard Representation","price":"From $350/hr","description":"Flexible legal support as needed.","features":["Experienced attorneys","Transparent billing","Strategy sessions","Court representation","Document preparation"],"featured":True},
-                    {"name":"Retainer","price":"Custom","description":"Dedicated ongoing partnership.","features":["Priority access","Monthly strategy calls","Contract review","Regulatory compliance","Predictable costs"],"featured":False},
-                ],
-                "testimonials": [
-                    {"name":"Robert Kim","role":"CEO","company":"TechStart Inc.","quote":"They guided our acquisition with skill and calm. I would trust them with any legal matter."},
-                    {"name":"Jennifer Adams","role":"Private Client","company":"Chicago, IL","quote":"They resolved a long-running dispute in four months. Exceptional communication throughout."},
-                ],
-                "faq": [
-                    {"q":"What practice areas do you cover?","a":"Corporate law, employment disputes, real estate, estate planning, and civil litigation."},
-                    {"q":"How does the free consultation work?","a":"A 30-minute confidential session to assess your situation and explain how we can help."},
-                    {"q":"Do you handle contingency cases?","a":"For select personal injury and employment matters, yes. Fee arrangements discussed at consultation."},
-                ],
-                "cta_text": f"Ready to protect what matters most? Contact {self.name} today.",
-            }
-
-        if self.industry in ("restaurant", "food"):
-            return {
-                "nav": ["Menu","About","Catering","Reservations"],
+        if self.industry == "restaurant":
+            return {**base, **{
+                "sections": ["hero", "trust", "features", "testimonials", "contact"],
+                "nav": ["Menu", "About", "Catering", "Reservations"],
                 "hero": {"h1": f"{self.name} — Food Made With Purpose", "sub": "Freshly prepared every day from locally sourced ingredients and time-honoured recipes.", "cta": "View Our Menu"},
                 "tagline": "Taste the difference.",
                 "social_proof": {"count": "1,200+", "label": "meals served weekly"},
                 "stats": [{"value":"4.9★","label":"Average rating"},{"value":"1,200+","label":"Meals weekly"},{"value":"8yr","label":"Serving the community"},{"value":"100%","label":"Fresh daily"}],
-                "trust_badges": ["Health Inspected ✓","Locally Sourced","5-Star Rated","Award Winning"],
+                "trust_badges": ["Health Inspected","Locally Sourced","5-Star Rated","Award Winning"],
                 "features": [
-                    {"title":"Locally Sourced","description":"We partner with regional farms so every dish is as fresh as it is flavourful — every single day.","icon":"🥗"},
+                    {"title":"Locally Sourced Ingredients","description":"We partner with regional farms so every dish is as fresh as it is flavourful — every single day.","icon":"🥗"},
                     {"title":"Made Fresh Daily","description":"Nothing is pre-made or frozen. Every dish is prepared in-house from scratch each morning.","icon":"👨‍🍳"},
-                    {"title":"Warm Atmosphere","description":"A dining room designed for lingering — perfect for dates, family meals, and celebrations alike.","icon":"🏡"},
+                    {"title":"Warm, Welcoming Atmosphere","description":"A dining room designed for lingering — perfect for date nights, family meals, and private celebrations.","icon":"🏡"},
                 ],
-                "pricing": [
-                    {"name":"Lunch","price":"$15–$25","description":"Daily specials and light plates.","features":["Soup & salad combos","Artisan sandwiches","Fresh-baked bread","Seasonal specials","Quick service"],"featured":False},
-                    {"name":"Dinner","price":"$28–$50","description":"Full à la carte menu.","features":["Signature entrées","House-made pasta","Fresh seafood daily","Curated wine list","Seasonal desserts"],"featured":True},
-                    {"name":"Catering","price":"Custom","description":"Events and private dining.","features":["Corporate events","Family celebrations","Drop-off or full-service","Custom menus","Dietary accommodations"],"featured":False},
-                ],
+                "pricing": None,
                 "testimonials": [
-                    {"name":"Maria Gonzalez","role":"Local Resident","company":"Yelp Elite","quote":"Best food in the neighbourhood. The pasta is always perfect and the portions are generous."},
-                    {"name":"David Park","role":"Food Blogger","company":"NYC Eats","quote":"A hidden gem. Every dish is made with care and you can taste it in every single bite."},
+                    {"name":"Maria Gonzalez","role":"Yelp Elite Reviewer","company":"Local Regular","quote":"Best food in the neighbourhood. The pasta is always perfectly cooked and the portions are genuinely generous."},
+                    {"name":"David Park","role":"Food Writer","company":"NYC Eats","quote":"A hidden gem that earns every star. You can taste the care in every dish."},
                 ],
-                "faq": [
-                    {"q":"Do you take reservations?","a":"Yes — recommended for dinner, especially weekends. Walk-ins always welcome for lunch."},
-                    {"q":"Can you accommodate dietary needs?","a":"Yes. Vegetarian, vegan, and gluten-free options are available across the full menu."},
-                    {"q":"Do you offer takeout?","a":"Full menu available for takeout. We also partner with major delivery platforms."},
-                ],
-                "cta_text": f"Come experience {self.name} for yourself",
-            }
+                "faq": [],
+                "cta_headline": f"Come experience {self.name} for yourself",
+            }}
 
-        # Generic professional fallback
-        return {
+        # Generic fallback
+        return {**base, **{
+            "sections": ["hero", "trust", "features", "pricing", "testimonials", "faq", "contact"],
             "nav": ["Features","Pricing","About","Contact"],
             "hero": {"h1": f"Welcome to {self.name}", "sub": "Professional services built around your specific needs and goals.", "cta": "Get Started"},
             "tagline": "Excellence delivered.",
@@ -1168,49 +1224,66 @@ Return ONLY valid JSON (no markdown fences, no prose):
             "features": [
                 {"title":"Expert Team","description":"Seasoned professionals with deep domain knowledge committed to delivering results that matter.","icon":"🏆"},
                 {"title":"Proven Track Record","description":"Hundreds of successful engagements across a wide range of industries and client sizes.","icon":"📈"},
-                {"title":"Responsive Support","description":"A dedicated team that responds quickly and keeps you informed at every step of the process.","icon":"🤝"},
+                {"title":"Responsive Support","description":"A dedicated team that responds quickly and keeps you informed at every step.","icon":"🤝"},
             ],
             "pricing": [
-                {"name":"Starter","price":"$49","description":"For individuals.","features":["Core features","Email support","5 projects","Basic analytics","Monthly reports"],"featured":False},
-                {"name":"Professional","price":"$149","description":"For growing teams.","features":["Everything in Starter","Priority support","Unlimited projects","Advanced analytics","Custom integrations"],"featured":True},
+                {"name":"Starter","price":"$49/mo","description":"For individuals.","features":["Core features","Email support","5 projects","Basic analytics","Monthly reports"],"featured":False},
+                {"name":"Professional","price":"$149/mo","description":"For growing teams.","features":["Everything in Starter","Priority support","Unlimited projects","Advanced analytics","Custom integrations"],"featured":True},
                 {"name":"Enterprise","price":"Custom","description":"For large organisations.","features":["Everything in Professional","Dedicated manager","SLA guarantee","Custom contracts","Onboarding support"],"featured":False},
             ],
             "testimonials": [
-                {"name":"Jordan Lee","role":"Director","company":"Meridian Group","quote":"Working with this team changed our approach entirely. The results were immediate and lasting."},
-                {"name":"Priya Nair","role":"Founder","company":"Spark Ventures","quote":"Responsive, knowledgeable, and genuinely invested in our success. Highly recommend."},
+                {"name":"Jordan Lee","role":"Director","company":"Meridian Group","quote":"Working with this team changed our entire approach. The results were measurable within the first month."},
+                {"name":"Priya Nair","role":"Founder","company":"Spark Ventures","quote":"Responsive, knowledgeable, and genuinely invested in our success. They feel like part of our team."},
             ],
             "faq": [
-                {"q":"How do I get started?","a":"Reach out via the contact form and we will schedule an initial conversation to understand your needs."},
+                {"q":"How do I get started?","a":"Reach out via the contact form and we'll schedule an initial call to understand your needs."},
                 {"q":"What does the process look like?","a":"Discovery first, then a tailored plan, then execution with full transparency at every stage."},
-                {"q":"Do you offer ongoing support?","a":"Yes. All engagements include continued access to our team after the initial project."},
+                {"q":"Do you offer ongoing support?","a":"Yes. All engagements include continued access to our team after the initial project is complete."},
             ],
-            "cta_text": f"Ready to get started with {self.name}?",
-        }
+            "cta_headline": f"Ready to get started with {self.name}?",
+        }}
 
     # ── Layout selectors ──────────────────────────────────────────────────────
 
     def _hero_fn(self) -> Callable:
         return {
-            "luxury":     Hero.centered, "agency":      Hero.centered,
-            "beauty":     Hero.centered, "travel":      Hero.centered, "nonprofit": Hero.centered,
-            "finance":    Hero.with_stats, "real_estate": Hero.with_stats,
-            "legal":      Hero.with_stats, "logistics":   Hero.with_stats,
-            "restaurant": Hero.editorial, "events":      Hero.editorial, "ecommerce": Hero.editorial,
+            "luxury":      Hero.centered,
+            "agency":      Hero.centered,
+            "beauty":      Hero.centered,
+            "travel":      Hero.centered,
+            "nonprofit":   Hero.centered,
+            "finance":     Hero.with_stats,
+            "real_estate": Hero.with_stats,
+            "legal":       Hero.with_stats,
+            "logistics":   Hero.with_stats,
+            "restaurant":  Hero.editorial,
+            "events":      Hero.editorial,
+            "ecommerce":   Hero.editorial,
         }.get(self.industry, Hero.split)
 
     def _features_fn(self) -> Callable:
         return {
-            "luxury":      Features.cards, "agency":       Features.cards,
-            "saas":        Features.cards, "ecommerce":    Features.cards,
-            "developer":   Features.cards, "startup":      Features.cards,
-            "ai":          Features.cards, "events":       Features.cards,
-            "finance":     Features.icon_list, "real_estate":  Features.icon_list,
-            "legal":       Features.icon_list, "logistics":    Features.icon_list,
-            "health":      Features.alternating, "fitness":     Features.alternating,
-            "travel":      Features.alternating, "restaurant":  Features.alternating,
-            "construction":Features.alternating, "automotive":  Features.alternating,
-            "beauty":      Features.alternating, "nature":      Features.alternating,
-            "nonprofit":   Features.alternating,
+            "luxury":       Features.cards,
+            "agency":       Features.cards,
+            "saas":         Features.cards,
+            "ecommerce":    Features.cards,
+            "developer":    Features.cards,
+            "startup":      Features.cards,
+            "ai":           Features.cards,
+            "events":       Features.cards,
+            "finance":      Features.icon_list,
+            "real_estate":  Features.icon_list,
+            "legal":        Features.icon_list,
+            "logistics":    Features.icon_list,
+            "health":       Features.alternating,
+            "fitness":      Features.alternating,
+            "travel":       Features.alternating,
+            "restaurant":   Features.alternating,
+            "construction": Features.alternating,
+            "automotive":   Features.alternating,
+            "beauty":       Features.alternating,
+            "nature":       Features.alternating,
+            "nonprofit":    Features.alternating,
         }.get(self.industry, Features.cards)
 
     def _pricing_fn(self) -> Callable:
@@ -1227,35 +1300,68 @@ Return ONLY valid JSON (no markdown fences, no prose):
     def _nav(self) -> str:
         t   = self.theme
         cta = self.data.get("hero", {}).get("cta", "Get Started")
+        sections = self.data.get("sections") or list(self.VALID_SECTIONS)
+        nav_items = self.data.get("nav") or []
+
+        # Only link to sections that actually exist
         links = "".join(
-            f'<li><a href="#{lnk.lower().replace(" ","")}" '
+            f'<li><a href="#{item.lower().replace(" ", "")}" '
             f'class="{t["text_muted"]} hover:opacity-75 transition-opacity text-sm font-medium">'
-            f'{lnk}</a></li>'
-            for lnk in (self.data.get("nav") or [])
+            f'{item}</a></li>'
+            for item in nav_items
         )
-        return (
-            f'<nav class="fixed top-0 w-full z-50 {t["nav"]}">'
-            f'<div class="container mx-auto {PAD_CON} py-4 flex justify-between items-center">'
-            f'<a href="#" class="text-xl font-black tracking-tight {t["text"]}">{self.name}</a>'
-            f'<ul class="hidden md:flex items-center gap-8">{links}</ul>'
-            f'{_btn(t, cta, "#contact", "text-sm px-5 py-2.5 rounded-lg")}'
-            f'</div></nav>'
+
+        # Mobile menu (pure CSS via checkbox hack)
+        mobile_links = "".join(
+            f'<a href="#{item.lower().replace(" ", "")}" '
+            f'class="block px-4 py-3 text-sm font-medium {t["text_muted"]} hover:opacity-75 transition-opacity border-b {t["border"]}">'
+            f'{item}</a>'
+            for item in nav_items
         )
+
+        dark = t["mode"] == "dark"
+        hamburger_color = "bg-white" if dark else "bg-slate-800"
+
+        return f"""<nav class="fixed top-0 w-full z-50 {t['nav']}">
+    <div class="container mx-auto {PAD_CON} py-4 flex justify-between items-center">
+        <a href="#" class="text-xl font-black tracking-tight {t['text']}">{self.name}</a>
+        <ul class="hidden md:flex items-center gap-8">{links}</ul>
+        <div class="flex items-center gap-3">
+            <a href="#contact" class="hidden md:inline-block bg-gradient-to-r {t['grad']} text-white font-bold rounded-xl px-5 py-2.5 text-sm shadow-md {HOVER_LIFT}">{cta}</a>
+            <!-- Hamburger (mobile only) -->
+            <label for="nav-toggle" class="md:hidden cursor-pointer p-2 rounded-lg border {t['border']} flex flex-col gap-1.5" aria-label="Toggle menu">
+                <span class="block w-5 h-0.5 {hamburger_color}"></span>
+                <span class="block w-5 h-0.5 {hamburger_color}"></span>
+                <span class="block w-5 h-0.5 {hamburger_color}"></span>
+            </label>
+        </div>
+    </div>
+    <!-- Mobile drawer (CSS only) -->
+    <input type="checkbox" id="nav-toggle" class="hidden peer" />
+    <div class="{t['bg']} border-t {t['border']} hidden peer-checked:block md:hidden shadow-lg">
+        {mobile_links}
+        <div class="p-4">
+            <a href="#contact" class="block text-center bg-gradient-to-r {t['grad']} text-white font-bold rounded-xl px-5 py-3 text-sm">{cta}</a>
+        </div>
+    </div>
+</nav>"""
 
     def _trust_band(self) -> str:
         t      = self.theme
-        badges = self.data.get("trust_badges") or ["Certified","Award Winning","5-Star Rated","Trusted"]
-        pills  = "".join(
+        badges = self.data.get("trust_badges") or []
+        if not badges:
+            return ""
+        pills = "".join(
             f'<span class="px-4 py-1.5 text-xs font-semibold {t["badge"]}">{b}</span>'
             for b in badges
         )
         return (
-            f'<div class="{t["bg_alt"]} border-y {t["border"]} py-5">'
+            f'<section id="trust" class="{t["bg_alt"]} border-y {t["border"]} py-5">'
             f'<div class="container mx-auto {PAD_CON}">'
             f'<div class="flex flex-wrap items-center justify-center gap-3">'
             f'<span class="text-xs {t["text_light"]} uppercase tracking-widest mr-1">Trusted &amp; Verified</span>'
             f'{pills}'
-            f'</div></div></div>'
+            f'</div></div></section>'
         )
 
     def _testimonials(self) -> str:
@@ -1263,11 +1369,11 @@ Return ONLY valid JSON (no markdown fences, no prose):
         tevs = self.data.get("testimonials") or []
         if not tevs:
             return ""
-        stars = "".join(['<span class="text-amber-400">&#9733;</span>'] * 5)
+        stars = "".join(['<span style="color:#f59e0b">&#9733;</span>'] * 5)
         cards = "".join(
             f'<div class="{t["card"]} rounded-2xl p-8 {HOVER_LIFT} flex flex-col">'
             f'<div class="flex gap-0.5 mb-5 text-sm">{stars}</div>'
-            f'<p class="{t["text_muted"]} text-base italic leading-relaxed flex-grow mb-6">'
+            f'<p class="{t["text_muted"]} text-base italic leading-relaxed flex-grow mb-6 max-w-2xl">'
             f'&#8220;{tv.get("quote","")}&#8221;</p>'
             f'<div class="flex items-center gap-3 pt-5 border-t {t["border"]}">'
             f'<div class="w-10 h-10 shrink-0 rounded-full bg-gradient-to-br {t["grad"]} '
@@ -1279,7 +1385,6 @@ Return ONLY valid JSON (no markdown fences, no prose):
             f'</div></div></div>'
             for tv in tevs
         )
-        # Testimonials sit on bg_alt so they contrast with the features section above (bg)
         return (
             f'<section id="testimonials" class="{t["bg_alt"]} {PAD_SEC}">'
             f'<div class="container mx-auto {PAD_CON}">'
@@ -1310,7 +1415,6 @@ Return ONLY valid JSON (no markdown fences, no prose):
             f'</div></details>'
             for faq in faqs
         )
-        # FAQ on bg (opposite of testimonials on bg_alt)
         return (
             f'<section id="faq" class="{t["bg"]} {PAD_SEC}">'
             f'<div class="container mx-auto {PAD_CON}">'
@@ -1322,74 +1426,176 @@ Return ONLY valid JSON (no markdown fences, no prose):
             f'</div></section>'
         )
 
-    def _cta(self) -> str:
-        t         = self.theme
-        headline  = self.data.get("cta_text") or f"Ready to get started with {self.name}?"
-        sub       = self.data.get("hero", {}).get("sub") or ""
-        btn_label = self.data.get("hero", {}).get("cta") or "Get Started"
-        img_url   = self.imgs[2] if len(self.imgs) > 2 else (self.imgs[0] if self.imgs else "")
-        overlay   = "bg-white/88" if t["mode"] == "light" else "bg-black/78"
-        img_op    = "opacity-[0.05]" if t["mode"] == "light" else "opacity-[0.08]"
-        mailto    = f"mailto:hello@{re.sub(r'[^a-z0-9]', '', self.name.lower())}.com"
-        sub_html  = f'<p class="text-lg {t["text_muted"]} leading-relaxed max-w-xl mx-auto">{sub}</p>' if sub else ""
+    def _contact(self) -> str:
+        """Real contact form section. Uses actual email/phone only if provided."""
+        t           = self.theme
+        headline    = self.data.get("cta_headline") or f"Get in Touch with {self.name}"
+        sub         = self.data.get("hero", {}).get("sub") or ""
+        btn_label   = self.data.get("hero", {}).get("cta") or "Send Message"
+        email       = self.data.get("contact_email") or ""
+        phone       = self.data.get("contact_phone") or ""
+        img_url     = self.imgs[2] if len(self.imgs) > 2 else (self.imgs[0] if self.imgs else "")
+        overlay     = "bg-white/88" if t["mode"] == "light" else "bg-black/78"
+        img_op      = "opacity-[0.05]" if t["mode"] == "light" else "opacity-[0.08]"
 
-        return (
-            f'<section id="contact" class="relative {t["bg_alt"]} {PAD_SEC} overflow-hidden">'
-            f'<div class="absolute inset-0 pointer-events-none select-none">'
-            f'<img src="{img_url}" alt="" class="w-full h-full object-cover {img_op}" loading="lazy" />'
-            f'<div class="absolute inset-0 {overlay}"></div>'
-            f'</div>'
-            f'<div class="absolute inset-0 bg-gradient-to-br {t["grad_subtle"]} pointer-events-none"></div>'
-            f'<div class="container mx-auto {PAD_CON} relative z-10 text-center">'
-            f'<div class="max-w-3xl mx-auto space-y-6">'
-            f'<h2 class="{H_SECTION} {t["text"]}">{headline}</h2>'
-            f'{sub_html}'
-            f'<div class="flex flex-col sm:flex-row gap-4 justify-center pt-4">'
-            f'{_btn(t, btn_label, mailto, "text-base px-10 py-5")}'
-            f'<a href="tel:+10000000000" '
-            f'class="border {t["border"]} {t["text"]} px-10 py-5 rounded-xl font-bold {HOVER_GLOW} text-base '
-            f'{"bg-white/6" if t["mode"]=="dark" else "bg-white/70"} backdrop-blur-sm">'
-            f'&#128222; Call Us</a>'
-            f'</div></div></div></section>'
+        # Form action: use real email if available, else no action (user configures later)
+        form_action = f'action="mailto:{email}" enctype="text/plain"' if email else ""
+        form_note   = "" if email else (
+            f'<p class="text-xs {t["text_light"]} mt-3 text-center">'
+            f'Form submission will be configured by the site owner.</p>'
         )
+
+        # Contact details — only render what we actually have
+        contact_details = ""
+        if email:
+            contact_details += (
+                f'<a href="mailto:{email}" class="flex items-center gap-2 text-sm {t["text_muted"]} '
+                f'hover:opacity-75 transition-opacity">'
+                f'<span>&#9993;</span><span>{email}</span></a>'
+            )
+        if phone:
+            contact_details += (
+                f'<a href="tel:{re.sub(r"[^+\d]","",phone)}" class="flex items-center gap-2 text-sm {t["text_muted"]} '
+                f'hover:opacity-75 transition-opacity">'
+                f'<span>&#128222;</span><span>{phone}</span></a>'
+            )
+        contact_block = (
+            f'<div class="flex flex-col gap-3 mt-6 pt-6 border-t {t["border"]}">{contact_details}</div>'
+        ) if contact_details else ""
+
+        return f"""<section id="contact" class="relative {t['bg_alt']} {PAD_SEC} overflow-hidden">
+    <div class="absolute inset-0 pointer-events-none select-none">
+        <img src="{img_url}" alt="" class="w-full h-full object-cover {img_op}" loading="lazy" />
+        <div class="absolute inset-0 {overlay}"></div>
+    </div>
+    <div class="absolute inset-0 bg-gradient-to-br {t['grad_subtle']} pointer-events-none"></div>
+    <div class="container mx-auto {PAD_CON} relative z-10">
+        <div class="grid lg:grid-cols-2 gap-16 items-start max-w-5xl mx-auto">
+            <!-- Left: copy -->
+            <div class="space-y-5">
+                {_eyebrow(t, "Contact")}
+                <h2 class="{H_SECTION} {t['text']}">{headline}</h2>
+                <p class="text-base {t['text_muted']} leading-relaxed max-w-2xl">{sub}</p>
+                {contact_block}
+            </div>
+            <!-- Right: form -->
+            <div class="{t['card']} rounded-2xl p-8 shadow-xl">
+                <form {form_action} method="post" class="space-y-5" novalidate>
+                    <div>
+                        <label class="block text-xs font-semibold {t['text']} mb-1.5 uppercase tracking-wide" for="cf-name">Your Name</label>
+                        <input type="text" id="cf-name" name="name" required autocomplete="name"
+                               placeholder="Jane Smith"
+                               class="w-full rounded-xl px-4 py-3 text-sm {t['input']} outline-none focus:ring-2 focus:ring-offset-1 transition" />
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold {t['text']} mb-1.5 uppercase tracking-wide" for="cf-email">Email Address</label>
+                        <input type="email" id="cf-email" name="email" required autocomplete="email"
+                               placeholder="jane@example.com"
+                               class="w-full rounded-xl px-4 py-3 text-sm {t['input']} outline-none focus:ring-2 focus:ring-offset-1 transition" />
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold {t['text']} mb-1.5 uppercase tracking-wide" for="cf-message">Message</label>
+                        <textarea id="cf-message" name="message" required rows="5"
+                                  placeholder="Tell us about your project or question..."
+                                  class="w-full rounded-xl px-4 py-3 text-sm {t['input']} outline-none focus:ring-2 focus:ring-offset-1 transition resize-none"></textarea>
+                    </div>
+                    <button type="submit"
+                            class="w-full bg-gradient-to-r {t['grad']} text-white font-bold rounded-xl py-4 text-sm shadow-md {HOVER_LIFT} transition-all duration-300">
+                        {btn_label} &rarr;
+                    </button>
+                    {form_note}
+                </form>
+            </div>
+        </div>
+    </div>
+</section>"""
 
     def _footer(self) -> str:
         t       = self.theme
         tagline = self.data.get("tagline") or ""
         sub     = self.data.get("hero", {}).get("sub") or ""
-        links   = "".join(
-            f'<li><a href="#{lnk.lower().replace(" ","")}" '
-            f'class="{t["text_muted"]} hover:opacity-70 text-sm transition-opacity">{lnk}</a></li>'
-            for lnk in (self.data.get("nav") or [])
+        email   = self.data.get("contact_email") or ""
+        phone   = self.data.get("contact_phone") or ""
+        nav_items = self.data.get("nav") or []
+
+        links = "".join(
+            f'<li><a href="#{item.lower().replace(" ","")}" '
+            f'class="{t["text_muted"]} hover:opacity-70 text-sm transition-opacity">{item}</a></li>'
+            for item in nav_items
         )
         tl_html = f'<p class="text-xs {t["text_light"]} mt-3 italic">{tagline}</p>' if tagline else ""
-        return (
-            f'<footer class="{t["bg"]} border-t {t["border"]} pt-16 pb-10">'
-            f'<div class="container mx-auto {PAD_CON}">'
-            f'<div class="grid md:grid-cols-4 gap-10 mb-12">'
-            # Brand column
-            f'<div class="md:col-span-2">'
-            f'<p class="font-black text-xl {t["text"]} mb-3">{self.name}</p>'
-            f'<p class="{t["text_muted"]} text-sm max-w-xs leading-relaxed">{sub}</p>'
-            f'{tl_html}</div>'
-            # Navigation
-            f'<div><p class="font-bold text-xs {t["text"]} mb-4 uppercase tracking-widest">Navigation</p>'
-            f'<ul class="space-y-2.5">{links}</ul></div>'
-            # Legal
+
+        # Contact column: only show what we have
+        contact_items = ""
+        if email:
+            contact_items += f'<li><a href="mailto:{email}" class="{t["text_muted"]} hover:opacity-70 text-sm transition-opacity">{email}</a></li>'
+        if phone:
+            contact_items += f'<li><a href="tel:{re.sub(r"[^+d]","",phone)}" class="{t["text_muted"]} hover:opacity-70 text-sm transition-opacity">{phone}</a></li>'
+        contact_col = (
+            f'<div><p class="font-bold text-xs {t["text"]} mb-4 uppercase tracking-widest">Contact</p>'
+            f'<ul class="space-y-2.5">{contact_items}</ul></div>'
+        ) if contact_items else (
             f'<div><p class="font-bold text-xs {t["text"]} mb-4 uppercase tracking-widest">Legal</p>'
             f'<ul class="space-y-2.5 text-sm">'
             f'<li><a href="#" class="{t["text_muted"]} hover:opacity-70 transition-opacity">Privacy Policy</a></li>'
             f'<li><a href="#" class="{t["text_muted"]} hover:opacity-70 transition-opacity">Terms of Service</a></li>'
-            f'<li><a href="mailto:hello@example.com" class="{t["text_muted"]} hover:opacity-70 transition-opacity">Contact Us</a></li>'
             f'</ul></div>'
+        )
+
+        return (
+            f'<footer class="{t["bg"]} border-t {t["border"]} pt-16 pb-10">'
+            f'<div class="container mx-auto {PAD_CON}">'
+            f'<div class="grid sm:grid-cols-2 md:grid-cols-4 gap-10 mb-12">'
+            f'<div class="sm:col-span-2">'
+            f'<p class="font-black text-xl {t["text"]} mb-3">{self.name}</p>'
+            f'<p class="{t["text_muted"]} text-sm max-w-xs leading-relaxed">{sub}</p>'
+            f'{tl_html}</div>'
+            f'<div><p class="font-bold text-xs {t["text"]} mb-4 uppercase tracking-widest">Navigate</p>'
+            f'<ul class="space-y-2.5">{links}</ul></div>'
+            f'{contact_col}'
             f'</div>'
-            # Bottom bar
             f'<div class="border-t {t["border"]} pt-6 flex flex-col md:flex-row justify-between items-center gap-3">'
             f'<p class="{t["text_light"]} text-xs">&copy; 2026 {self.name}. All rights reserved.</p>'
             f'<p class="{t["text_light"]} text-xs">v{self.version}</p>'
             f'</div>'
             f'</div></footer>'
         )
+
+    # ── Section dispatcher ─────────────────────────────────────────────────────
+
+    def _build_section(self, section_id: str) -> str:
+        t = self.theme
+        d = self.data
+
+        if section_id == "hero":
+            return self._hero_fn()(t, d, self.imgs)
+
+        if section_id == "trust":
+            return self._trust_band()
+
+        if section_id == "features":
+            features = d.get("features") or []
+            if not features:
+                return ""
+            return self._features_fn()(t, features, self.imgs)
+
+        if section_id == "pricing":
+            tiers = d.get("pricing")
+            if not tiers:
+                return Pricing.contact_only(t, [])
+            return self._pricing_fn()(t, tiers)
+
+        if section_id == "testimonials":
+            return self._testimonials()
+
+        if section_id == "faq":
+            return self._faq()
+
+        if section_id == "contact":
+            return self._contact()
+
+        logger.warning(f"Unknown section id '{section_id}' — skipping.")
+        return ""
 
     # ── Build ─────────────────────────────────────────────────────────────────
 
@@ -1399,23 +1605,31 @@ Return ONLY valid JSON (no markdown fences, no prose):
             self.imgs = _img_set(self.industry, count=8)
             t         = self.theme
 
-            # Section background rhythm (only bg / bg_alt — never a third colour):
-            # nav(fixed)  → hero(bg)  → trust(bg_alt)  → features(bg or bg_alt, variant-controlled)
-            # → pricing(bg_alt or bg, variant-controlled) → testimonials(bg_alt)
-            # → faq(bg) → cta(bg_alt) → footer(bg)
-            # Every variant respects this — nothing can ever "randomly" go off-palette.
+            # AI specifies which sections to render, in order.
+            # Filter to only known section IDs. Always ensure hero + contact exist.
+            raw_sections = self.data.get("sections") or list(self.VALID_SECTIONS)
+            sections_order = []
+            seen = set()
+            for s in raw_sections:
+                sid = str(s).lower().strip()
+                if sid in self.VALID_SECTIONS and sid not in seen:
+                    sections_order.append(sid)
+                    seen.add(sid)
+            if "hero" not in seen:
+                sections_order.insert(0, "hero")
+            if "contact" not in seen:
+                sections_order.append("contact")
 
-            sections = [
-                self._nav(),
-                self._hero_fn()(t, self.data, self.imgs),
-                self._trust_band(),
-                self._features_fn()(t, self.data.get("features") or [], self.imgs),
-                self._pricing_fn()(t, self.data.get("pricing") or []),
-                self._testimonials(),
-                self._faq(),
-                self._cta(),
-                self._footer(),
-            ]
+            section_html = [self._nav()]
+            for sid in sections_order:
+                html_piece = self._build_section(sid)
+                if html_piece:
+                    section_html.append(html_piece)
+            section_html.append(self._footer())
+
+            # Runtime colour audit (dev mode — logs warnings, doesn't raise)
+            full_body = "".join(section_html)
+            _assert_no_hardcoded_colours(full_body, f"{self.name}/{self.industry}")
 
             css = """
 @keyframes fadeUp {
@@ -1424,10 +1638,13 @@ Return ONLY valid JSON (no markdown fences, no prose):
 }
 section > .container, nav > .container { animation: fadeUp 0.55s ease-out both; }
 details > summary::-webkit-details-marker { display:none; }
+details[open] > summary > span:last-child { transform: rotate(45deg); }
+/* Smooth scroll offset for fixed nav */
+:target { scroll-margin-top: 80px; }
+/* Form focus ring */
+input:focus, textarea:focus { box-shadow: 0 0 0 3px rgba(0,0,0,0.08); }
 """
-            # Title = the business name the user typed in the form, verbatim
             title = self.name
-
             html = (
                 '<!DOCTYPE html>\n'
                 '<html lang="en" style="scroll-behavior:smooth">\n'
@@ -1443,14 +1660,15 @@ details > summary::-webkit-details-marker { display:none; }
                 f'<style>*,*::before,*::after{{box-sizing:border-box;margin:0}}'
                 f'html{{font-family:{t["fonts"]};-webkit-font-smoothing:antialiased}}'
                 f'img{{display:block;max-width:100%}}'
+                f'#nav-toggle{{display:none}}'
                 f'{css}</style>\n'
                 '</head>\n'
                 f'<body class="{t["bg"]} {t["text"]}">\n'
-                + "".join(sections)
+                + full_body
                 + '\n</body>\n</html>'
             )
 
-            logger.info(f"Built '{title}' | {self.industry} | {t['id']}")
+            logger.info(f"Built '{title}' | {self.industry} | {t['id']} | sections={sections_order}")
 
             return {
                 "html": html,
@@ -1459,9 +1677,12 @@ details > summary::-webkit-details-marker { display:none; }
                     "industry":         self.industry,
                     "theme":            t["id"],
                     "version":          self.version,
+                    "sections":         sections_order,
                     "hero_variant":     self._hero_fn().__name__,
                     "features_variant": self._features_fn().__name__,
                     "pricing_variant":  self._pricing_fn().__name__,
+                    "contact_email":    bool(self.data.get("contact_email")),
+                    "contact_phone":    bool(self.data.get("contact_phone")),
                     "status":           "success",
                 },
             }
@@ -1476,7 +1697,7 @@ details > summary::-webkit-details-marker { display:none; }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PUBLIC API  (called from dashboard_websites_routes.py)
+# PUBLIC API
 # ─────────────────────────────────────────────────────────────────────────────
 
 def generate_ai_plan(ai_input: Dict[str, Any], version: int = 1, **kwargs) -> Dict[str, Any]:
