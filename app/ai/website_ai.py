@@ -83,8 +83,31 @@ H_HERO    = "text-5xl md:text-6xl lg:text-7xl font-black tracking-tight leading-
 H_SECTION = "text-3xl md:text-4xl lg:text-5xl font-black tracking-tight leading-[1.15]"
 H_CARD    = "text-lg font-bold tracking-tight"
 
-PAD_SEC = "py-24 md:py-32"
-PAD_CON = "px-5 md:px-8 lg:px-12"
+# Sections breathe at different scales — not identical padding everywhere
+PAD_SEC       = "py-24 md:py-32"      # default
+PAD_SEC_SM    = "py-16 md:py-20"      # compact (trust, FAQ)
+PAD_SEC_LG    = "py-32 md:py-44"      # hero, contact
+PAD_CON       = "px-5 md:px-8 lg:px-12"
+
+# SVG wave dividers — light and dark variants. Placed at section bottoms to bleed into next.
+def _wave_divider(fill_color_hex: str, flip: bool = False) -> str:
+    """Renders an SVG wave that bleeds the current section into the next."""
+    transform = ' style="transform:rotate(180deg)"' if flip else ""
+    return (
+        f'<div class="absolute bottom-0 left-0 right-0 overflow-hidden leading-none pointer-events-none"{transform}>'
+        f'<svg viewBox="0 0 1440 56" preserveAspectRatio="none" class="block w-full h-14">'
+        f'<path d="M0,28 C240,56 480,0 720,28 C960,56 1200,0 1440,28 L1440,56 L0,56 Z" fill="{fill_color_hex}"/>'
+        f'</svg></div>'
+    )
+
+def _diagonal_divider(fill_color_hex: str) -> str:
+    """Diagonal cut at section bottom to bleed into next section."""
+    return (
+        f'<div class="absolute bottom-0 left-0 right-0 overflow-hidden leading-none pointer-events-none">'
+        f'<svg viewBox="0 0 1440 48" preserveAspectRatio="none" class="block w-full h-12">'
+        f'<polygon points="0,48 1440,0 1440,48" fill="{fill_color_hex}"/>'
+        f'</svg></div>'
+    )
 
 # Tailwind colour tokens we NEVER want hardcoded in HTML strings (non-neutral, non-theme)
 _FORBIDDEN_COLOUR_RE = re.compile(
@@ -263,6 +286,9 @@ THEMES: Dict[str, Dict] = {
         "id": "blue", "mode": "light",
         "bg":          "bg-white",
         "bg_alt":      "bg-slate-50",
+        "bg_hex":      "#ffffff",
+        "bg_alt_hex":  "#f8fafc",
+        "ambient":     "bg-blue-500",
         "text":        "text-slate-900",
         "text_muted":  "text-slate-500",
         "text_light":  "text-slate-400",
@@ -285,6 +311,9 @@ THEMES: Dict[str, Dict] = {
         "id": "slate", "mode": "light",
         "bg":          "bg-white",
         "bg_alt":      "bg-slate-50",
+        "bg_hex":      "#ffffff",
+        "bg_alt_hex":  "#f8fafc",
+        "ambient":     "bg-slate-400",
         "text":        "text-slate-900",
         "text_muted":  "text-slate-500",
         "text_light":  "text-slate-400",
@@ -307,6 +336,9 @@ THEMES: Dict[str, Dict] = {
         "id": "amber", "mode": "light",
         "bg":          "bg-[#fffbf2]",
         "bg_alt":      "bg-[#fff6e0]",
+        "bg_hex":      "#fffbf2",
+        "bg_alt_hex":  "#fff6e0",
+        "ambient":     "bg-[#fbbf24]",
         "text":        "text-[#2d1a00]",
         "text_muted":  "text-[#7a5c2e]",
         "text_light":  "text-[#b08040]/70",
@@ -329,6 +361,9 @@ THEMES: Dict[str, Dict] = {
         "id": "green", "mode": "light",
         "bg":          "bg-white",
         "bg_alt":      "bg-[#f0fdf4]",
+        "bg_hex":      "#ffffff",
+        "bg_alt_hex":  "#f0fdf4",
+        "ambient":     "bg-[#34d399]",
         "text":        "text-slate-900",
         "text_muted":  "text-slate-500",
         "text_light":  "text-slate-400",
@@ -351,6 +386,9 @@ THEMES: Dict[str, Dict] = {
         "id": "dark", "mode": "dark",
         "bg":          "bg-gray-950",
         "bg_alt":      "bg-gray-900",
+        "bg_hex":      "#030712",
+        "bg_alt_hex":  "#111827",
+        "ambient":     "bg-[#06b6d4]",
         "text":        "text-white",
         "text_muted":  "text-gray-400",
         "text_light":  "text-gray-600",
@@ -373,6 +411,9 @@ THEMES: Dict[str, Dict] = {
         "id": "rose", "mode": "dark",
         "bg":          "bg-[#0d0508]",
         "bg_alt":      "bg-[#130a0e]",
+        "bg_hex":      "#0d0508",
+        "bg_alt_hex":  "#130a0e",
+        "ambient":     "bg-[#f43f5e]",
         "text":        "text-[#fff1f2]",
         "text_muted":  "text-[#fda4af]/70",
         "text_light":  "text-[#fb7185]/50",
@@ -600,12 +641,14 @@ class Hero:
                 f'{badge}</span>'
             )
 
-        return f"""<section id="hero" class="relative {t['bg']} overflow-hidden pt-32 pb-20 md:pt-44 md:pb-28">
+        return f"""<section id="hero" class="relative {t['bg']} overflow-hidden pt-32 pb-32 md:pt-44 md:pb-44">
+    <!-- Ambient atmosphere: two large orbs that persist across the hero → trust transition -->
+    <div class="absolute top-0 right-0 w-[700px] h-[700px] {t['glow']} opacity-[0.04] blur-[160px] rounded-full pointer-events-none"></div>
+    <div class="absolute bottom-0 left-1/3 w-[500px] h-[500px] {t['glow']} opacity-[0.025] blur-[120px] rounded-full pointer-events-none"></div>
     <div class="absolute inset-0 bg-gradient-to-br {t['grad_subtle']} pointer-events-none"></div>
-    <div class="absolute top-0 right-0 w-[600px] h-[600px] {t['glow']} opacity-[0.035] blur-[130px] rounded-full pointer-events-none"></div>
     <div class="container mx-auto {PAD_CON} relative z-10">
         <div class="grid lg:grid-cols-2 gap-12 xl:gap-20 items-center">
-            <div class="space-y-7 order-2 lg:order-1">
+            <div class="space-y-7 order-2 lg:order-1 reveal">
                 {badge_html}
                 <h1 class="{H_HERO} {t['text']}">{h1}</h1>
                 <p class="text-lg md:text-xl {t['text_muted']} leading-relaxed max-w-2xl">{sub}</p>
@@ -615,14 +658,16 @@ class Hero:
                 </div>
                 {proof_html}
             </div>
-            <div class="relative h-[300px] md:h-[420px] lg:h-[520px] order-1 lg:order-2">
-                <div class="absolute -inset-4 {t['glow']} opacity-[0.07] blur-3xl rounded-3xl"></div>
+            <div class="relative h-[300px] md:h-[420px] lg:h-[520px] order-1 lg:order-2 reveal reveal-delay-1">
+                <div class="absolute -inset-4 {t['glow']} opacity-[0.08] blur-3xl rounded-3xl"></div>
                 <img src="{img}" alt="{h1}"
                      class="relative z-10 w-full h-full object-cover rounded-2xl shadow-2xl"
                      loading="eager" />
             </div>
         </div>
     </div>
+    <!-- Wave bleeds into next section -->
+    {_wave_divider(t['bg_alt_hex'])}
 </section>"""
 
     @staticmethod
@@ -644,8 +689,10 @@ class Hero:
         <div class="absolute inset-0 {overlay}"></div>
     </div>
     <div class="absolute inset-0 bg-gradient-to-br {t['grad_subtle']} pointer-events-none"></div>
+    <!-- Soft orbs for atmosphere -->
+    <div class="absolute top-1/4 left-1/4 w-[600px] h-[600px] {t['glow']} opacity-[0.06] blur-[140px] rounded-full pointer-events-none"></div>
     <div class="container mx-auto {PAD_CON} relative z-10 text-center py-44">
-        <div class="max-w-4xl mx-auto space-y-7">
+        <div class="max-w-4xl mx-auto space-y-7 reveal">
             {tl}
             <h1 class="{H_HERO} {t['text']}">{h1}</h1>
             <p class="text-xl {t['text_muted']} leading-relaxed max-w-2xl mx-auto">{sub}</p>
@@ -655,6 +702,7 @@ class Hero:
             </div>
         </div>
     </div>
+    {_wave_divider(t['bg_alt_hex'])}
 </section>"""
 
     @staticmethod
@@ -678,14 +726,15 @@ class Hero:
             f'{stat_grid}</div>'
         ) if stats else ""
 
-        return f"""<section id="hero" class="relative {t['bg']} overflow-hidden pt-32 pb-20 md:pt-44 md:pb-28">
+        return f"""<section id="hero" class="relative {t['bg']} overflow-hidden pt-32 pb-32 md:pt-44 md:pb-44">
     <div class="absolute inset-0 bg-gradient-to-br {t['grad_subtle']} pointer-events-none"></div>
+    <div class="absolute top-0 right-0 w-[700px] h-[700px] {t['glow']} opacity-[0.04] blur-[160px] rounded-full pointer-events-none"></div>
     <div class="absolute top-0 right-0 w-1/2 h-full overflow-hidden pointer-events-none select-none">
         <img src="{img}" alt="" class="w-full h-full object-cover {img_op}" loading="eager" />
         <div class="absolute inset-0 bg-gradient-to-r {'from-white via-white/80 to-transparent' if t['mode']=='light' else 'from-gray-950 via-gray-950/80 to-transparent'}"></div>
     </div>
     <div class="container mx-auto {PAD_CON} relative z-10">
-        <div class="max-w-2xl space-y-8">
+        <div class="max-w-2xl space-y-8 reveal">
             <h1 class="{H_HERO} {t['text']}">{h1}</h1>
             <p class="text-lg md:text-xl {t['text_muted']} leading-relaxed max-w-2xl">{sub}</p>
             <div class="flex flex-wrap gap-4">
@@ -695,6 +744,7 @@ class Hero:
         </div>
         {stats_html}
     </div>
+    {_wave_divider(t['bg_alt_hex'])}
 </section>"""
 
     @staticmethod
@@ -709,22 +759,24 @@ class Hero:
         l1   = " ".join(ws[:mid])
         l2   = " ".join(ws[mid:])
 
-        return f"""<section id="hero" class="relative {t['bg']} overflow-hidden pt-28 pb-12 md:pt-36 md:pb-18">
+        return f"""<section id="hero" class="relative {t['bg']} overflow-hidden pt-28 pb-28 md:pt-36 md:pb-36">
+    <div class="absolute top-0 right-0 w-[500px] h-[500px] {t['glow']} opacity-[0.035] blur-[120px] rounded-full pointer-events-none"></div>
     <div class="container mx-auto {PAD_CON}">
-        <h1 class="font-black tracking-tight leading-[1.02] text-[clamp(2.8rem,6.5vw,6rem)] {t['text']} mb-10">
+        <h1 class="font-black tracking-tight leading-[1.02] text-[clamp(2.8rem,6.5vw,6rem)] {t['text']} mb-10 reveal">
             <span class="block">{l1}</span>
             <span class="block bg-gradient-to-r {t['grad_text']} bg-clip-text text-transparent">{l2}</span>
         </h1>
         <div class="grid lg:grid-cols-5 gap-10 items-end">
-            <div class="lg:col-span-3 aspect-[16/9] overflow-hidden rounded-2xl shadow-2xl">
+            <div class="lg:col-span-3 aspect-[16/9] overflow-hidden rounded-2xl shadow-2xl reveal">
                 <img src="{img}" alt="" class="w-full h-full object-cover" loading="eager" />
             </div>
-            <div class="lg:col-span-2 space-y-7 pb-4">
+            <div class="lg:col-span-2 space-y-7 pb-4 reveal reveal-delay-1">
                 <p class="text-base md:text-lg {t['text_muted']} leading-relaxed max-w-2xl">{sub}</p>
                 {_btn(t, f"{cta} &rarr;", "#contact", "text-base")}
             </div>
         </div>
     </div>
+    {_wave_divider(t['bg_alt_hex'])}
 </section>"""
 
 
@@ -737,22 +789,24 @@ class Features:
     @staticmethod
     def cards(t: Dict, features: List[Dict], imgs: List[str]) -> str:
         items = "".join(
-            f'<div class="{t["card"]} rounded-2xl p-7 {HOVER_LIFT} flex flex-col">'
+            f'<div class="{t["card"]} rounded-2xl p-7 {HOVER_LIFT} flex flex-col reveal" style="animation-delay:{i*0.1:.1f}s">'
             f'<div class="w-12 h-12 rounded-xl bg-gradient-to-br {t["grad"]} '
             f'flex items-center justify-center text-xl mb-5 shrink-0">{f.get("icon","✦")}</div>'
             f'<h3 class="{H_CARD} {t["text"]} mb-2">{f.get("title","")}</h3>'
             f'<p class="{t["text_muted"]} text-sm leading-relaxed flex-grow">{f.get("description","")}</p>'
             f'</div>'
-            for f in (features or [])
+            for i, f in enumerate(features or [])
         )
-        return f"""<section id="features" class="{t['bg_alt']} {PAD_SEC}">
+        return f"""<section id="features" class="relative {t['bg_alt']} {PAD_SEC}">
+    <div class="absolute bottom-0 right-0 w-[400px] h-[400px] {t['glow']} opacity-[0.025] blur-[100px] rounded-full pointer-events-none"></div>
     <div class="container mx-auto {PAD_CON}">
-        <div class="text-center mb-14">
+        <div class="text-center mb-14 reveal">
             {_eyebrow(t, "What we offer")}
             {_h2(t, "Everything You Need", "Thoughtfully designed to help you succeed.")}
         </div>
         <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">{items}</div>
     </div>
+    {_wave_divider(t['bg_hex'])}
 </section>"""
 
     @staticmethod
@@ -763,7 +817,7 @@ class Features:
             copy_cls = "lg:order-1" if i % 2 == 0 else "lg:order-2"
             img_cls  = "lg:order-2" if i % 2 == 0 else "lg:order-1"
             blocks.append(
-                f'<div class="grid lg:grid-cols-2 gap-12 xl:gap-20 items-center">'
+                f'<div class="grid lg:grid-cols-2 gap-12 xl:gap-20 items-center reveal">'
                 f'<div class="space-y-5 {copy_cls}">'
                 f'<div class="text-4xl leading-none">{f.get("icon","✦")}</div>'
                 f'<h3 class="text-2xl md:text-3xl font-bold {t["text"]}">{f.get("title","")}</h3>'
@@ -775,21 +829,23 @@ class Features:
                 f'<img src="{img_url}" alt="" class="w-full h-full object-cover" loading="lazy" />'
                 f'</div></div>'
             )
-        return f"""<section id="features" class="{t['bg']} {PAD_SEC}">
+        return f"""<section id="features" class="relative {t['bg']} {PAD_SEC}">
+    <div class="absolute top-1/2 left-0 w-[300px] h-[300px] {t['glow']} opacity-[0.025] blur-[80px] rounded-full pointer-events-none"></div>
     <div class="container mx-auto {PAD_CON}">
-        <div class="text-center mb-20">
+        <div class="text-center mb-20 reveal">
             {_eyebrow(t, "How it works")}
             {_h2(t, "Why Choose Us")}
         </div>
         <div class="space-y-20 md:space-y-28">{"".join(blocks)}</div>
     </div>
+    {_wave_divider(t['bg_alt_hex'])}
 </section>"""
 
     @staticmethod
     def icon_list(t: Dict, features: List[Dict], imgs: List[str]) -> str:
         img_url = imgs[1] if len(imgs) > 1 else (imgs[0] if imgs else "")
         items   = "".join(
-            f'<div class="flex gap-4 items-start p-5 rounded-xl border {t["border"]} {HOVER_GLOW}">'
+            f'<div class="flex gap-4 items-start p-5 rounded-xl border {t["border"]} {HOVER_GLOW} reveal" style="animation-delay:{i*0.08:.2f}s">'
             f'<div class="w-9 h-9 shrink-0 rounded-full bg-gradient-to-br {t["grad"]} '
             f'flex items-center justify-center text-white font-black text-xs shadow">'
             f'{str(i+1).zfill(2)}</div>'
@@ -798,19 +854,20 @@ class Features:
             f'</div></div>'
             for i, f in enumerate(features or [])
         )
-        return f"""<section id="features" class="{t['bg_alt']} {PAD_SEC}">
+        return f"""<section id="features" class="relative {t['bg_alt']} {PAD_SEC}">
     <div class="container mx-auto {PAD_CON}">
         <div class="grid lg:grid-cols-2 gap-16 xl:gap-24 items-center">
-            <div>
+            <div class="reveal">
                 {_eyebrow(t, "Our approach")}
                 <h2 class="{H_SECTION} {t['text']} mb-10">Built for Real Results</h2>
                 <div class="space-y-3">{items}</div>
             </div>
-            <div class="aspect-[4/3] rounded-2xl overflow-hidden shadow-2xl">
+            <div class="aspect-[4/3] rounded-2xl overflow-hidden shadow-2xl reveal reveal-delay-1">
                 <img src="{img_url}" alt="" class="w-full h-full object-cover" loading="lazy" />
             </div>
         </div>
     </div>
+    {_wave_divider(t['bg_hex'])}
 </section>"""
 
 
@@ -1356,12 +1413,17 @@ Return ONLY valid JSON (no markdown fences, no prose):
             for b in badges
         )
         return (
-            f'<section id="trust" class="{t["bg_alt"]} border-y {t["border"]} py-5">'
+            f'<section id="trust" class="relative {t["bg_alt"]} py-6 overflow-hidden">'
             f'<div class="container mx-auto {PAD_CON}">'
-            f'<div class="flex flex-wrap items-center justify-center gap-3">'
+            f'<div class="flex flex-wrap items-center justify-center gap-3 reveal">'
             f'<span class="text-xs {t["text_light"]} uppercase tracking-widest mr-1">Trusted &amp; Verified</span>'
             f'{pills}'
-            f'</div></div></section>'
+            f'</div></div>'
+            f'<div class="absolute bottom-0 left-0 right-0 overflow-hidden pointer-events-none">'
+            f'<svg viewBox="0 0 1440 24" preserveAspectRatio="none" class="block w-full h-6">'
+            f'<path d="M0,12 C360,24 1080,0 1440,12 L1440,24 L0,24 Z" fill="{t["bg_hex"]}"/>'
+            f'</svg></div>'
+            f'</section>'
         )
 
     def _testimonials(self) -> str:
@@ -1370,8 +1432,9 @@ Return ONLY valid JSON (no markdown fences, no prose):
         if not tevs:
             return ""
         stars = "".join(['<span style="color:#f59e0b">&#9733;</span>'] * 5)
+        # Cards use snap scroll on mobile for a flowing horizontal experience
         cards = "".join(
-            f'<div class="{t["card"]} rounded-2xl p-8 {HOVER_LIFT} flex flex-col">'
+            f'<div class="{t["card"]} rounded-2xl p-8 {HOVER_LIFT} flex flex-col snap-start shrink-0 w-[85vw] sm:w-auto reveal" style="animation-delay:{i*0.12:.2f}s">'
             f'<div class="flex gap-0.5 mb-5 text-sm">{stars}</div>'
             f'<p class="{t["text_muted"]} text-base italic leading-relaxed flex-grow mb-6 max-w-2xl">'
             f'&#8220;{tv.get("quote","")}&#8221;</p>'
@@ -1383,17 +1446,30 @@ Return ONLY valid JSON (no markdown fences, no prose):
             f'<p class="text-xs {t["text_light"]}">'
             f'{tv.get("role","")} &middot; {tv.get("company","")}</p>'
             f'</div></div></div>'
-            for tv in tevs
+            for i, tv in enumerate(tevs)
         )
         return (
-            f'<section id="testimonials" class="{t["bg_alt"]} {PAD_SEC}">'
-            f'<div class="container mx-auto {PAD_CON}">'
-            f'<div class="text-center mb-12">'
+            f'<section id="testimonials" class="relative {t["bg_alt"]} {PAD_SEC}">'
+            # Diagonal cut at top for visual flow from pricing
+            f'<div class="absolute top-0 left-0 right-0 overflow-hidden pointer-events-none">'
+            f'<svg viewBox="0 0 1440 48" preserveAspectRatio="none" class="block w-full h-12">'
+            f'<polygon points="0,0 1440,48 0,48" fill="{t["bg_hex"]}"/>'
+            f'</svg></div>'
+            f'<div class="container mx-auto {PAD_CON} pt-12">'
+            f'<div class="text-center mb-12 reveal">'
             f'{_eyebrow(t, "Testimonials")}'
             f'{_h2(t, "What Our Clients Say")}'
             f'</div>'
-            f'<div class="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">{cards}</div>'
-            f'</div></section>'
+            # Horizontal scroll on mobile, grid on desktop
+            f'<div class="flex sm:grid sm:grid-cols-2 gap-5 overflow-x-auto snap-x snap-mandatory pb-4 -mx-5 px-5 sm:mx-0 sm:px-0 sm:overflow-visible max-w-4xl sm:mx-auto scrollbar-hide">'
+            f'{cards}'
+            f'</div>'
+            f'</div>'
+            f'<div class="absolute bottom-0 left-0 right-0 overflow-hidden pointer-events-none">'
+            f'<svg viewBox="0 0 1440 48" preserveAspectRatio="none" class="block w-full h-12">'
+            f'<polygon points="1440,0 1440,48 0,48" fill="{t["bg_hex"]}"/>'
+            f'</svg></div>'
+            f'</section>'
         )
 
     def _faq(self) -> str:
@@ -1402,7 +1478,7 @@ Return ONLY valid JSON (no markdown fences, no prose):
         if not faqs:
             return ""
         items = "".join(
-            f'<details class="{t["card"]} rounded-xl overflow-hidden group">'
+            f'<details class="{t["card"]} rounded-xl overflow-hidden group reveal" style="animation-delay:{i*0.07:.2f}s">'
             f'<summary class="flex justify-between items-center p-6 cursor-pointer '
             f'font-semibold {t["text"]} list-none select-none hover:opacity-75 transition-opacity">'
             f'<span>{faq.get("q","")}</span>'
@@ -1413,12 +1489,12 @@ Return ONLY valid JSON (no markdown fences, no prose):
             f'<div class="px-6 pb-6 border-t {t["border"]} pt-4">'
             f'<p class="{t["text_muted"]} text-sm leading-relaxed">{faq.get("a","")}</p>'
             f'</div></details>'
-            for faq in faqs
+            for i, faq in enumerate(faqs)
         )
         return (
-            f'<section id="faq" class="{t["bg"]} {PAD_SEC}">'
+            f'<section id="faq" class="{t["bg"]} {PAD_SEC_SM}">'
             f'<div class="container mx-auto {PAD_CON}">'
-            f'<div class="text-center mb-12">'
+            f'<div class="text-center mb-12 reveal">'
             f'{_eyebrow(t, "FAQ")}'
             f'{_h2(t, "Common Questions")}'
             f'</div>'
@@ -1435,17 +1511,15 @@ Return ONLY valid JSON (no markdown fences, no prose):
         email       = self.data.get("contact_email") or ""
         phone       = self.data.get("contact_phone") or ""
         img_url     = self.imgs[2] if len(self.imgs) > 2 else (self.imgs[0] if self.imgs else "")
-        overlay     = "bg-white/88" if t["mode"] == "light" else "bg-black/78"
-        img_op      = "opacity-[0.05]" if t["mode"] == "light" else "opacity-[0.08]"
+        overlay     = "bg-white/90" if t["mode"] == "light" else "bg-black/82"
+        img_op      = "opacity-[0.04]" if t["mode"] == "light" else "opacity-[0.07]"
 
-        # Form action: use real email if available, else no action (user configures later)
         form_action = f'action="mailto:{email}" enctype="text/plain"' if email else ""
         form_note   = "" if email else (
             f'<p class="text-xs {t["text_light"]} mt-3 text-center">'
             f'Form submission will be configured by the site owner.</p>'
         )
 
-        # Contact details — only render what we actually have
         contact_details = ""
         if email:
             contact_details += (
@@ -1463,23 +1537,25 @@ Return ONLY valid JSON (no markdown fences, no prose):
             f'<div class="flex flex-col gap-3 mt-6 pt-6 border-t {t["border"]}">{contact_details}</div>'
         ) if contact_details else ""
 
-        return f"""<section id="contact" class="relative {t['bg_alt']} {PAD_SEC} overflow-hidden">
+        return f"""<section id="contact" class="relative {t['bg_alt']} {PAD_SEC_LG} overflow-hidden">
+    <!-- Atmospheric image layer -->
     <div class="absolute inset-0 pointer-events-none select-none">
         <img src="{img_url}" alt="" class="w-full h-full object-cover {img_op}" loading="lazy" />
         <div class="absolute inset-0 {overlay}"></div>
     </div>
-    <div class="absolute inset-0 bg-gradient-to-br {t['grad_subtle']} pointer-events-none"></div>
+    <!-- Ambient glow behind the form -->
+    <div class="absolute top-1/2 right-1/4 -translate-y-1/2 w-[500px] h-[500px] {t['glow']} opacity-[0.06] blur-[120px] rounded-full pointer-events-none"></div>
     <div class="container mx-auto {PAD_CON} relative z-10">
         <div class="grid lg:grid-cols-2 gap-16 items-start max-w-5xl mx-auto">
             <!-- Left: copy -->
-            <div class="space-y-5">
-                {_eyebrow(t, "Contact")}
+            <div class="space-y-5 reveal">
+                {_eyebrow(t, "Get in Touch")}
                 <h2 class="{H_SECTION} {t['text']}">{headline}</h2>
                 <p class="text-base {t['text_muted']} leading-relaxed max-w-2xl">{sub}</p>
                 {contact_block}
             </div>
-            <!-- Right: form -->
-            <div class="{t['card']} rounded-2xl p-8 shadow-xl">
+            <!-- Right: form — slightly overlapping, elevated with stronger shadow -->
+            <div class="{t['card']} rounded-2xl p-8 shadow-2xl reveal reveal-delay-1 lg:-mt-8">
                 <form {form_action} method="post" class="space-y-5" novalidate>
                     <div>
                         <label class="block text-xs font-semibold {t['text']} mb-1.5 uppercase tracking-wide" for="cf-name">Your Name</label>
@@ -1632,18 +1708,56 @@ Return ONLY valid JSON (no markdown fences, no prose):
             _assert_no_hardcoded_colours(full_body, f"{self.name}/{self.industry}")
 
             css = """
-@keyframes fadeUp {
-    from { opacity:0; transform:translateY(14px); }
-    to   { opacity:1; transform:translateY(0); }
+/* ── Scroll-reveal ─────────────────────────────────────────── */
+.reveal {
+    opacity: 0;
+    transform: translateY(22px);
+    transition: opacity 0.65s cubic-bezier(0.16,1,0.3,1), transform 0.65s cubic-bezier(0.16,1,0.3,1);
 }
-section > .container, nav > .container { animation: fadeUp 0.55s ease-out both; }
+.reveal.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+.reveal-delay-1 { transition-delay: 0.12s; }
+.reveal-delay-2 { transition-delay: 0.24s; }
+.reveal-delay-3 { transition-delay: 0.36s; }
+
+/* ── FAQ accordion ─────────────────────────────────────────── */
 details > summary::-webkit-details-marker { display:none; }
 details[open] > summary > span:last-child { transform: rotate(45deg); }
-/* Smooth scroll offset for fixed nav */
+
+/* ── Scroll target offset for fixed nav ───────────────────── */
 :target { scroll-margin-top: 80px; }
-/* Form focus ring */
+
+/* ── Form focus ring ───────────────────────────────────────── */
 input:focus, textarea:focus { box-shadow: 0 0 0 3px rgba(0,0,0,0.08); }
+
+/* ── Hide scrollbar on testimonials carousel ───────────────── */
+.scrollbar-hide { scrollbar-width: none; -ms-overflow-style: none; }
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+
+/* ── Section wave/divider SVGs ─────────────────────────────── */
+/* Sections are position:relative so absolute-positioned SVGs
+   at bottom-0 sit flush. Padding-bottom on hero accounts for
+   the 56px wave height so content isn't clipped. */
 """
+            # Scroll-reveal JavaScript — minimal, no dependencies
+            scroll_js = """
+<script>
+(function(){
+    var els = document.querySelectorAll('.reveal');
+    if (!els.length) return;
+    var io = new IntersectionObserver(function(entries){
+        entries.forEach(function(e){
+            if (e.isIntersecting) {
+                e.target.classList.add('visible');
+                io.unobserve(e.target);
+            }
+        });
+    }, { threshold: 0.12 });
+    els.forEach(function(el){ io.observe(el); });
+})();
+</script>"""
             title = self.name
             html = (
                 '<!DOCTYPE html>\n'
@@ -1665,6 +1779,7 @@ input:focus, textarea:focus { box-shadow: 0 0 0 3px rgba(0,0,0,0.08); }
                 '</head>\n'
                 f'<body class="{t["bg"]} {t["text"]}">\n'
                 + full_body
+                + scroll_js
                 + '\n</body>\n</html>'
             )
 
