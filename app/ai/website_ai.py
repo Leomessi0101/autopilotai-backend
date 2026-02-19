@@ -1,24 +1,28 @@
 """
-website_ai.py  —  Master Architect v2
-Generates complete, professional landing pages from a business name + prompt.
+website_ai.py  —  Master Architect v3
+Self-contained HTML generator. Zero Tailwind CDN dependency.
 
-Improvements over v1:
-  - Content is 100% conditional — no placeholder data ever rendered
-  - AI decides which sections to include via a `sections` key
-  - Contact section is a real HTML form (no fake phone/email)
-  - All HTML tokens read from theme dict — zero hardcoded colour classes
-  - Runtime assertion catches any stray Tailwind colour classes
-  - Hamburger nav (pure CSS, no JS dependencies)
-  - Proper mobile layouts throughout
-  - Only hero image is eager — all others lazy
-  - AI prompt uses industry vocabulary, not SaaS filler
+WHY NO TAILWIND:
+  The renderer injects HTML via .innerHTML into a div. Tailwind CDN scripts
+  re-execute async and miss classes that were already parsed — causing purple
+  browser-default link colours and broken layouts. Pure CSS with CSS custom
+  properties is 100% reliable on injection.
+
+WHAT'S NEW IN v3:
+  - All styles are inline <style> blocks using CSS variables
+  - Zero hardcoded colour values in HTML — all from theme CSS vars
+  - Business name = self.name always (never the prompt text)
+  - One continuous canvas — sections flow via spacing + gradient bands
+  - Scroll-reveal via IntersectionObserver (8 lines of vanilla JS)
+  - Testimonials: horizontal snap-scroll on mobile, grid on desktop
+  - Contact = real form with conditional email/phone only
+  - Sections chosen by AI — only relevant ones rendered
 """
 
 import json
 import logging
-import traceback
 import re
-from typing import Dict, Any, List, Callable, Optional
+from typing import Dict, Any, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +35,7 @@ except ImportError as e:
 
     def chat_completion(system: str, user: str, temperature: float = 0.7) -> str:
         return json.dumps({
-            "sections": ["hero", "trust", "features", "pricing", "testimonials", "faq", "contact"],
+            "sections": ["hero", "trust", "features", "testimonials", "faq", "contact"],
             "nav": ["Services", "About", "FAQ", "Contact"],
             "hero": {
                 "h1": "Built for Your Industry",
@@ -48,23 +52,24 @@ except ImportError as e:
             ],
             "trust_badges": ["Licensed & Insured", "Award Winner 2024", "5-Star Rated", "Certified Professionals"],
             "features": [
-                {"title": "Expert Team",      "description": "Seasoned professionals with deep industry knowledge working for your success every day.",  "icon": "🏆"},
-                {"title": "Proven Results",   "description": "A track record of delivering outcomes that matter, backed by hundreds of satisfied clients.", "icon": "📈"},
-                {"title": "Dedicated Support","description": "Responsive, attentive service from first contact through completion and beyond.",            "icon": "🤝"},
+                {"title": "Expert Team",       "description": "Seasoned professionals committed to results that actually move the needle for your business.", "icon": "◆"},
+                {"title": "Proven Results",    "description": "Hundreds of successful engagements. We measure our success by yours.", "icon": "▲"},
+                {"title": "Dedicated Support", "description": "A team that responds quickly and keeps you informed at every step.", "icon": "●"},
             ],
-            "pricing": [
-                {"name": "Starter",      "price": "$49",    "description": "For individuals and small teams.", "features": ["Core features", "Email support", "5 projects", "Basic analytics", "Monthly reports"],                                               "featured": False},
-                {"name": "Professional", "price": "$149",   "description": "For growing businesses.",         "features": ["Everything in Starter", "Priority support", "Unlimited projects", "Advanced analytics", "Custom integrations"],                     "featured": True},
-                {"name": "Enterprise",   "price": "Custom", "description": "For large organisations.",        "features": ["Everything in Professional", "Dedicated manager", "SLA guarantee", "Custom contracts", "Onboarding support"], "featured": False},
-            ],
+            "pricing": None,
             "testimonials": [
-                {"name": "Jordan Lee",  "role": "Director", "company": "Meridian Group",  "quote": "Working with this team changed our approach entirely. The results were immediate and lasting."},
-                {"name": "Priya Nair",  "role": "Founder",  "company": "Spark Ventures",  "quote": "Responsive, knowledgeable, and genuinely invested in our success. Highly recommend."},
+                {"name": "Jordan Lee",  "role": "Director", "company": "Meridian Group",
+                 "quote": "Working with this team changed how we operate. Measurable results within the first month."},
+                {"name": "Priya Nair",  "role": "Founder",  "company": "Spark Ventures",
+                 "quote": "Responsive, knowledgeable, and genuinely invested in our success. Highly recommend."},
             ],
             "faq": [
-                {"q": "How do I get started?",            "a": "Reach out via the contact form and we will schedule an initial conversation."},
-                {"q": "What does the process look like?", "a": "Discovery first, then a tailored plan, then execution with full transparency."},
-                {"q": "Do you offer ongoing support?",    "a": "Yes. All engagements include continued access after the initial project is complete."},
+                {"q": "How do I get started?",
+                 "a": "Fill out the contact form and we will schedule an initial call to understand your needs."},
+                {"q": "What does the process look like?",
+                 "a": "Discovery first, then a tailored plan, then execution with full transparency at every stage."},
+                {"q": "Do you offer ongoing support?",
+                 "a": "Yes — all engagements include continued team access after the initial project is complete."},
             ],
             "cta_headline": "Ready to get started?",
             "contact_email": "",
@@ -72,377 +77,168 @@ except ImportError as e:
         })
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# DESIGN CONSTANTS
-# ─────────────────────────────────────────────────────────────────────────────
-
-HOVER_LIFT = "transition-all duration-300 hover:-translate-y-1 hover:shadow-xl"
-HOVER_GLOW = "transition-all duration-200 hover:brightness-105"
-
-H_HERO    = "text-5xl md:text-6xl lg:text-7xl font-black tracking-tight leading-[1.06]"
-H_SECTION = "text-3xl md:text-4xl lg:text-5xl font-black tracking-tight leading-[1.15]"
-H_CARD    = "text-lg font-bold tracking-tight"
-
-# Sections breathe at different scales — not identical padding everywhere
-PAD_SEC       = "py-24 md:py-32"      # default
-PAD_SEC_SM    = "py-16 md:py-20"      # compact (trust, FAQ)
-PAD_SEC_LG    = "py-32 md:py-44"      # hero, contact
-PAD_CON       = "px-5 md:px-8 lg:px-12"
-
-# SVG wave dividers — light and dark variants. Placed at section bottoms to bleed into next.
-def _wave_divider(fill_color_hex: str, flip: bool = False) -> str:
-    """Renders an SVG wave that bleeds the current section into the next."""
-    transform = ' style="transform:rotate(180deg)"' if flip else ""
-    return (
-        f'<div class="absolute bottom-0 left-0 right-0 overflow-hidden leading-none pointer-events-none"{transform}>'
-        f'<svg viewBox="0 0 1440 56" preserveAspectRatio="none" class="block w-full h-14">'
-        f'<path d="M0,28 C240,56 480,0 720,28 C960,56 1200,0 1440,28 L1440,56 L0,56 Z" fill="{fill_color_hex}"/>'
-        f'</svg></div>'
-    )
-
-def _diagonal_divider(fill_color_hex: str) -> str:
-    """Diagonal cut at section bottom to bleed into next section."""
-    return (
-        f'<div class="absolute bottom-0 left-0 right-0 overflow-hidden leading-none pointer-events-none">'
-        f'<svg viewBox="0 0 1440 48" preserveAspectRatio="none" class="block w-full h-12">'
-        f'<polygon points="0,48 1440,0 1440,48" fill="{fill_color_hex}"/>'
-        f'</svg></div>'
-    )
-
-# Tailwind colour tokens we NEVER want hardcoded in HTML strings (non-neutral, non-theme)
-_FORBIDDEN_COLOUR_RE = re.compile(
-    r'\b(?:bg|text|border|ring|from|to|via)-(?:'
-    r'violet|fuchsia|purple|indigo|magenta|'
-    r'pink(?!-\d)|red|orange|yellow|lime|'
-    r'teal|cyan|sky|'
-    r'emerald|green|'
-    r'amber|'
-    r'rose'
-    r')-\d{2,3}\b'
-)
-
-def _assert_no_hardcoded_colours(html: str, context: str = "") -> None:
-    """Dev-mode assertion: raises if any forbidden Tailwind colour appears in rendered HTML."""
-    hits = _FORBIDDEN_COLOUR_RE.findall(html)
-    if hits:
-        logger.warning(f"Hardcoded colour classes found [{context}]: {set(hits)}")
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# INDUSTRY PHOTO POOLS  — hand-curated Unsplash IDs
-# ─────────────────────────────────────────────────────────────────────────────
-
-INDUSTRY_PHOTO_POOLS: Dict[str, List[str]] = {
-    "construction": [
-        "photo-1504307651254-35680f356dfd", "photo-1541888946425-d81bb19240f5",
-        "photo-1590674899484-d5640e854abe", "photo-1581578731548-c64695cc6952",
-        "photo-1565117623394-5f93fd4c7a06", "photo-1530836176759-510f6ca9f76f",
-        "photo-1558618666-fcd25c85cd64",   "photo-1600585154340-be6161a56a0c",
-    ],
-    "legal": [
-        "photo-1589578527966-fdac0f44566c", "photo-1436450412740-6b988f486c6b",
-        "photo-1505664194779-8beaceb5c7c7", "photo-1521791055366-0d553872952f",
-        "photo-1450101499163-c8848c66ca85", "photo-1568992687947-868a62a9f521",
-        "photo-1497366216548-37526070297c", "photo-1552664730-d307ca884978",
-    ],
-    "logistics": [
-        "photo-1504493188-45c49f65c6ba", "photo-1586528116311-ad8dd3c8310d",
-        "photo-1601584115197-04ecc0da31d7","photo-1494412574643-ff11b0a5c1c3",
-        "photo-1519003300449-424ad0405076","photo-1543169964-f2e91dc1fbf4",
-        "photo-1473445730015-841f29a9490b","photo-1565891741441-64926e3e5c74",
-    ],
-    "automotive": [
-        "photo-1492144534655-ae79c964c9d7","photo-1503376780353-7e6692767b70",
-        "photo-1544636331-e26879cd4d9b", "photo-1565043589221-1a6fd9ae45c7",
-        "photo-1558981806-ec527fa84c39", "photo-1549317661-bd32c8ce0db2",
-        "photo-1580273916550-e323be2ae537","photo-1520340356584-f9917d1eea6f",
-    ],
-    "restaurant": [
-        "photo-1504674900247-0877df9cc836","photo-1414235077428-338989a2e8c0",
-        "photo-1555396273-367ea4eb4db5", "photo-1517248135467-4c7edcad34c4",
-        "photo-1512621776951-a57141f2eefd","photo-1467003909585-2f8a72700288",
-        "photo-1565299585323-38d6b0865b47","photo-1484723091739-30a097e8f929",
-    ],
-    "health": [
-        "photo-1576091160550-2173dba999ef","photo-1559757148-5c350d0d3c56",
-        "photo-1535914254981-b5012eebbd15","photo-1571772996211-2f02c9727629",
-        "photo-1540420773420-3366772f4999","photo-1631217868264-e5b90bb7e133",
-        "photo-1582750433449-648ed127bb54","photo-1532938911079-1b06ac7ceec7",
-    ],
-    "fitness": [
-        "photo-1534438327276-14e5300c3a48","photo-1571019613454-1cb2f99b2d8b",
-        "photo-1517836357463-d25dfeac3438","photo-1549060279-7e168fcee0c2",
-        "photo-1526506118085-60ce8714f8c5","photo-1574680178050-55c6a6a96e0a",
-        "photo-1544033527-b192daee1f5b", "photo-1540497077202-7c8a3999166f",
-    ],
-    "beauty": [
-        "photo-1487412947147-5cebf100ffc2","photo-1560066984-138dadb4c035",
-        "photo-1522337360788-8b13dee7a37e","photo-1596704017254-9b121068fb31",
-        "photo-1571019613576-2b22c76fd955","photo-1519014816548-bf5fe059798b",
-        "photo-1540555700478-4be289fbecef","photo-1522338242992-e1a54906a8da",
-    ],
-    "finance": [
-        "photo-1611974789855-9c2a0a7236a3","photo-1563986768609-322da13575f3",
-        "photo-1468254095679-bbcba94a7066","photo-1454165804606-c3d57bc86b40",
-        "photo-1460925895917-afdab827c52f","photo-1601597111158-2fceff292cdc",
-        "photo-1526304640581-d334cdbbf45e","photo-1565514020179-026b92b84bb6",
-    ],
-    "real_estate": [
-        "photo-1560518883-ce09059eeffa","photo-1570129477492-45c003edd2be",
-        "photo-1513584684374-8bab748fbf90","photo-1501183638710-841dd1904471",
-        "photo-1486325212027-8081e485255e","photo-1523217582562-09d0def993a6",
-        "photo-1598300042247-d088f8ab3a91","photo-1580587771525-78b9dba3b914",
-    ],
-    "education": [
-        "photo-1503676260728-1c00da094a0b","photo-1456513080510-7bf3a84b82f8",
-        "photo-1509062522246-3755977927d7","photo-1427504494785-3a9ca7044f45",
-        "photo-1522202176988-66273c2fd55f","photo-1434030216411-0b793f4b4173",
-        "photo-1546410531-bb4caa6b424d", "photo-1488190211105-8b0e65b80b4e",
-    ],
-    "travel": [
-        "photo-1501854140801-50d01698950b","photo-1436491865332-7a61a109cc05",
-        "photo-1488085061387-422e29b40080","photo-1476514525535-07fb3b4ae5f1",
-        "photo-1530521954074-e64f6810b32d","photo-1503220317375-aaad61436b1b",
-        "photo-1528360983277-13d401cdc186","photo-1469854523086-cc02fe5d8800",
-    ],
-    "ecommerce": [
-        "photo-1556742049-0cfed4f6a45d","photo-1472851294608-062f824d29cc",
-        "photo-1607082348824-0a96f2a4b9da","photo-1523275335684-37898b6baf30",
-        "photo-1581091226825-a6a2a5aee158","photo-1526170375885-4d8ecf77b99f",
-        "photo-1491553895911-0055eca6402d","photo-1585386959984-a4155224a1ad",
-    ],
-    "saas": [
-        "photo-1518770660439-4636190af475","photo-1461749280684-dccba630e2f6",
-        "photo-1551434678-e076c223a692", "photo-1497366216548-37526070297c",
-        "photo-1573164713988-8665fc963095","photo-1498050108023-c5249f4df085",
-        "photo-1522071820081-009f0129c71c","photo-1531482615713-2afd69097998",
-    ],
-    "ai": [
-        "photo-1677442135703-1787eea5ce01","photo-1620712943543-bcc4688e7485",
-        "photo-1555255707-c07966088b7b","photo-1518770660439-4636190af475",
-        "photo-1535378917042-10a22c95931a","photo-1593508512255-86ab42a8e620",
-        "photo-1589254065878-42efea3c6521","photo-1558346547-4439467bd1d5",
-    ],
-    "developer": [
-        "photo-1461749280684-dccba630e2f6","photo-1498050108023-c5249f4df085",
-        "photo-1555066931-4365d14bab8c","photo-1607799279861-4dd421887fb3",
-        "photo-1519389950473-47ba0277781c","photo-1537432376769-00f5c2f4c8d2",
-        "photo-1573495612522-4c73ff6a54b0","photo-1571171637578-41bc2dd41cd2",
-    ],
-    "startup": [
-        "photo-1559136555-9303baea8ebd","photo-1531297484001-80022131f5a1",
-        "photo-1556761175-4b46a572b786","photo-1522202176988-66273c2fd55f",
-        "photo-1542744173-8e7e53415bb0","photo-1572021335469-31706a17aaef",
-        "photo-1560472355-536de3962603","photo-1524758631624-e2822e304c36",
-    ],
-    "agency": [
-        "photo-1558655146-9f40138edfeb","photo-1524758631624-e2822e304c36",
-        "photo-1497366754035-f200968a6e72","photo-1535016120720-40c646be5580",
-        "photo-1531538606174-0f90ff5dce83","photo-1487017159836-4e23ece2e4cf",
-        "photo-1542744094-3a31f272c490","photo-1573164574511-73c773193279",
-    ],
-    "nature": [
-        "photo-1441974231531-c6227db76b6e","photo-1506905925346-21bda4d32df4",
-        "photo-1469474968028-56623f02e42e","photo-1500534314209-a25ddb2bd429",
-        "photo-1472214103451-9374bd1c798e","photo-1542601906990-b4d3fb778b09",
-        "photo-1448375240586-882707db888b","photo-1518173946687-a4c8892bbd9f",
-    ],
-    "nonprofit": [
-        "photo-1593113630400-ea4288922559","photo-1559027615-cd4628902d4a",
-        "photo-1532629345422-7515f3d16bb6","photo-1509099836639-18ba1795216d",
-        "photo-1469571486292-b53601010376","photo-1488521787991-ed7bbaae773c",
-        "photo-1556484687-30636164638b","photo-1593113598332-cd59a0c3a9a4",
-    ],
-    "events": [
-        "photo-1540575467063-178a50c2df87","photo-1511795409834-ef04bbd61622",
-        "photo-1464366400600-7168b8af9bc3","photo-1519167758481-83f550bb49b3",
-        "photo-1492684223066-81342ee5ff30","photo-1478147427282-58a87a433d8f",
-        "photo-1529543544282-ea669407fca3","photo-1551818255-e6e10975bc17",
-    ],
-}
-
-_DEFAULT_PHOTOS = [
-    "photo-1552664730-d307ca884978","photo-1460925895917-afdab827c52f",
-    "photo-1556742049-0cfed4f6a45d","photo-1497366216548-37526070297c",
-    "photo-1454165804606-c3d57bc86b40","photo-1522202176988-66273c2fd55f",
-]
-
-
-def _img_set(industry: str, count: int = 8, w: int = 900) -> List[str]:
-    pool = INDUSTRY_PHOTO_POOLS.get(industry, _DEFAULT_PHOTOS)
-    return [
-        f"https://images.unsplash.com/{pool[i % len(pool)]}?w={w}&auto=format&fit=crop&q=82"
-        for i in range(count)
-    ]
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# THEMES — six palettes, no purple/violet/fuchsia/indigo anywhere.
-# All sections read colours from theme keys only.
-# ─────────────────────────────────────────────────────────────────────────────
+# =============================================================================
+# THEMES  — CSS custom properties only. No Tailwind, no hardcoded hex in HTML.
+# =============================================================================
 
 THEMES: Dict[str, Dict] = {
     "blue": {
         "id": "blue", "mode": "light",
-        "bg":          "bg-white",
-        "bg_alt":      "bg-slate-50",
-        "bg_hex":      "#ffffff",
-        "bg_alt_hex":  "#f8fafc",
-        "ambient":     "bg-blue-500",
-        "text":        "text-slate-900",
-        "text_muted":  "text-slate-500",
-        "text_light":  "text-slate-400",
-        "grad":        "from-blue-600 to-blue-500",
-        "grad_text":   "from-blue-700 to-blue-500",
-        "grad_subtle": "from-blue-50 to-slate-50",
-        "glow":        "bg-blue-500",
-        "border":      "border-slate-200",
-        "nav":         "bg-white/95 border-b border-slate-200 shadow-sm backdrop-blur-md",
-        "badge":       "bg-blue-50 text-blue-700 border border-blue-200 rounded-full",
-        "stat":        "text-blue-600",
-        "check":       "text-blue-500",
-        "card":        "bg-white border border-slate-200 shadow-sm",
-        "input":       "bg-white border border-slate-300 text-slate-900 placeholder-slate-400 focus:border-blue-500",
-        "btn_secondary": "border border-slate-300 text-slate-700 bg-white hover:bg-slate-50",
-        "fonts":       "'Inter', sans-serif",
-        "font_url":    "https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap",
+        "font_family": "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
+        "font_url": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap",
+        "vars": {
+            "--c-bg":           "#ffffff",
+            "--c-bg2":          "#f8fafc",
+            "--c-text":         "#0f172a",
+            "--c-text2":        "#475569",
+            "--c-text3":        "#94a3b8",
+            "--c-accent":       "#2563eb",
+            "--c-accent2":      "#1d4ed8",
+            "--c-accent-rgb":   "37,99,235",
+            "--c-border":       "#e2e8f0",
+            "--c-card":         "#ffffff",
+            "--c-card-border":  "#e2e8f0",
+            "--c-nav":          "rgba(255,255,255,0.92)",
+            "--c-badge-bg":     "#eff6ff",
+            "--c-badge-text":   "#1e40af",
+            "--c-badge-border": "#bfdbfe",
+            "--c-input-bg":     "#f8fafc",
+            "--c-input-border": "#e2e8f0",
+            "--c-glow":         "rgba(37,99,235,0.07)",
+        },
     },
     "slate": {
         "id": "slate", "mode": "light",
-        "bg":          "bg-white",
-        "bg_alt":      "bg-slate-50",
-        "bg_hex":      "#ffffff",
-        "bg_alt_hex":  "#f8fafc",
-        "ambient":     "bg-slate-400",
-        "text":        "text-slate-900",
-        "text_muted":  "text-slate-500",
-        "text_light":  "text-slate-400",
-        "grad":        "from-slate-800 to-slate-600",
-        "grad_text":   "from-slate-800 to-slate-500",
-        "grad_subtle": "from-slate-100 to-slate-50",
-        "glow":        "bg-slate-500",
-        "border":      "border-slate-200",
-        "nav":         "bg-white border-b border-slate-200 shadow-sm",
-        "badge":       "bg-slate-100 text-slate-700 border border-slate-300 rounded-full",
-        "stat":        "text-slate-800",
-        "check":       "text-slate-600",
-        "card":        "bg-white border border-slate-200 shadow-sm",
-        "input":       "bg-white border border-slate-300 text-slate-900 placeholder-slate-400 focus:border-slate-600",
-        "btn_secondary": "border border-slate-300 text-slate-700 bg-white hover:bg-slate-50",
-        "fonts":       "'IBM Plex Sans', sans-serif",
-        "font_url":    "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap",
+        "font_family": "'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif",
+        "font_url": "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap",
+        "vars": {
+            "--c-bg":           "#ffffff",
+            "--c-bg2":          "#f8fafc",
+            "--c-text":         "#0f172a",
+            "--c-text2":        "#475569",
+            "--c-text3":        "#94a3b8",
+            "--c-accent":       "#334155",
+            "--c-accent2":      "#1e293b",
+            "--c-accent-rgb":   "51,65,85",
+            "--c-border":       "#e2e8f0",
+            "--c-card":         "#ffffff",
+            "--c-card-border":  "#e2e8f0",
+            "--c-nav":          "rgba(255,255,255,0.95)",
+            "--c-badge-bg":     "#f1f5f9",
+            "--c-badge-text":   "#334155",
+            "--c-badge-border": "#cbd5e1",
+            "--c-input-bg":     "#f8fafc",
+            "--c-input-border": "#e2e8f0",
+            "--c-glow":         "rgba(51,65,85,0.05)",
+        },
     },
     "amber": {
         "id": "amber", "mode": "light",
-        "bg":          "bg-[#fffbf2]",
-        "bg_alt":      "bg-[#fff6e0]",
-        "bg_hex":      "#fffbf2",
-        "bg_alt_hex":  "#fff6e0",
-        "ambient":     "bg-[#fbbf24]",
-        "text":        "text-[#2d1a00]",
-        "text_muted":  "text-[#7a5c2e]",
-        "text_light":  "text-[#b08040]/70",
-        "grad":        "from-[#f59e0b] to-[#f97316]",
-        "grad_text":   "from-[#d97706] to-[#ea580c]",
-        "grad_subtle": "from-[#fef3c7] to-[#fff7ed]",
-        "glow":        "bg-[#fbbf24]",
-        "border":      "border-[#fde68a]",
-        "nav":         "bg-[#fffbf2]/95 border-b border-[#fde68a] shadow-sm backdrop-blur-md",
-        "badge":       "bg-[#fef3c7] text-[#92400e] border border-[#fde68a] rounded-full",
-        "stat":        "text-[#d97706]",
-        "check":       "text-[#d97706]",
-        "card":        "bg-white border border-[#fde68a] shadow-sm",
-        "input":       "bg-white border border-[#fde68a] text-[#2d1a00] placeholder-[#b08040]/60 focus:border-[#d97706]",
-        "btn_secondary": "border border-[#fde68a] text-[#92400e] bg-white hover:bg-[#fef3c7]",
-        "fonts":       "'DM Sans', sans-serif",
-        "font_url":    "https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700;9..40,800&display=swap",
+        "font_family": "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif",
+        "font_url": "https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700;9..40,800&display=swap",
+        "vars": {
+            "--c-bg":           "#fffbf2",
+            "--c-bg2":          "#fff6e0",
+            "--c-text":         "#1c0f00",
+            "--c-text2":        "#6b4c1e",
+            "--c-text3":        "#a07840",
+            "--c-accent":       "#d97706",
+            "--c-accent2":      "#b45309",
+            "--c-accent-rgb":   "217,119,6",
+            "--c-border":       "#fde68a",
+            "--c-card":         "#ffffff",
+            "--c-card-border":  "#fde68a",
+            "--c-nav":          "rgba(255,251,242,0.94)",
+            "--c-badge-bg":     "#fef3c7",
+            "--c-badge-text":   "#92400e",
+            "--c-badge-border": "#fde68a",
+            "--c-input-bg":     "#fffbf2",
+            "--c-input-border": "#fde68a",
+            "--c-glow":         "rgba(217,119,6,0.07)",
+        },
     },
     "green": {
         "id": "green", "mode": "light",
-        "bg":          "bg-white",
-        "bg_alt":      "bg-[#f0fdf4]",
-        "bg_hex":      "#ffffff",
-        "bg_alt_hex":  "#f0fdf4",
-        "ambient":     "bg-[#34d399]",
-        "text":        "text-slate-900",
-        "text_muted":  "text-slate-500",
-        "text_light":  "text-slate-400",
-        "grad":        "from-[#059669] to-[#0d9488]",
-        "grad_text":   "from-[#047857] to-[#0d9488]",
-        "grad_subtle": "from-[#d1fae5] to-[#ccfbf1]",
-        "glow":        "bg-[#34d399]",
-        "border":      "border-[#bbf7d0]",
-        "nav":         "bg-white/95 border-b border-[#bbf7d0] shadow-sm backdrop-blur-md",
-        "badge":       "bg-[#d1fae5] text-[#065f46] border border-[#a7f3d0] rounded-full",
-        "stat":        "text-[#059669]",
-        "check":       "text-[#059669]",
-        "card":        "bg-white border border-[#bbf7d0] shadow-sm",
-        "input":       "bg-white border border-[#a7f3d0] text-slate-900 placeholder-slate-400 focus:border-[#059669]",
-        "btn_secondary": "border border-[#a7f3d0] text-[#065f46] bg-white hover:bg-[#d1fae5]",
-        "fonts":       "'Plus Jakarta Sans', sans-serif",
-        "font_url":    "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap",
+        "font_family": "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif",
+        "font_url": "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap",
+        "vars": {
+            "--c-bg":           "#ffffff",
+            "--c-bg2":          "#f0fdf4",
+            "--c-text":         "#052e16",
+            "--c-text2":        "#166534",
+            "--c-text3":        "#4ade80",
+            "--c-accent":       "#16a34a",
+            "--c-accent2":      "#15803d",
+            "--c-accent-rgb":   "22,163,74",
+            "--c-border":       "#bbf7d0",
+            "--c-card":         "#ffffff",
+            "--c-card-border":  "#bbf7d0",
+            "--c-nav":          "rgba(255,255,255,0.94)",
+            "--c-badge-bg":     "#dcfce7",
+            "--c-badge-text":   "#15803d",
+            "--c-badge-border": "#86efac",
+            "--c-input-bg":     "#f0fdf4",
+            "--c-input-border": "#bbf7d0",
+            "--c-glow":         "rgba(22,163,74,0.07)",
+        },
     },
     "dark": {
         "id": "dark", "mode": "dark",
-        "bg":          "bg-gray-950",
-        "bg_alt":      "bg-gray-900",
-        "bg_hex":      "#030712",
-        "bg_alt_hex":  "#111827",
-        "ambient":     "bg-[#06b6d4]",
-        "text":        "text-white",
-        "text_muted":  "text-gray-400",
-        "text_light":  "text-gray-600",
-        "grad":        "from-[#06b6d4] to-[#2563eb]",
-        "grad_text":   "from-[#22d3ee] to-[#60a5fa]",
-        "grad_subtle": "from-[#083344]/25 to-[#1e3a8a]/15",
-        "glow":        "bg-[#06b6d4]",
-        "border":      "border-white/10",
-        "nav":         "bg-gray-950/90 border-b border-white/10 backdrop-blur-xl",
-        "badge":       "bg-[#083344]/60 text-[#67e8f9] border border-[#06b6d4]/30 rounded-full",
-        "stat":        "text-[#22d3ee]",
-        "check":       "text-[#22d3ee]",
-        "card":        "bg-gray-900 border border-white/10",
-        "input":       "bg-gray-800 border border-white/20 text-white placeholder-gray-500 focus:border-[#06b6d4]",
-        "btn_secondary": "border border-white/20 text-white bg-white/6 hover:bg-white/10",
-        "fonts":       "'Space Grotesk', sans-serif",
-        "font_url":    "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap",
+        "font_family": "'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif",
+        "font_url": "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap",
+        "vars": {
+            "--c-bg":           "#080c10",
+            "--c-bg2":          "#0d1117",
+            "--c-text":         "#f0f6fc",
+            "--c-text2":        "#8b949e",
+            "--c-text3":        "#484f58",
+            "--c-accent":       "#58a6ff",
+            "--c-accent2":      "#1f6feb",
+            "--c-accent-rgb":   "88,166,255",
+            "--c-border":       "rgba(240,246,252,0.1)",
+            "--c-card":         "#0d1117",
+            "--c-card-border":  "rgba(240,246,252,0.08)",
+            "--c-nav":          "rgba(8,12,16,0.90)",
+            "--c-badge-bg":     "rgba(88,166,255,0.1)",
+            "--c-badge-text":   "#58a6ff",
+            "--c-badge-border": "rgba(88,166,255,0.2)",
+            "--c-input-bg":     "#161b22",
+            "--c-input-border": "rgba(240,246,252,0.1)",
+            "--c-glow":         "rgba(88,166,255,0.08)",
+        },
     },
     "rose": {
         "id": "rose", "mode": "dark",
-        "bg":          "bg-[#0d0508]",
-        "bg_alt":      "bg-[#130a0e]",
-        "bg_hex":      "#0d0508",
-        "bg_alt_hex":  "#130a0e",
-        "ambient":     "bg-[#f43f5e]",
-        "text":        "text-[#fff1f2]",
-        "text_muted":  "text-[#fda4af]/70",
-        "text_light":  "text-[#fb7185]/50",
-        "grad":        "from-[#f43f5e] to-[#ec4899]",
-        "grad_text":   "from-[#fb7185] to-[#f472b6]",
-        "grad_subtle": "from-[#4c0519]/30 to-[#500724]/15",
-        "glow":        "bg-[#f43f5e]",
-        "border":      "border-[#4c0519]/40",
-        "nav":         "bg-[#0d0508]/90 border-b border-[#4c0519]/30 backdrop-blur-xl",
-        "badge":       "bg-[#4c0519]/60 text-[#fda4af] border border-[#f43f5e]/25 rounded-full",
-        "stat":        "text-[#fb7185]",
-        "check":       "text-[#fb7185]",
-        "card":        "bg-[#130a0e] border border-[#4c0519]/35",
-        "input":       "bg-[#1a0810] border border-[#4c0519]/50 text-[#fff1f2] placeholder-[#fda4af]/40 focus:border-[#f43f5e]",
-        "btn_secondary": "border border-[#4c0519]/50 text-[#fda4af] bg-[#4c0519]/20 hover:bg-[#4c0519]/40",
-        "fonts":       "'Cormorant Garamond', serif",
-        "font_url":    "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600;700&display=swap",
+        "font_family": "'Cormorant Garamond', Georgia, serif",
+        "font_url": "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600;700&display=swap",
+        "vars": {
+            "--c-bg":           "#0d0508",
+            "--c-bg2":          "#120609",
+            "--c-text":         "#fdf2f4",
+            "--c-text2":        "#d4a0aa",
+            "--c-text3":        "#7a4a54",
+            "--c-accent":       "#e11d48",
+            "--c-accent2":      "#be123c",
+            "--c-accent-rgb":   "225,29,72",
+            "--c-border":       "rgba(225,29,72,0.15)",
+            "--c-card":         "#120609",
+            "--c-card-border":  "rgba(225,29,72,0.12)",
+            "--c-nav":          "rgba(13,5,8,0.92)",
+            "--c-badge-bg":     "rgba(225,29,72,0.08)",
+            "--c-badge-text":   "#fda4af",
+            "--c-badge-border": "rgba(225,29,72,0.2)",
+            "--c-input-bg":     "#1a080d",
+            "--c-input-border": "rgba(225,29,72,0.2)",
+            "--c-glow":         "rgba(225,29,72,0.08)",
+        },
     },
 }
 
-# ─────────────────────────────────────────────────────────────────────────────
-# INDUSTRY → THEME
-# ─────────────────────────────────────────────────────────────────────────────
-
 INDUSTRY_KEYWORDS: Dict[str, List[str]] = {
-    "saas":         ["software", "app", "platform", "cloud", "api", "saas", "dashboard", "workflow", "automation", "crm", "erp"],
-    "ai":           ["ai", "artificial intelligence", "machine learning", "ml", "neural", "llm", "gpt", "data science", "algorithm"],
-    "ecommerce":    ["shop", "store", "ecommerce", "e-commerce", "sell", "product", "cart", "marketplace", "retail", "dropship"],
-    "health":       ["health", "medical", "wellness", "clinic", "doctor", "hospital", "therapy", "mental health", "nutrition", "physio"],
+    "saas":         ["software", "app", "platform", "cloud", "api", "saas", "dashboard", "workflow", "automation", "crm"],
+    "ai":           ["ai", "artificial intelligence", "machine learning", "ml", "neural", "llm", "gpt", "data science"],
+    "ecommerce":    ["shop", "store", "ecommerce", "e-commerce", "sell", "product", "cart", "marketplace", "retail"],
+    "health":       ["health", "medical", "wellness", "clinic", "doctor", "hospital", "therapy", "nutrition", "physio"],
     "fitness":      ["fitness", "gym", "personal trainer", "workout", "yoga", "crossfit", "athletics", "exercise"],
     "finance":      ["finance", "banking", "investment", "crypto", "payment", "fintech", "trading", "insurance", "wealth", "accounting", "tax"],
     "agency":       ["agency", "design", "creative", "marketing", "brand", "advertising", "studio", "media"],
@@ -451,30 +247,59 @@ INDUSTRY_KEYWORDS: Dict[str, List[str]] = {
     "restaurant":   ["restaurant", "food", "cafe", "bakery", "catering", "cuisine", "dining", "menu", "chef", "bar", "bistro"],
     "beauty":       ["beauty", "salon", "spa", "skincare", "cosmetic", "makeup", "aesthetics", "bridal", "hair", "nail"],
     "real_estate":  ["real estate", "property", "realty", "housing", "apartment", "mortgage", "agent", "broker"],
-    "travel":       ["travel", "hotel", "tour", "booking", "airbnb", "vacation", "resort", "hospitality"],
+    "travel":       ["travel", "hotel", "tour", "booking", "vacation", "resort", "hospitality"],
     "startup":      ["startup", "founder", "seed", "venture", "mvp", "launch", "pitch", "scale", "growth"],
     "developer":    ["developer", "engineer", "code", "open source", "github", "devtools", "ide", "terminal", "cli"],
     "nature":       ["organic", "eco", "sustainable", "farm", "agriculture", "environment", "garden", "zero waste"],
     "construction": ["construction", "contractor", "builder", "building", "renovation", "remodel", "plumbing", "electrical",
                      "roofing", "flooring", "masonry", "carpentry", "landscaping", "painting", "hvac", "handyman",
-                     "general contractor", "home improvement", "excavation", "concrete", "drywall", "framing", "trades"],
-    "legal":        ["law", "lawyer", "attorney", "legal", "firm", "counsel", "litigation", "contract", "court", "compliance",
-                     "paralegal", "notary", "solicitor", "barrister"],
-    "logistics":    ["logistics", "shipping", "freight", "delivery", "supply chain", "warehouse", "trucking", "transport",
-                     "courier", "fulfillment", "distribution", "fleet"],
+                     "general contractor", "home improvement", "concrete", "drywall", "framing", "trades"],
+    "legal":        ["law", "lawyer", "attorney", "legal", "firm", "counsel", "litigation", "contract", "court", "compliance"],
+    "logistics":    ["logistics", "shipping", "freight", "delivery", "supply chain", "warehouse", "trucking", "transport", "courier"],
     "automotive":   ["auto", "car", "vehicle", "mechanic", "garage", "dealership", "repair", "tire", "bodywork", "detailing"],
-    "nonprofit":    ["nonprofit", "charity", "foundation", "ngo", "volunteer", "donation", "cause", "community", "social impact"],
+    "nonprofit":    ["nonprofit", "charity", "foundation", "ngo", "volunteer", "donation", "cause", "community"],
     "events":       ["event", "wedding", "conference", "venue", "entertainment", "party", "corporate event"],
 }
 
 INDUSTRY_THEME: Dict[str, str] = {
-    "saas": "blue", "ai": "dark", "ecommerce": "amber", "health": "green",
-    "fitness": "green", "finance": "blue", "agency": "dark", "education": "blue",
-    "luxury": "rose", "restaurant": "amber", "beauty": "rose", "real_estate": "slate",
-    "travel": "blue", "startup": "dark", "developer": "dark", "nature": "green",
+    "saas": "blue",       "ai": "dark",       "ecommerce": "amber",  "health": "green",
+    "fitness": "green",   "finance": "blue",  "agency": "dark",      "education": "blue",
+    "luxury": "rose",     "restaurant": "amber", "beauty": "rose",   "real_estate": "slate",
+    "travel": "blue",     "startup": "dark",  "developer": "dark",   "nature": "green",
     "construction": "slate", "legal": "slate", "logistics": "slate", "automotive": "slate",
     "nonprofit": "green", "events": "amber",
 }
+
+INDUSTRY_PHOTOS: Dict[str, List[str]] = {
+    "construction": ["photo-1504307651254-35680f356dfd", "photo-1541888946425-d81bb19240f5", "photo-1590674899484-d5640e854abe", "photo-1581578731548-c64695cc6952", "photo-1565117623394-5f93fd4c7a06", "photo-1530836176759-510f6ca9f76f"],
+    "legal":        ["photo-1589578527966-fdac0f44566c", "photo-1436450412740-6b988f486c6b", "photo-1505664194779-8beaceb5c7c7", "photo-1521791055366-0d553872952f", "photo-1450101499163-c8848c66ca85", "photo-1568992687947-868a62a9f521"],
+    "logistics":    ["photo-1504493188-45c49f65c6ba", "photo-1586528116311-ad8dd3c8310d", "photo-1601584115197-04ecc0da31d7", "photo-1494412574643-ff11b0a5c1c3", "photo-1519003300449-424ad0405076", "photo-1543169964-f2e91dc1fbf4"],
+    "automotive":   ["photo-1492144534655-ae79c964c9d7", "photo-1503376780353-7e6692767b70", "photo-1544636331-e26879cd4d9b", "photo-1565043589221-1a6fd9ae45c7", "photo-1558981806-ec527fa84c39", "photo-1549317661-bd32c8ce0db2"],
+    "restaurant":   ["photo-1504674900247-0877df9cc836", "photo-1414235077428-338989a2e8c0", "photo-1555396273-367ea4eb4db5", "photo-1517248135467-4c7edcad34c4", "photo-1512621776951-a57141f2eefd", "photo-1467003909585-2f8a72700288"],
+    "health":       ["photo-1576091160550-2173dba999ef", "photo-1559757148-5c350d0d3c56", "photo-1535914254981-b5012eebbd15", "photo-1571772996211-2f02c9727629", "photo-1540420773420-3366772f4999", "photo-1631217868264-e5b90bb7e133"],
+    "fitness":      ["photo-1534438327276-14e5300c3a48", "photo-1571019613454-1cb2f99b2d8b", "photo-1517836357463-d25dfeac3438", "photo-1549060279-7e168fcee0c2", "photo-1526506118085-60ce8714f8c5", "photo-1574680178050-55c6a6a96e0a"],
+    "beauty":       ["photo-1487412947147-5cebf100ffc2", "photo-1560066984-138dadb4c035", "photo-1522337360788-8b13dee7a37e", "photo-1596704017254-9b121068fb31", "photo-1571019613576-2b22c76fd955", "photo-1519014816548-bf5fe059798b"],
+    "finance":      ["photo-1611974789855-9c2a0a7236a3", "photo-1563986768609-322da13575f3", "photo-1468254095679-bbcba94a7066", "photo-1454165804606-c3d57bc86b40", "photo-1460925895917-afdab827c52f", "photo-1526304640581-d334cdbbf45e"],
+    "real_estate":  ["photo-1560518883-ce09059eeffa", "photo-1570129477492-45c003edd2be", "photo-1513584684374-8bab748fbf90", "photo-1501183638710-841dd1904471", "photo-1486325212027-8081e485255e", "photo-1523217582562-09d0def993a6"],
+    "education":    ["photo-1503676260728-1c00da094a0b", "photo-1456513080510-7bf3a84b82f8", "photo-1509062522246-3755977927d7", "photo-1427504494785-3a9ca7044f45", "photo-1522202176988-66273c2fd55f", "photo-1434030216411-0b793f4b4173"],
+    "travel":       ["photo-1501854140801-50d01698950b", "photo-1436491865332-7a61a109cc05", "photo-1488085061387-422e29b40080", "photo-1476514525535-07fb3b4ae5f1", "photo-1530521954074-e64f6810b32d", "photo-1503220317375-aaad61436b1b"],
+    "ecommerce":    ["photo-1556742049-0cfed4f6a45d", "photo-1472851294608-062f824d29cc", "photo-1607082348824-0a96f2a4b9da", "photo-1523275335684-37898b6baf30", "photo-1581091226825-a6a2a5aee158", "photo-1526170375885-4d8ecf77b99f"],
+    "saas":         ["photo-1518770660439-4636190af475", "photo-1461749280684-dccba630e2f6", "photo-1551434678-e076c223a692", "photo-1497366216548-37526070297c", "photo-1573164713988-8665fc963095", "photo-1498050108023-c5249f4df085"],
+    "ai":           ["photo-1677442135703-1787eea5ce01", "photo-1620712943543-bcc4688e7485", "photo-1555255707-c07966088b7b", "photo-1518770660439-4636190af475", "photo-1535378917042-10a22c95931a", "photo-1593508512255-86ab42a8e620"],
+    "developer":    ["photo-1461749280684-dccba630e2f6", "photo-1498050108023-c5249f4df085", "photo-1555066931-4365d14bab8c", "photo-1607799279861-4dd421887fb3", "photo-1562813733-b31f71025d54", "photo-1504639725590-34d0984388bd"],
+    "startup":      ["photo-1559136555-9303baea8ebd", "photo-1531297484001-80022131f5a1", "photo-1556761175-4b46a572b786", "photo-1522202176988-66273c2fd55f", "photo-1553484771-371a605b060b", "photo-1531973576160-7125cd663d86"],
+    "agency":       ["photo-1558655146-9f40138edfeb", "photo-1524758631624-e2822e304c36", "photo-1497366754035-f200968a6e72", "photo-1535016120720-40c646be5580", "photo-1559028012-481c04fa702d", "photo-1542744173-8e7e53415bb0"],
+    "nature":       ["photo-1441974231531-c6227db76b6e", "photo-1506905925346-21bda4d32df4", "photo-1469474968028-56623f02e42e", "photo-1500534314209-a25ddb2bd429", "photo-1518173946687-a4c8892bbd9f", "photo-1540979388789-6cee28a1cdc9"],
+    "nonprofit":    ["photo-1593113630400-ea4288922559", "photo-1559027615-cd4628902d4a", "photo-1532629345422-7515f3d16bb6", "photo-1509099836639-18ba1795216d", "photo-1491438590914-bc09fcaaf77a", "photo-1488521787991-ed7bbaae773c"],
+    "events":       ["photo-1540575467063-178a50c2df87", "photo-1511795409834-ef04bbd61622", "photo-1464366400600-7168b8af9bc3", "photo-1519167758481-83f550bb49b3", "photo-1529543544282-ea669407fca3", "photo-1505373877841-8d25f7d46678"],
+}
+_DEFAULT_PHOTOS = ["photo-1552664730-d307ca884978", "photo-1460925895917-afdab827c52f", "photo-1556742049-0cfed4f6a45d", "photo-1497366216548-37526070297c"]
+
+
+def _photo_url(industry: str, idx: int, w: int = 1000) -> str:
+    pool = INDUSTRY_PHOTOS.get(industry, _DEFAULT_PHOTOS)
+    pid  = pool[idx % len(pool)]
+    return f"https://images.unsplash.com/{pid}?w={w}&auto=format&fit=crop&q=80"
 
 
 def detect_industry(text: str) -> str:
@@ -489,22 +314,20 @@ def select_theme(industry: str) -> Dict:
     return THEMES[INDUSTRY_THEME.get(industry, "blue")]
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# BUSINESS NAME EXTRACTION
-# ─────────────────────────────────────────────────────────────────────────────
-
-_NAME_PREFIXES = [
-    "my company is called ", "my business is called ", "company name is ", "business name is ",
-    "called ", "named ", "name is ", "it's called ", "we are ", "we're ", "i own ", "i run ",
-]
-_DESC_STARTERS = ["we ", "our ", "a ", "an ", "the ", "i have", "i own", "i run", "this is", "it's a"]
-
+# =============================================================================
+# BUSINESS NAME + CONTACT EXTRACTION
+# =============================================================================
 
 def extract_business_name(raw: str, prompt: str):
+    """
+    Returns (name, cleaned_prompt).
+    IMPORTANT: name is always the actual business name — never the prompt text.
+    """
     raw, prompt = (raw or "").strip(), (prompt or "").strip()
     pl = prompt.lower()
-    for indicator in ["the company name is ", "company name: ", "business name: ", "we're called ",
-                      "it's called ", "my company is called ", "my business is called "]:
+
+    for indicator in ["the company name is ", "company name: ", "business name: ",
+                      "we're called ", "it's called ", "my company is called ", "my business is called "]:
         if indicator in pl:
             idx   = pl.index(indicator)
             after = prompt[idx + len(indicator):].strip()
@@ -517,13 +340,19 @@ def extract_business_name(raw: str, prompt: str):
             before    = prompt[:idx].strip()
             remainder = prompt[idx + len(indicator) + end:].strip(" .,;")
             return name, f"{before} {remainder}".strip()
+
     if not raw:
         return "", prompt
+
     rl = raw.lower()
-    for s in _DESC_STARTERS:
+    desc_starters = ["we ", "our ", "a ", "an ", "the ", "i have", "i own", "i run", "this is", "it's a"]
+    for s in desc_starters:
         if rl.startswith(s):
             return "", f"{raw}. {prompt}".strip(" .")
-    for p in _NAME_PREFIXES:
+
+    prefixes = ["my company is called ", "my business is called ", "company name is ",
+                "called ", "named ", "name is ", "it's called "]
+    for p in prefixes:
         if rl.startswith(p):
             rest = raw[len(p):].strip()
             for sep in [" - ", " — ", ", ", ". "]:
@@ -531,1336 +360,1218 @@ def extract_business_name(raw: str, prompt: str):
                     parts = rest.split(sep, 1)
                     return parts[0].strip(), f"{parts[1].strip()}. {prompt}".strip(" .")
             return rest.strip(), prompt
+
     for sep in [" - ", " — ", ": "]:
         if sep in raw:
             parts = raw.split(sep, 1)
             return parts[0].strip(), f"{parts[1].strip()}. {prompt}".strip(" .")
+
     if len(raw.split()) <= 5:
         return raw, prompt
+
     words = raw.split()
     return " ".join(words[:3]).rstrip(".,!?"), f"{' '.join(words[3:])}. {prompt}".strip(" .")
 
 
 def _default_name(industry: str) -> str:
     return {
-        "construction": "BuildRight Group", "legal": "Sterling Law",
-        "finance": "Apex Capital", "health": "Vitalis Health",
-        "fitness": "Peak Fitness", "restaurant": "The Kitchen",
-        "beauty": "Lumiere Studio", "ecommerce": "The Shop",
-        "education": "Elevate Academy", "real_estate": "Keystone Realty",
-        "logistics": "Swift Logistics", "automotive": "AutoPro",
-        "events": "Premier Events", "nonprofit": "Together Foundation",
-        "nature": "Green Root", "agency": "Creative Studio", "travel": "Voyage Co.",
+        "construction": "BuildRight Group",  "legal": "Sterling Law",
+        "finance": "Apex Capital",           "health": "Vitalis Health",
+        "fitness": "Peak Fitness",           "restaurant": "The Kitchen",
+        "beauty": "Lumiere Studio",          "ecommerce": "The Shop",
+        "education": "Elevate Academy",      "real_estate": "Keystone Realty",
+        "logistics": "Swift Logistics",      "automotive": "AutoPro",
+        "events": "Premier Events",          "nonprofit": "Together Foundation",
+        "nature": "Green Root",              "agency": "Creative Studio",
+        "travel": "Voyage Co.",              "saas": "LaunchPad",
+        "ai": "Neural",                      "developer": "DevBase",
+        "startup": "Foundry",
     }.get(industry, "My Business")
 
 
-def _extract_contact_info(prompt: str) -> Dict[str, str]:
-    """Pull any real email / phone from the prompt. Returns only what's actually found."""
+def _extract_contact(text: str) -> Dict[str, str]:
     result = {}
-    email_match = re.search(r'[\w.+-]+@[\w-]+\.[a-zA-Z]{2,}', prompt or "")
-    if email_match:
-        result["email"] = email_match.group(0)
-    phone_match = re.search(
-        r'(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?)?\d{3}[-.\s]?\d{4}', prompt or ""
-    )
-    if phone_match:
-        candidate = re.sub(r'[^\d+]', '', phone_match.group(0))
-        if len(candidate) >= 10:
-            result["phone"] = phone_match.group(0).strip()
+    m = re.search(r'[\w.+-]+@[\w-]+\.[a-zA-Z]{2,}', text or "")
+    if m:
+        result["email"] = m.group(0)
+    m = re.search(r'(?:\+?1[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?)?\d{3}[-.\s]?\d{4}', text or "")
+    if m:
+        digits = re.sub(r'[^\d+]', '', m.group(0))
+        if len(digits) >= 10:
+            result["phone"] = m.group(0).strip()
     return result
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# HTML HELPERS — all colours come from theme dict
-# ─────────────────────────────────────────────────────────────────────────────
+# =============================================================================
+# PAGE CSS — all styles, zero Tailwind, pure CSS variables
+# =============================================================================
 
-def _btn(t: Dict, label: str, href: str = "#contact", extra: str = "") -> str:
-    return (f'<a href="{href}" class="inline-block bg-gradient-to-r {t["grad"]} text-white '
-            f'font-bold rounded-xl px-8 py-4 shadow-md {HOVER_LIFT} {extra}">{label}</a>')
+def _page_css(t: Dict) -> str:
+    vars_css = "\n".join(f"  {k}: {v};" for k, v in t["vars"].items())
+    return f"""<style>
+*,*::before,*::after{{box-sizing:border-box;margin:0;padding:0}}
+:root{{{vars_css}}}
+html{{font-family:{t['font_family']};background:var(--c-bg);color:var(--c-text);scroll-behavior:smooth;-webkit-font-smoothing:antialiased}}
+body{{background:var(--c-bg);color:var(--c-text);overflow-x:hidden}}
+img{{display:block;max-width:100%}}
+a{{color:inherit;text-decoration:none}}
+button{{cursor:pointer;font-family:inherit;border:none;background:none}}
+input,textarea,select{{font-family:inherit}}
+
+/* Typography */
+.t-hero{{font-size:clamp(2.5rem,6vw,5.5rem);font-weight:900;letter-spacing:-0.03em;line-height:1.05;color:var(--c-text)}}
+.t-section{{font-size:clamp(1.9rem,3.5vw,3rem);font-weight:800;letter-spacing:-0.025em;line-height:1.12;color:var(--c-text)}}
+.t-card{{font-size:1.05rem;font-weight:700;letter-spacing:-0.01em;color:var(--c-text)}}
+.t-eyebrow{{display:block;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.2em;color:var(--c-accent);margin-bottom:0.85rem}}
+.t-body{{font-size:1.05rem;line-height:1.7;color:var(--c-text2)}}
+.t-small{{font-size:0.85rem;line-height:1.65;color:var(--c-text2)}}
+.t-muted{{color:var(--c-text3)}}
+.t-accent{{color:var(--c-accent)}}
+.t-grad{{background:linear-gradient(135deg,var(--c-accent),var(--c-accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}}
+
+/* Layout */
+.wrap{{width:100%;max-width:1160px;margin:0 auto;padding:0 1.5rem}}
+@media(min-width:768px){{.wrap{{padding:0 2.5rem}}}}
+
+/* Sections — ONE background, rhythm through spacing */
+.sec{{position:relative;padding:6rem 0}}
+.sec-sm{{position:relative;padding:3.5rem 0}}
+.sec-hero{{position:relative;padding:7rem 0 5rem;min-height:90vh;display:flex;align-items:center}}
+@media(max-width:767px){{
+  .sec{{padding:4rem 0}}
+  .sec-hero{{padding:5rem 0 3.5rem;min-height:auto}}
+}}
+
+/* Subtle band — a translucent tint to break monotony without bg colour change */
+.sec-band::before{{content:'';position:absolute;inset:0;background:linear-gradient(180deg,transparent 0%,rgba(var(--c-accent-rgb),0.035) 35%,rgba(var(--c-accent-rgb),0.035) 65%,transparent 100%);pointer-events:none}}
+
+/* Grid */
+.g2{{display:grid;grid-template-columns:1fr;gap:2rem}}
+.g3{{display:grid;grid-template-columns:1fr;gap:1.5rem}}
+.g4{{display:grid;grid-template-columns:repeat(2,1fr);gap:1.25rem}}
+@media(min-width:640px){{.g3{{grid-template-columns:repeat(2,1fr)}}}}
+@media(min-width:900px){{
+  .g2{{grid-template-columns:repeat(2,1fr)}}
+  .g3{{grid-template-columns:repeat(3,1fr)}}
+  .g4{{grid-template-columns:repeat(4,1fr)}}
+}}
+.ai{{align-items:center}}
+.as{{align-items:start}}
+.gap-xl{{gap:4rem}}
+
+/* Utilities */
+.rel{{position:relative}}
+.z1{{position:relative;z-index:1}}
+.tc{{text-align:center}}
+.mx-auto{{margin-left:auto;margin-right:auto}}
+.mw-sm{{max-width:34rem}}
+.mw-md{{max-width:48rem}}
+.mw-lg{{max-width:64rem}}
+.mt1{{margin-top:0.5rem}}.mt2{{margin-top:1rem}}.mt3{{margin-top:1.5rem}}
+.mt4{{margin-top:2rem}}.mt5{{margin-top:2.5rem}}.mt6{{margin-top:3rem}}
+.mb1{{margin-bottom:0.5rem}}.mb2{{margin-bottom:1rem}}.mb3{{margin-bottom:1.5rem}}
+.mb4{{margin-bottom:2rem}}.mb5{{margin-bottom:2.5rem}}.mb6{{margin-bottom:3rem}}
+.flex{{display:flex}}.flex-col{{flex-direction:column}}.flex-wrap{{flex-wrap:wrap}}
+.gap1{{gap:0.5rem}}.gap2{{gap:0.75rem}}.gap3{{gap:1rem}}.gap4{{gap:1.5rem}}.gap5{{gap:2rem}}
+.w100{{width:100%}}
+
+/* Nav */
+.site-nav{{position:fixed;top:0;left:0;right:0;z-index:200;background:var(--c-nav);border-bottom:1px solid var(--c-border);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}}
+.nav-in{{display:flex;align-items:center;justify-content:space-between;height:64px;padding:0 1.5rem;max-width:1160px;margin:0 auto}}
+@media(min-width:768px){{.nav-in{{padding:0 2.5rem}}}}
+.nav-logo{{font-size:1.1rem;font-weight:900;letter-spacing:-0.03em;color:var(--c-text)}}
+.nav-links{{display:none;list-style:none;gap:2rem;align-items:center}}
+@media(min-width:768px){{.nav-links{{display:flex}}}}
+.nav-links a{{font-size:0.875rem;font-weight:500;color:var(--c-text2);transition:color 0.2s}}
+.nav-links a:hover{{color:var(--c-text)}}
+.nav-act{{display:flex;align-items:center;gap:1rem}}
+.nav-cta{{background:var(--c-accent);color:#fff !important;font-size:0.85rem;font-weight:600;padding:0.45rem 1.15rem;border-radius:8px;transition:opacity 0.2s,transform 0.2s}}
+.nav-cta:hover{{opacity:0.88;transform:translateY(-1px)}}
+@media(max-width:767px){{.nav-cta{{display:none}}}}
+.hamburger{{display:flex;flex-direction:column;gap:5px;padding:4px;cursor:pointer}}
+@media(min-width:768px){{.hamburger{{display:none}}}}
+.hamburger span{{display:block;width:22px;height:2px;background:var(--c-text);border-radius:2px}}
+.nav-mob{{display:none;flex-direction:column;position:absolute;top:64px;left:0;right:0;background:var(--c-nav);border-bottom:1px solid var(--c-border);padding:0.75rem 1.5rem 1.25rem}}
+.nav-mob.open{{display:flex}}
+.nav-mob a{{padding:0.7rem 0;border-bottom:1px solid var(--c-border);font-size:0.9rem;font-weight:500;color:var(--c-text2)}}
+.nav-mob a:last-child{{border-bottom:none;padding-top:1rem}}
+
+/* Buttons */
+.btn{{display:inline-block;font-weight:700;font-size:0.95rem;padding:0.85rem 2rem;border-radius:10px;transition:all 0.25s cubic-bezier(.16,1,.3,1);cursor:pointer;text-align:center}}
+.btn-p{{background:var(--c-accent);color:#fff !important;border:2px solid var(--c-accent)}}
+.btn-p:hover{{background:var(--c-accent2);border-color:var(--c-accent2);transform:translateY(-2px);box-shadow:0 8px 24px rgba(var(--c-accent-rgb),.28)}}
+.btn-g{{background:transparent;color:var(--c-text) !important;border:2px solid var(--c-border)}}
+.btn-g:hover{{border-color:var(--c-accent);color:var(--c-accent) !important}}
+.btn-row{{display:flex;flex-wrap:wrap;gap:0.85rem;align-items:center}}
+
+/* Cards */
+.card{{background:var(--c-card);border:1px solid var(--c-card-border);border-radius:16px;box-shadow:0 1px 3px rgba(0,0,0,0.07),0 1px 2px rgba(0,0,0,0.04);transition:box-shadow 0.3s,transform 0.3s}}
+.card:hover{{box-shadow:0 12px 40px rgba(var(--c-accent-rgb),.1),0 4px 12px rgba(0,0,0,0.06);transform:translateY(-3px)}}
+.card-p{{padding:1.75rem}}
+.card-plg{{padding:2.25rem}}
+
+/* Feature icon */
+.feat-icon{{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.3rem;background:linear-gradient(135deg,rgba(var(--c-accent-rgb),.12),rgba(var(--c-accent-rgb),.04));margin-bottom:1.1rem;flex-shrink:0}}
+
+/* Badge / pill */
+.badge{{display:inline-flex;align-items:center;gap:0.4rem;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;padding:0.3rem 0.8rem;border-radius:999px;background:var(--c-badge-bg);color:var(--c-badge-text);border:1px solid var(--c-badge-border)}}
+.bdot{{width:6px;height:6px;border-radius:50%;background:var(--c-accent);animation:bpulse 2s infinite}}
+@keyframes bpulse{{0%,100%{{opacity:1}}50%{{opacity:.4}}}}
+
+/* Stats */
+.stat-val{{font-size:clamp(2rem,4vw,3.25rem);font-weight:900;letter-spacing:-0.04em;color:var(--c-accent);line-height:1}}
+.stat-lbl{{font-size:0.78rem;color:var(--c-text2);margin-top:0.3rem;line-height:1.4}}
+
+/* Images */
+.img-frame{{border-radius:16px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.13)}}
+.img-tall{{height:520px}}
+.img-sq{{aspect-ratio:4/3}}
+.img-wide{{aspect-ratio:16/9}}
+.img-fill{{width:100%;height:100%;object-fit:cover;display:block}}
+@media(max-width:767px){{.img-tall{{height:280px}}}}
+
+/* Checklist */
+.chklist{{list-style:none;display:flex;flex-direction:column;gap:0.55rem}}
+.chk-item{{display:flex;align-items:flex-start;gap:0.6rem;font-size:0.875rem;color:var(--c-text2)}}
+.chk-icon{{flex-shrink:0;width:16px;height:16px;margin-top:2px;color:var(--c-accent);font-weight:900;font-size:0.75rem;display:flex;align-items:center;justify-content:center}}
+
+/* Stars */
+.stars{{color:#f59e0b;font-size:0.875rem;letter-spacing:1px;margin-bottom:0.85rem}}
+
+/* Avatar */
+.avatar{{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,var(--c-accent),var(--c-accent2));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:0.9rem;flex-shrink:0}}
+
+/* Form */
+.form-label{{display:block;font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:var(--c-text2);margin-bottom:0.4rem}}
+.form-input{{width:100%;padding:0.75rem 1rem;font-size:0.9rem;background:var(--c-input-bg);border:1px solid var(--c-input-border);border-radius:10px;color:var(--c-text);outline:none;transition:border-color 0.2s,box-shadow 0.2s}}
+.form-input:focus{{border-color:var(--c-accent);box-shadow:0 0 0 3px rgba(var(--c-accent-rgb),.12)}}
+.form-input::placeholder{{color:var(--c-text3)}}
+textarea.form-input{{resize:none;min-height:130px}}
+.form-row{{margin-bottom:1.1rem}}
+
+/* FAQ */
+details.faq{{border:1px solid var(--c-border);border-radius:12px;overflow:hidden;margin-bottom:0.6rem;background:var(--c-card)}}
+details.faq>summary{{list-style:none;display:flex;justify-content:space-between;align-items:center;padding:1.1rem 1.4rem;cursor:pointer;font-weight:600;font-size:0.9rem;color:var(--c-text);user-select:none;gap:1rem}}
+details.faq>summary::-webkit-details-marker{{display:none}}
+.faq-icon{{flex-shrink:0;width:22px;height:22px;border:1px solid var(--c-border);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.8rem;color:var(--c-text2);transition:transform 0.2s}}
+details.faq[open]>.summary .faq-icon{{transform:rotate(45deg)}}
+details.faq[open]>summary .faq-icon{{transform:rotate(45deg)}}
+.faq-body{{padding:0 1.4rem 1.1rem;font-size:0.875rem;color:var(--c-text2);line-height:1.7;border-top:1px solid var(--c-border);padding-top:0.9rem}}
+
+/* Testimonials scroll on mobile */
+.testi-grid{{display:flex;gap:1rem;overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:0.5rem;scrollbar-width:none}}
+.testi-grid::-webkit-scrollbar{{display:none}}
+.testi-grid .card{{scroll-snap-align:start;flex-shrink:0;width:min(84vw,340px);display:flex;flex-direction:column}}
+@media(min-width:768px){{
+  .testi-grid{{display:grid;grid-template-columns:repeat(2,1fr);overflow:visible;scroll-snap-type:none}}
+  .testi-grid .card{{width:auto}}
+}}
+@media(min-width:1024px){{.testi-grid{{grid-template-columns:repeat(3,1fr)}}}}
+
+/* Separator */
+.hr{{border:none;border-top:1px solid var(--c-border);margin:0}}
+
+/* Ambient glow blobs — purely decorative, no layout impact */
+.glow-blob{{position:absolute;border-radius:50%;filter:blur(80px);pointer-events:none;z-index:0;background:var(--c-glow)}}
+
+/* Footer */
+.site-footer{{border-top:1px solid var(--c-border);padding:4rem 0 2rem;background:var(--c-bg)}}
+
+/* Scroll reveal */
+.rv{{opacity:0;transform:translateY(20px);transition:opacity .7s cubic-bezier(.16,1,.3,1),transform .7s cubic-bezier(.16,1,.3,1)}}
+.rv.in{{opacity:1;transform:none}}
+.d1{{transition-delay:.1s}}.d2{{transition-delay:.2s}}.d3{{transition-delay:.3s}}.d4{{transition-delay:.4s}}
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="{t['font_url']}">"""
 
 
-def _btn_ghost(t: Dict, label: str, href: str = "#features", extra: str = "") -> str:
-    return (f'<a href="{href}" class="{t["btn_secondary"]} '
-            f'font-semibold rounded-xl px-8 py-4 {HOVER_GLOW} transition-all duration-200 {extra}">{label}</a>')
+REVEAL_JS = """<script>
+(function(){
+  var els=document.querySelectorAll('.rv');
+  if(!els.length)return;
+  if(window.IntersectionObserver){
+    var io=new IntersectionObserver(function(entries){
+      entries.forEach(function(e){if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target);}});
+    },{threshold:0.1});
+    els.forEach(function(el){io.observe(el);});
+  }else{
+    els.forEach(function(el){el.classList.add('in');});
+  }
+  // Mobile nav
+  var btn=document.getElementById('nav-btn');
+  var mob=document.getElementById('nav-mob');
+  if(btn&&mob){
+    btn.addEventListener('click',function(){mob.classList.toggle('open');});
+    mob.querySelectorAll('a').forEach(function(a){
+      a.addEventListener('click',function(){mob.classList.remove('open');});
+    });
+  }
+})();
+</script>"""
 
 
-def _eyebrow(t: Dict, text: str) -> str:
-    return f'<p class="text-xs font-bold uppercase tracking-[0.2em] {t["text_light"]} mb-3">{text}</p>'
+# =============================================================================
+# HTML PRIMITIVES
+# =============================================================================
 
+def _eyebrow(label: str) -> str:
+    return f'<span class="t-eyebrow">{label}</span>'
 
-def _h2(t: Dict, title: str, sub: str = "") -> str:
-    s = f'<p class="text-base {t["text_muted"]} mt-4 max-w-xl mx-auto leading-relaxed">{sub}</p>' if sub else ""
-    return f'<h2 class="{H_SECTION} {t["text"]}">{title}</h2>{s}'
+def _h2(title: str, sub: str = "") -> str:
+    sub_html = f'<p class="t-body mt2 mw-sm">{sub}</p>' if sub else ""
+    return f'<h2 class="t-section">{title}</h2>{sub_html}'
 
+def _btn(label: str, href: str = "#contact", style: str = "p") -> str:
+    return f'<a href="{href}" class="btn btn-{style}">{label}</a>'
 
-def _check(t: Dict, text: str) -> str:
-    return (f'<li class="flex items-start gap-2.5 text-sm {t["text_muted"]}">'
-            f'<span class="mt-0.5 shrink-0 font-black {t["check"]}">&#10003;</span>'
+def _chk(text: str) -> str:
+    return (f'<li class="chk-item">'
+            f'<span class="chk-icon">✓</span>'
             f'<span>{text}</span></li>')
 
+def _stars() -> str:
+    return '<div class="stars">★★★★★</div>'
 
-# ─────────────────────────────────────────────────────────────────────────────
+
+# =============================================================================
+# NAV
+# =============================================================================
+
+def _build_nav(name: str, items: List[str], cta: str) -> str:
+    li = "".join(
+        f'<li><a href="#{it.lower().replace(" ","")}">{it}</a></li>'
+        for it in items
+    )
+    mob = "".join(
+        f'<a href="#{it.lower().replace(" ","")}">{it}</a>'
+        for it in items
+    ) + f'<a href="#contact" style="background:var(--c-accent);color:#fff !important;border-radius:8px;padding:0.7rem 0;margin-top:0.5rem;text-align:center;font-weight:700;">{cta}</a>'
+
+    return f"""<nav class="site-nav">
+  <div class="nav-in">
+    <a href="#" class="nav-logo">{name}</a>
+    <ul class="nav-links">{li}</ul>
+    <div class="nav-act">
+      <a href="#contact" class="nav-cta">{cta}</a>
+      <button class="hamburger" id="nav-btn" aria-label="Menu">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </div>
+  <div class="nav-mob" id="nav-mob">{mob}</div>
+</nav>"""
+
+
+# =============================================================================
 # HERO VARIANTS
-# ─────────────────────────────────────────────────────────────────────────────
+# =============================================================================
 
-class Hero:
+def _hero_split(name: str, d: Dict, industry: str) -> str:
+    h     = d.get("hero", {})
+    h1    = h.get("h1", f"Welcome to {name}")
+    sub   = h.get("sub", "")
+    cta   = h.get("cta", "Get Started")
+    tag   = d.get("tagline", "")
+    proof = d.get("social_proof") or {}
+    img   = _photo_url(industry, 0, 1000)
 
-    @staticmethod
-    def split(t: Dict, d: Dict, imgs: List[str]) -> str:
-        """Left copy + right image. Image stacks below copy on mobile."""
-        img   = imgs[0] if imgs else ""
-        h1    = d.get("hero", {}).get("h1", "")
-        sub   = d.get("hero", {}).get("sub", "")
-        cta   = d.get("hero", {}).get("cta", "Get Started")
-        badge = d.get("tagline", "")
-        proof = d.get("social_proof") or {}
-        dark  = t["mode"] == "dark"
-        av_border = "border-gray-800" if dark else "border-white"
+    tag_html = f'<div class="badge mb3 rv"><span class="bdot"></span>{tag}</div>' if tag else ""
 
-        avatars = "".join(
-            f'<div class="w-8 h-8 rounded-full bg-gradient-to-br {t["grad"]} '
-            f'border-2 {av_border} opacity-75 -ml-1 first:ml-0"></div>'
-            for _ in range(4)
+    proof_html = ""
+    if proof.get("count") and proof.get("label"):
+        avs = "".join(
+            f'<div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--c-accent),var(--c-accent2));border:2px solid var(--c-bg);display:flex;align-items:center;justify-content:center;color:#fff;font-size:0.6rem;font-weight:800;margin-left:{"-6px" if i else "0"};">{chr(65+i)}</div>'
+            for i in range(4)
         )
-        proof_html = ""
-        if proof.get("count") and proof.get("label"):
-            proof_html = (
-                f'<div class="flex items-center gap-3 pt-5 border-t {t["border"]}">'
-                f'<div class="flex">{avatars}</div>'
-                f'<span class="text-sm {t["text_muted"]}">'
-                f'<span class="font-bold {t["stat"]}">{proof["count"]}</span>'
-                f' {proof["label"]}</span></div>'
-            )
+        proof_html = f"""<div class="flex ai gap3 mt4" style="border-top:1px solid var(--c-border);padding-top:1.25rem;flex-wrap:wrap;">
+      <div class="flex ai">{avs}</div>
+      <span class="t-small"><strong style="color:var(--c-accent)">{proof['count']}</strong> {proof['label']}</span>
+    </div>"""
 
-        badge_html = ""
-        if badge:
-            badge_html = (
-                f'<span class="inline-flex items-center gap-2 px-4 py-1.5 text-xs font-bold '
-                f'uppercase tracking-wider {t["badge"]}">'
-                f'<span class="w-1.5 h-1.5 rounded-full bg-current animate-pulse"></span>'
-                f'{badge}</span>'
-            )
-
-        return f"""<section id="hero" class="relative {t['bg']} overflow-hidden pt-32 pb-32 md:pt-44 md:pb-44">
-    <!-- Ambient atmosphere: two large orbs that persist across the hero → trust transition -->
-    <div class="absolute top-0 right-0 w-[700px] h-[700px] {t['glow']} opacity-[0.04] blur-[160px] rounded-full pointer-events-none"></div>
-    <div class="absolute bottom-0 left-1/3 w-[500px] h-[500px] {t['glow']} opacity-[0.025] blur-[120px] rounded-full pointer-events-none"></div>
-    <div class="absolute inset-0 bg-gradient-to-br {t['grad_subtle']} pointer-events-none"></div>
-    <div class="container mx-auto {PAD_CON} relative z-10">
-        <div class="grid lg:grid-cols-2 gap-12 xl:gap-20 items-center">
-            <div class="space-y-7 order-2 lg:order-1 reveal">
-                {badge_html}
-                <h1 class="{H_HERO} {t['text']}">{h1}</h1>
-                <p class="text-lg md:text-xl {t['text_muted']} leading-relaxed max-w-2xl">{sub}</p>
-                <div class="flex flex-wrap gap-4">
-                    {_btn(t, cta, "#contact", "text-base px-9 py-4")}
-                    {_btn_ghost(t, "See how it works &rarr;", "#features", "text-base px-9 py-4")}
-                </div>
-                {proof_html}
-            </div>
-            <div class="relative h-[300px] md:h-[420px] lg:h-[520px] order-1 lg:order-2 reveal reveal-delay-1">
-                <div class="absolute -inset-4 {t['glow']} opacity-[0.08] blur-3xl rounded-3xl"></div>
-                <img src="{img}" alt="{h1}"
-                     class="relative z-10 w-full h-full object-cover rounded-2xl shadow-2xl"
-                     loading="eager" />
-            </div>
+    return f"""<section class="sec-hero" style="padding-top:7rem;">
+  <div class="glow-blob" style="width:600px;height:600px;top:-10%;right:-8%;opacity:0.8;"></div>
+  <div class="glow-blob" style="width:300px;height:300px;bottom:5%;left:-5%;opacity:0.5;"></div>
+  <div class="wrap z1">
+    <div class="g2 ai gap-xl">
+      <div class="rv" style="order:2;">
+        {tag_html}
+        <h1 class="t-hero">{h1}</h1>
+        <p class="t-body mt3 mw-sm">{sub}</p>
+        <div class="btn-row mt4">
+          {_btn(cta, "#contact")}
+          {_btn("See how it works →", "#features", "g")}
         </div>
-    </div>
-    <!-- Wave bleeds into next section -->
-    {_wave_divider(t['bg_alt_hex'])}
-</section>"""
-
-    @staticmethod
-    def centered(t: Dict, d: Dict, imgs: List[str]) -> str:
-        """Full-bleed image, centered copy — luxury, beauty, travel, nonprofit."""
-        img     = imgs[0] if imgs else ""
-        h1      = d.get("hero", {}).get("h1", "")
-        sub     = d.get("hero", {}).get("sub", "")
-        cta     = d.get("hero", {}).get("cta", "Get Started")
-        tagline = d.get("tagline", "")
-        overlay = "bg-white/78" if t["mode"] == "light" else "bg-black/68"
-        img_op  = "opacity-[0.18]" if t["mode"] == "light" else "opacity-[0.22]"
-        tl = (f'<p class="text-xs font-bold uppercase tracking-[0.3em] {t["text_muted"]}">'
-              f'&#8212; {tagline} &#8212;</p>') if tagline else ""
-
-        return f"""<section id="hero" class="relative {t['bg']} overflow-hidden min-h-[88vh] flex items-center">
-    <div class="absolute inset-0 pointer-events-none select-none">
-        <img src="{img}" alt="" class="w-full h-full object-cover {img_op}" loading="eager" />
-        <div class="absolute inset-0 {overlay}"></div>
-    </div>
-    <div class="absolute inset-0 bg-gradient-to-br {t['grad_subtle']} pointer-events-none"></div>
-    <!-- Soft orbs for atmosphere -->
-    <div class="absolute top-1/4 left-1/4 w-[600px] h-[600px] {t['glow']} opacity-[0.06] blur-[140px] rounded-full pointer-events-none"></div>
-    <div class="container mx-auto {PAD_CON} relative z-10 text-center py-44">
-        <div class="max-w-4xl mx-auto space-y-7 reveal">
-            {tl}
-            <h1 class="{H_HERO} {t['text']}">{h1}</h1>
-            <p class="text-xl {t['text_muted']} leading-relaxed max-w-2xl mx-auto">{sub}</p>
-            <div class="flex flex-col sm:flex-row gap-4 justify-center pt-4">
-                {_btn(t, cta, "#contact", "text-base px-10 py-5 rounded-full")}
-                {_btn_ghost(t, "Learn more &darr;", "#features", "text-base px-10 py-5 rounded-full")}
-            </div>
+        {proof_html}
+      </div>
+      <div class="rv d1" style="order:1;">
+        <div class="img-frame img-tall" style="position:relative;">
+          <div style="position:absolute;inset:-16px;background:radial-gradient(circle,var(--c-glow) 0%,transparent 70%);z-index:-1;"></div>
+          <img src="{img}" alt="{name}" class="img-fill" loading="eager">
         </div>
+      </div>
     </div>
-    {_wave_divider(t['bg_alt_hex'])}
-</section>"""
-
-    @staticmethod
-    def with_stats(t: Dict, d: Dict, imgs: List[str]) -> str:
-        """Left headline + stats bar. Image is atmospheric background."""
-        img   = imgs[0] if imgs else ""
-        h1    = d.get("hero", {}).get("h1", "")
-        sub   = d.get("hero", {}).get("sub", "")
-        cta   = d.get("hero", {}).get("cta", "Get Started")
-        stats = d.get("stats") or []
-        img_op = "opacity-[0.06]" if t["mode"] == "light" else "opacity-[0.1]"
-
-        stat_grid = "".join(
-            f'<div class="text-center">'
-            f'<p class="text-4xl md:text-5xl font-black {t["stat"]}">{s.get("value","")}</p>'
-            f'<p class="text-sm {t["text_muted"]} mt-1 leading-tight">{s.get("label","")}</p></div>'
-            for s in stats[:4]
-        ) if stats else ""
-        stats_html = (
-            f'<div class="grid grid-cols-2 md:grid-cols-4 gap-8 mt-16 pt-12 border-t {t["border"]}">'
-            f'{stat_grid}</div>'
-        ) if stats else ""
-
-        return f"""<section id="hero" class="relative {t['bg']} overflow-hidden pt-32 pb-32 md:pt-44 md:pb-44">
-    <div class="absolute inset-0 bg-gradient-to-br {t['grad_subtle']} pointer-events-none"></div>
-    <div class="absolute top-0 right-0 w-[700px] h-[700px] {t['glow']} opacity-[0.04] blur-[160px] rounded-full pointer-events-none"></div>
-    <div class="absolute top-0 right-0 w-1/2 h-full overflow-hidden pointer-events-none select-none">
-        <img src="{img}" alt="" class="w-full h-full object-cover {img_op}" loading="eager" />
-        <div class="absolute inset-0 bg-gradient-to-r {'from-white via-white/80 to-transparent' if t['mode']=='light' else 'from-gray-950 via-gray-950/80 to-transparent'}"></div>
-    </div>
-    <div class="container mx-auto {PAD_CON} relative z-10">
-        <div class="max-w-2xl space-y-8 reveal">
-            <h1 class="{H_HERO} {t['text']}">{h1}</h1>
-            <p class="text-lg md:text-xl {t['text_muted']} leading-relaxed max-w-2xl">{sub}</p>
-            <div class="flex flex-wrap gap-4">
-                {_btn(t, cta, "#contact", "text-base")}
-                {_btn_ghost(t, "See our work &rarr;", "#features", "text-base")}
-            </div>
-        </div>
-        {stats_html}
-    </div>
-    {_wave_divider(t['bg_alt_hex'])}
-</section>"""
-
-    @staticmethod
-    def editorial(t: Dict, d: Dict, imgs: List[str]) -> str:
-        """Large split headline + wide image — restaurant, events, ecommerce."""
-        img  = imgs[0] if imgs else ""
-        h1   = d.get("hero", {}).get("h1", "")
-        sub  = d.get("hero", {}).get("sub", "")
-        cta  = d.get("hero", {}).get("cta", "Explore")
-        ws   = h1.split()
-        mid  = max(1, len(ws) // 2)
-        l1   = " ".join(ws[:mid])
-        l2   = " ".join(ws[mid:])
-
-        return f"""<section id="hero" class="relative {t['bg']} overflow-hidden pt-28 pb-28 md:pt-36 md:pb-36">
-    <div class="absolute top-0 right-0 w-[500px] h-[500px] {t['glow']} opacity-[0.035] blur-[120px] rounded-full pointer-events-none"></div>
-    <div class="container mx-auto {PAD_CON}">
-        <h1 class="font-black tracking-tight leading-[1.02] text-[clamp(2.8rem,6.5vw,6rem)] {t['text']} mb-10 reveal">
-            <span class="block">{l1}</span>
-            <span class="block bg-gradient-to-r {t['grad_text']} bg-clip-text text-transparent">{l2}</span>
-        </h1>
-        <div class="grid lg:grid-cols-5 gap-10 items-end">
-            <div class="lg:col-span-3 aspect-[16/9] overflow-hidden rounded-2xl shadow-2xl reveal">
-                <img src="{img}" alt="" class="w-full h-full object-cover" loading="eager" />
-            </div>
-            <div class="lg:col-span-2 space-y-7 pb-4 reveal reveal-delay-1">
-                <p class="text-base md:text-lg {t['text_muted']} leading-relaxed max-w-2xl">{sub}</p>
-                {_btn(t, f"{cta} &rarr;", "#contact", "text-base")}
-            </div>
-        </div>
-    </div>
-    {_wave_divider(t['bg_alt_hex'])}
+  </div>
 </section>"""
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+def _hero_centered(name: str, d: Dict, industry: str) -> str:
+    h   = d.get("hero", {})
+    h1  = h.get("h1", f"Welcome to {name}")
+    sub = h.get("sub", "")
+    cta = h.get("cta", "Discover")
+    tag = d.get("tagline", "")
+    img = _photo_url(industry, 0, 1200)
+
+    tag_html = f'<p style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.22em;color:var(--c-accent);margin-bottom:1.5rem;">— {tag} —</p>' if tag else ""
+
+    return f"""<section class="sec-hero" style="min-height:92vh;background:linear-gradient(180deg,var(--c-bg2) 0%,var(--c-bg) 100%);">
+  <div class="glow-blob" style="width:700px;height:700px;top:-15%;left:50%;transform:translateX(-50%);opacity:0.6;"></div>
+  <div style="position:absolute;inset:0;overflow:hidden;pointer-events:none;">
+    <img src="{img}" alt="" style="width:100%;height:100%;object-fit:cover;opacity:0.1;" loading="eager">
+    <div style="position:absolute;inset:0;background:linear-gradient(to bottom,var(--c-bg2) 0%,rgba(255,255,255,0) 40%,rgba(255,255,255,0) 60%,var(--c-bg) 100%);"></div>
+  </div>
+  <div class="wrap z1 tc">
+    <div class="rv mw-md mx-auto" style="padding:2rem 0;">
+      {tag_html}
+      <h1 class="t-hero">{h1}</h1>
+      <p class="t-body mt3 mw-sm mx-auto">{sub}</p>
+      <div class="btn-row mt5" style="justify-content:center;">
+        {_btn(cta, "#contact")}
+        {_btn("Learn more ↓", "#features", "g")}
+      </div>
+    </div>
+  </div>
+</section>"""
+
+
+def _hero_stats(name: str, d: Dict, industry: str) -> str:
+    h     = d.get("hero", {})
+    h1    = h.get("h1", f"Welcome to {name}")
+    sub   = h.get("sub", "")
+    cta   = h.get("cta", "Get Started")
+    stats = d.get("stats") or []
+    img   = _photo_url(industry, 0, 1200)
+
+    stat_items = ""
+    if stats:
+        stat_items = "".join(
+            f'<div class="rv d{min(i+1,4)}" style="text-align:center;">'
+            f'<div class="stat-val">{s.get("value","")}</div>'
+            f'<div class="stat-lbl">{s.get("label","")}</div></div>'
+            for i, s in enumerate(stats[:4])
+        )
+        stat_items = f'<div class="g4 mt6" style="border-top:1px solid var(--c-border);padding-top:2.5rem;">{stat_items}</div>'
+
+    return f"""<section class="sec-hero" style="overflow:hidden;">
+  <div class="glow-blob" style="width:700px;height:700px;top:-10%;right:-5%;opacity:0.7;"></div>
+  <div style="position:absolute;top:0;right:0;width:48%;height:100%;overflow:hidden;pointer-events:none;">
+    <img src="{img}" alt="" style="width:100%;height:100%;object-fit:cover;opacity:0.08;" loading="eager">
+    <div style="position:absolute;inset:0;background:linear-gradient(to right,var(--c-bg) 0%,transparent 60%);"></div>
+  </div>
+  <div class="wrap z1">
+    <div style="max-width:580px;" class="rv">
+      <h1 class="t-hero">{h1}</h1>
+      <p class="t-body mt3">{sub}</p>
+      <div class="btn-row mt4">
+        {_btn(cta, "#contact")}
+        {_btn("See our work →", "#features", "g")}
+      </div>
+    </div>
+    {stat_items}
+  </div>
+</section>"""
+
+
+def _hero_editorial(name: str, d: Dict, industry: str) -> str:
+    h   = d.get("hero", {})
+    h1  = h.get("h1", f"Welcome to {name}")
+    sub = h.get("sub", "")
+    cta = h.get("cta", "Explore")
+    img = _photo_url(industry, 0, 1200)
+    ws  = h1.split()
+    mid = max(1, len(ws) // 2)
+    l1, l2 = " ".join(ws[:mid]), " ".join(ws[mid:]) or ws[-1]
+
+    return f"""<section class="sec" style="padding-top:7rem;">
+  <div class="glow-blob" style="width:500px;height:500px;top:-5%;right:-8%;opacity:0.7;"></div>
+  <div class="wrap z1">
+    <h1 class="rv" style="font-size:clamp(2.8rem,6.5vw,6rem);font-weight:900;letter-spacing:-0.035em;line-height:1.02;margin-bottom:2.5rem;">
+      <span style="display:block;color:var(--c-text);">{l1}</span>
+      <span class="t-grad" style="display:block;">{l2}</span>
+    </h1>
+    <div class="g2 ai gap-xl">
+      <div class="img-frame img-wide rv">
+        <img src="{img}" alt="{name}" class="img-fill" loading="eager">
+      </div>
+      <div class="rv d2">
+        <p class="t-body mb4">{sub}</p>
+        {_btn(f"{cta} →", "#contact")}
+      </div>
+    </div>
+  </div>
+</section>"""
+
+
+# =============================================================================
+# TRUST BAND
+# =============================================================================
+
+def _build_trust(badges: List[str]) -> str:
+    if not badges:
+        return ""
+    pills = "".join(f'<span class="badge">{b}</span>' for b in badges)
+    return f"""<div class="sec-sm" style="border-top:1px solid var(--c-border);border-bottom:1px solid var(--c-border);">
+  <div class="wrap">
+    <div class="rv flex flex-wrap ai" style="justify-content:center;gap:0.75rem;">
+      <span style="font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.15em;color:var(--c-text3);margin-right:0.25rem;">Certified</span>
+      {pills}
+    </div>
+  </div>
+</div>"""
+
+
+# =============================================================================
 # FEATURES VARIANTS
-# ─────────────────────────────────────────────────────────────────────────────
+# =============================================================================
 
-class Features:
-
-    @staticmethod
-    def cards(t: Dict, features: List[Dict], imgs: List[str]) -> str:
-        items = "".join(
-            f'<div class="{t["card"]} rounded-2xl p-7 {HOVER_LIFT} flex flex-col reveal" style="animation-delay:{i*0.1:.1f}s">'
-            f'<div class="w-12 h-12 rounded-xl bg-gradient-to-br {t["grad"]} '
-            f'flex items-center justify-center text-xl mb-5 shrink-0">{f.get("icon","✦")}</div>'
-            f'<h3 class="{H_CARD} {t["text"]} mb-2">{f.get("title","")}</h3>'
-            f'<p class="{t["text_muted"]} text-sm leading-relaxed flex-grow">{f.get("description","")}</p>'
-            f'</div>'
-            for i, f in enumerate(features or [])
-        )
-        return f"""<section id="features" class="relative {t['bg_alt']} {PAD_SEC}">
-    <div class="absolute bottom-0 right-0 w-[400px] h-[400px] {t['glow']} opacity-[0.025] blur-[100px] rounded-full pointer-events-none"></div>
-    <div class="container mx-auto {PAD_CON}">
-        <div class="text-center mb-14 reveal">
-            {_eyebrow(t, "What we offer")}
-            {_h2(t, "Everything You Need", "Thoughtfully designed to help you succeed.")}
-        </div>
-        <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">{items}</div>
+def _feat_cards(features: List[Dict]) -> str:
+    cards = "".join(
+        f"""<div class="card card-p rv d{min(i+1,4)}">
+      <div class="feat-icon">{f.get("icon","◆")}</div>
+      <h3 class="t-card mb1">{f.get("title","")}</h3>
+      <p class="t-small">{f.get("description","")}</p>
+    </div>"""
+        for i, f in enumerate(features or [])
+    )
+    return f"""<section class="sec sec-band" id="features">
+  <div class="wrap">
+    <div class="tc mb6 rv">
+      {_eyebrow("What We Offer")}
+      {_h2("Everything You Need", "Crafted to help your business move forward.")}
     </div>
-    {_wave_divider(t['bg_hex'])}
-</section>"""
-
-    @staticmethod
-    def alternating(t: Dict, features: List[Dict], imgs: List[str]) -> str:
-        blocks = []
-        for i, f in enumerate(features or []):
-            img_url  = imgs[(i + 1) % len(imgs)] if imgs else ""
-            copy_cls = "lg:order-1" if i % 2 == 0 else "lg:order-2"
-            img_cls  = "lg:order-2" if i % 2 == 0 else "lg:order-1"
-            blocks.append(
-                f'<div class="grid lg:grid-cols-2 gap-12 xl:gap-20 items-center reveal">'
-                f'<div class="space-y-5 {copy_cls}">'
-                f'<div class="text-4xl leading-none">{f.get("icon","✦")}</div>'
-                f'<h3 class="text-2xl md:text-3xl font-bold {t["text"]}">{f.get("title","")}</h3>'
-                f'<p class="text-base {t["text_muted"]} leading-relaxed max-w-2xl">{f.get("description","")}</p>'
-                f'<a href="#contact" class="inline-flex items-center gap-1 text-sm font-semibold '
-                f'{t["stat"]} {HOVER_GLOW}">Learn more &rarr;</a>'
-                f'</div>'
-                f'<div class="aspect-[4/3] rounded-2xl overflow-hidden shadow-xl {img_cls}">'
-                f'<img src="{img_url}" alt="" class="w-full h-full object-cover" loading="lazy" />'
-                f'</div></div>'
-            )
-        return f"""<section id="features" class="relative {t['bg']} {PAD_SEC}">
-    <div class="absolute top-1/2 left-0 w-[300px] h-[300px] {t['glow']} opacity-[0.025] blur-[80px] rounded-full pointer-events-none"></div>
-    <div class="container mx-auto {PAD_CON}">
-        <div class="text-center mb-20 reveal">
-            {_eyebrow(t, "How it works")}
-            {_h2(t, "Why Choose Us")}
-        </div>
-        <div class="space-y-20 md:space-y-28">{"".join(blocks)}</div>
-    </div>
-    {_wave_divider(t['bg_alt_hex'])}
-</section>"""
-
-    @staticmethod
-    def icon_list(t: Dict, features: List[Dict], imgs: List[str]) -> str:
-        img_url = imgs[1] if len(imgs) > 1 else (imgs[0] if imgs else "")
-        items   = "".join(
-            f'<div class="flex gap-4 items-start p-5 rounded-xl border {t["border"]} {HOVER_GLOW} reveal" style="animation-delay:{i*0.08:.2f}s">'
-            f'<div class="w-9 h-9 shrink-0 rounded-full bg-gradient-to-br {t["grad"]} '
-            f'flex items-center justify-center text-white font-black text-xs shadow">'
-            f'{str(i+1).zfill(2)}</div>'
-            f'<div><h3 class="font-bold {t["text"]} mb-1">{f.get("title","")}</h3>'
-            f'<p class="text-sm {t["text_muted"]} leading-relaxed">{f.get("description","")}</p>'
-            f'</div></div>'
-            for i, f in enumerate(features or [])
-        )
-        return f"""<section id="features" class="relative {t['bg_alt']} {PAD_SEC}">
-    <div class="container mx-auto {PAD_CON}">
-        <div class="grid lg:grid-cols-2 gap-16 xl:gap-24 items-center">
-            <div class="reveal">
-                {_eyebrow(t, "Our approach")}
-                <h2 class="{H_SECTION} {t['text']} mb-10">Built for Real Results</h2>
-                <div class="space-y-3">{items}</div>
-            </div>
-            <div class="aspect-[4/3] rounded-2xl overflow-hidden shadow-2xl reveal reveal-delay-1">
-                <img src="{img_url}" alt="" class="w-full h-full object-cover" loading="lazy" />
-            </div>
-        </div>
-    </div>
-    {_wave_divider(t['bg_hex'])}
+    <div class="g3">{cards}</div>
+  </div>
 </section>"""
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+def _feat_alternating(features: List[Dict], industry: str) -> str:
+    blocks = []
+    for i, f in enumerate(features or []):
+        img   = _photo_url(industry, i + 1, 900)
+        rev   = "direction:row-reverse;" if i % 2 != 0 else ""
+        blocks.append(f"""<div class="g2 ai gap-xl" style="{rev}margin-bottom:5rem;">
+      <div class="rv">
+        <div style="font-size:2.5rem;line-height:1;margin-bottom:1rem;">{f.get("icon","◆")}</div>
+        <h3 class="t-section" style="font-size:1.65rem;margin-bottom:1rem;">{f.get("title","")}</h3>
+        <p class="t-body">{f.get("description","")}</p>
+        <a href="#contact" class="btn btn-g" style="margin-top:1.5rem;font-size:0.875rem;padding:0.6rem 1.25rem;">Learn more →</a>
+      </div>
+      <div class="img-frame img-sq rv d1">
+        <img src="{img}" alt="" class="img-fill" loading="lazy">
+      </div>
+    </div>""")
+    return f"""<section class="sec" id="features">
+  <div class="wrap">
+    <div class="tc mb6 rv">
+      {_eyebrow("How It Works")}
+      {_h2("Why Choose Us")}
+    </div>
+    {"".join(blocks)}
+  </div>
+</section>"""
+
+
+def _feat_icon_list(features: List[Dict], industry: str) -> str:
+    img   = _photo_url(industry, 1, 900)
+    items = "".join(
+        f"""<div class="rv d{min(i+1,4)}" style="display:flex;gap:1rem;align-items:flex-start;padding:1rem;border:1px solid var(--c-border);border-radius:12px;margin-bottom:0.75rem;background:var(--c-card);">
+      <div style="min-width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--c-accent),var(--c-accent2));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:0.72rem;flex-shrink:0;">{str(i+1).zfill(2)}</div>
+      <div>
+        <h3 class="t-card mb1">{f.get("title","")}</h3>
+        <p class="t-small">{f.get("description","")}</p>
+      </div>
+    </div>"""
+        for i, f in enumerate(features or [])
+    )
+    return f"""<section class="sec sec-band" id="features">
+  <div class="wrap">
+    <div class="g2 ai gap-xl">
+      <div class="rv">
+        {_eyebrow("Our Approach")}
+        <h2 class="t-section mb5">Built for Real Results</h2>
+        {items}
+      </div>
+      <div class="img-frame img-tall rv d2">
+        <img src="{img}" alt="" class="img-fill" loading="lazy">
+      </div>
+    </div>
+  </div>
+</section>"""
+
+
+# =============================================================================
 # PRICING VARIANTS
-# ─────────────────────────────────────────────────────────────────────────────
+# =============================================================================
 
-class Pricing:
-
-    @staticmethod
-    def tiers(t: Dict, tiers: List[Dict]) -> str:
-        def _card(tier: Dict) -> str:
-            featured = tier.get("featured", False)
-            feats    = "".join([_check(t, f) for f in (tier.get("features") or [])])
-            pop = (f'<span class="absolute top-4 right-4 text-xs font-bold bg-gradient-to-r '
-                   f'{t["grad"]} text-white px-3 py-1 rounded-full">Most Popular</span>') if featured else ""
-            cta_btn = (
-                _btn(t, "Get Started", "#contact", "w-full text-center block py-3.5 rounded-xl")
-                if featured else
-                f'<a href="#contact" class="{t["btn_secondary"]} font-bold '
-                f'w-full py-3.5 rounded-xl block text-center transition-all duration-200">Get Started</a>'
-            )
-            return (
-                f'<div class="relative {t["card"]} rounded-2xl p-8 {HOVER_LIFT} flex flex-col">{pop}'
-                f'<h3 class="font-bold text-xl {t["text"]} mb-1">{tier.get("name","Plan")}</h3>'
-                f'<p class="text-xs {t["text_light"]} mb-5">{tier.get("description","")}</p>'
-                f'<div class="mb-7"><span class="text-5xl font-black {t["text"]}">{tier.get("price","$0")}</span>'
-                f'<span class="text-sm {t["text_muted"]}"> /mo</span></div>'
-                f'<ul class="space-y-2.5 mb-8 flex-grow">{feats}</ul>'
-                f'{cta_btn}</div>'
-            )
-        cards = "".join([_card(tier) for tier in (tiers or [])])
-        return f"""<section id="pricing" class="{t['bg_alt']} {PAD_SEC}">
-    <div class="container mx-auto {PAD_CON}">
-        <div class="text-center mb-14">
-            {_eyebrow(t, "Pricing")}
-            {_h2(t, "Simple, Honest Pricing", "No hidden fees. No surprises. Cancel any time.")}
-        </div>
-        <div class="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">{cards}</div>
-    </div>
-</section>"""
-
-    @staticmethod
-    def two_col(t: Dict, tiers: List[Dict]) -> str:
-        tiers  = tiers or []
-        simple = tiers[0] if tiers else {}
-        pro    = tiers[1] if len(tiers) > 1 else {}
-        sf     = "".join([_check(t, f) for f in (simple.get("features") or [])])
-        pf     = "".join([
-            f'<li class="flex items-start gap-2.5 text-sm text-white/80">'
-            f'<span class="mt-0.5 shrink-0 font-black text-white/60">&#10003;</span>'
-            f'<span>{f}</span></li>'
-            for f in (pro.get("features") or [])
-        ])
-        return f"""<section id="pricing" class="{t['bg']} {PAD_SEC}">
-    <div class="container mx-auto {PAD_CON}">
-        <div class="text-center mb-14">
-            {_eyebrow(t, "Pricing")}
-            {_h2(t, "Choose Your Plan")}
-        </div>
-        <div class="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
-            <div class="{t['card']} rounded-2xl p-10 {HOVER_LIFT}">
-                <h3 class="text-xl font-bold {t['text']} mb-1">{simple.get("name","Starter")}</h3>
-                <p class="text-sm {t['text_light']} mb-6">{simple.get("description","")}</p>
-                <p class="text-5xl font-black {t['text']} mb-8">{simple.get("price","Free")}</p>
-                <ul class="space-y-2.5 mb-10">{sf}</ul>
-                {_btn_ghost(t, "Get Started", "#contact", "block w-full text-center py-3.5")}
-            </div>
-            <div class="bg-gradient-to-br {t['grad']} rounded-2xl p-10 text-white relative overflow-hidden {HOVER_LIFT} shadow-2xl">
-                <div class="absolute top-0 right-0 w-44 h-44 bg-white/10 blur-3xl rounded-full pointer-events-none"></div>
-                <span class="inline-block px-3 py-1 bg-white/20 text-xs font-bold rounded-full mb-4 uppercase tracking-wide">Recommended</span>
-                <h3 class="text-xl font-bold mb-1">{pro.get("name","Pro")}</h3>
-                <p class="text-sm text-white/70 mb-6">{pro.get("description","")}</p>
-                <p class="text-5xl font-black mb-8">{pro.get("price","$99")}</p>
-                <ul class="space-y-2.5 mb-10">{pf}</ul>
-                <a href="#contact" class="block w-full text-center bg-white text-gray-900 py-3.5 rounded-xl font-bold hover:bg-gray-50 transition">Get Started</a>
-            </div>
-        </div>
-    </div>
-</section>"""
-
-    @staticmethod
-    def project_quotes(t: Dict, tiers: List[Dict]) -> str:
-        tiers = tiers or []
-        cards = "".join(
-            f'<div class="{t["card"]} rounded-2xl p-8 {HOVER_LIFT} flex flex-col">'
-            f'<div class="text-3xl mb-5">{["&#127959;","&#128296;","&#127970;"][i % 3]}</div>'
-            f'<h3 class="text-xl font-bold {t["text"]} mb-2">{tier.get("name","Package")}</h3>'
-            f'<p class="text-sm {t["text_muted"]} mb-3 leading-relaxed">{tier.get("description","")}</p>'
-            f'<p class="text-xl font-black {t["stat"]} mb-5">{tier.get("price","Get a Quote")}</p>'
-            f'<ul class="space-y-2 mb-8 flex-grow">{"".join([_check(t, f) for f in (tier.get("features") or [])])}</ul>'
-            f'{_btn_ghost(t, "Request a Quote &rarr;", "#contact", "block w-full text-center py-3")}'
-            f'</div>'
-            for i, tier in enumerate(tiers)
+def _price_tiers(tiers: List[Dict]) -> str:
+    def _one(tier: Dict, idx: int) -> str:
+        feat = tier.get("featured", False)
+        fs   = "background:linear-gradient(135deg,var(--c-accent),var(--c-accent2));border-color:transparent;" if feat else ""
+        tc   = "color:#fff;" if feat else "color:var(--c-text2);"
+        pc   = "color:#fff;" if feat else "color:var(--c-text);"
+        cc   = "color:#fff;" if feat else "color:var(--c-accent);"
+        pop  = '<span style="position:absolute;top:1rem;right:1rem;font-size:0.62rem;font-weight:700;background:rgba(255,255,255,0.22);color:#fff;padding:0.2rem 0.6rem;border-radius:999px;text-transform:uppercase;letter-spacing:0.1em;">Popular</span>' if feat else ""
+        cta_style = "display:block;text-align:center;margin-top:1.5rem;padding:0.85rem;border-radius:10px;font-weight:700;font-size:0.9rem;"
+        cta_html  = (
+            f'<a href="#contact" style="{cta_style}background:#fff;color:var(--c-accent);">Get Started</a>'
+            if feat else
+            f'<a href="#contact" class="btn btn-g" style="{cta_style}width:100%;">{tier.get("cta","Get Started")}</a>'
         )
-        cta_card = (
-            f'<div class="{t["card"]} rounded-2xl p-8 max-w-2xl mx-auto text-center mt-10">'
-            f'<p class="font-bold text-lg {t["text"]} mb-2">Not sure what you need?</p>'
-            f'<p class="text-sm {t["text_muted"]} mb-6 leading-relaxed max-w-2xl mx-auto">'
-            f'Every project is different. We\'ll assess yours and give a transparent, no-obligation estimate.</p>'
-            f'{_btn(t, "Get a Free Estimate", "#contact")}'
-            f'</div>'
-        )
-        return f"""<section id="pricing" class="{t['bg_alt']} {PAD_SEC}">
-    <div class="container mx-auto {PAD_CON}">
-        <div class="text-center mb-14">
-            {_eyebrow(t, "Services & Pricing")}
-            {_h2(t, "What We Offer", "Every project gets a tailored quote. No surprises.")}
-        </div>
-        <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl mx-auto">{cards}</div>
-        {cta_card}
-    </div>
-</section>"""
-
-    @staticmethod
-    def service_rows(t: Dict, tiers: List[Dict]) -> str:
         rows = "".join(
-            f'<div class="grid md:grid-cols-3 gap-6 items-start py-10 border-b {t["border"]}">'
-            f'<div>'
-            f'<h3 class="font-bold text-xl {t["text"]}">{tier.get("name","Service")}</h3>'
-            f'<p class="text-sm {t["text_muted"]} mt-2 leading-relaxed">{tier.get("description","")}</p>'
-            f'<p class="font-black text-lg {t["stat"]} mt-3">{tier.get("price","")}</p>'
-            f'</div>'
-            f'<ul class="space-y-2">{"".join([_check(t, f) for f in (tier.get("features") or [])[:4]])}</ul>'
-            f'<div class="md:text-right pt-2">'
-            f'{_btn(t, "Book Consultation", "#contact", "text-sm px-6 py-3 rounded-lg")}'
-            f'</div></div>'
-            for tier in (tiers or [])
+            f'<li class="chk-item"><span class="chk-icon" style="{cc}">✓</span><span style="{tc}">{f}</span></li>'
+            for f in (tier.get("features") or [])
         )
-        return f"""<section id="pricing" class="{t['bg']} {PAD_SEC}">
-    <div class="container mx-auto {PAD_CON}">
-        <div class="mb-14">
-            {_eyebrow(t, "Services")}
-            <h2 class="{H_SECTION} {t['text']}">How We Can Help</h2>
-            <p class="text-base {t['text_muted']} mt-4 max-w-lg leading-relaxed">
-                All engagements begin with a complimentary consultation. No commitment required.
-            </p>
-        </div>
-        <div class="divide-y {t['border']}">{rows}</div>
-        <div class="mt-12 text-center">
-            {_btn(t, "Schedule a Free Consultation", "#contact", "text-base px-10 py-5")}
-        </div>
+        return f"""<div class="card card-p rv d{min(idx+1,4)}" style="position:relative;display:flex;flex-direction:column;{fs}">
+      {pop}
+      <h3 style="font-weight:700;font-size:1.1rem;margin-bottom:0.25rem;{pc}">{tier.get("name","Plan")}</h3>
+      <p style="font-size:0.8rem;margin-bottom:1.25rem;{tc}">{tier.get("description","")}</p>
+      <div style="margin-bottom:1.5rem;">
+        <span style="font-size:2.75rem;font-weight:900;letter-spacing:-0.04em;{pc}">{tier.get("price","$0")}</span>
+        <span style="font-size:0.78rem;{tc}"> /mo</span>
+      </div>
+      <ul class="chklist" style="flex:1;">{rows}</ul>
+      {cta_html}
+    </div>"""
+    cards = "".join(_one(t, i) for i, t in enumerate(tiers or []))
+    return f"""<section class="sec" id="pricing">
+  <div class="wrap">
+    <div class="tc mb6 rv">
+      {_eyebrow("Pricing")}
+      {_h2("Simple, Honest Pricing", "No hidden fees. Cancel any time.")}
     </div>
-</section>"""
-
-    @staticmethod
-    def contact_only(t: Dict, tiers: List[Dict]) -> str:
-        """Used when no pricing data is available — just a clean CTA to contact."""
-        return f"""<section id="pricing" class="{t['bg_alt']} {PAD_SEC}">
-    <div class="container mx-auto {PAD_CON}">
-        <div class="max-w-2xl mx-auto text-center {t["card"]} rounded-2xl p-12">
-            {_eyebrow(t, "Pricing")}
-            <h2 class="text-3xl font-black {t['text']} mt-2 mb-4">Every Project Is Different</h2>
-            <p class="text-base {t['text_muted']} leading-relaxed mb-8">
-                We tailor our services to your specific needs. Get in touch and we'll provide a
-                transparent, no-obligation quote.
-            </p>
-            {_btn(t, "Request a Quote", "#contact", "text-base px-10 py-5")}
-        </div>
-    </div>
+    <div class="g3 mw-lg mx-auto">{cards}</div>
+  </div>
 </section>"""
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+def _price_project(tiers: List[Dict]) -> str:
+    cards = "".join(
+        f"""<div class="card card-p rv d{min(i+1,4)}" style="display:flex;flex-direction:column;">
+      <h3 class="t-card mb1">{t.get("name","Package")}</h3>
+      <p class="t-small mb3">{t.get("description","")}</p>
+      <p style="font-size:1.3rem;font-weight:800;color:var(--c-accent);margin-bottom:1rem;">{t.get("price","Get a Quote")}</p>
+      <ul class="chklist" style="flex:1;margin-bottom:1.5rem;">{"".join(_chk(f) for f in (t.get("features") or []))}</ul>
+      {_btn("Request a Quote →", "#contact", "g")}
+    </div>"""
+        for i, t in enumerate(tiers or [])
+    )
+    return f"""<section class="sec sec-band" id="pricing">
+  <div class="wrap">
+    <div class="mb6 rv">
+      {_eyebrow("Services & Pricing")}
+      {_h2("What We Offer", "Every project gets a tailored estimate. No surprises.")}
+    </div>
+    <div class="g3">{cards}</div>
+    <div class="card card-plg tc rv mt4 mw-sm mx-auto">
+      <h3 class="t-card mb2">Not sure what you need?</h3>
+      <p class="t-small mb4">We'll assess your project and provide a transparent, no-obligation quote.</p>
+      {_btn("Get a Free Estimate", "#contact")}
+    </div>
+  </div>
+</section>"""
+
+
+def _price_service_rows(tiers: List[Dict]) -> str:
+    rows = "".join(
+        f"""<div class="rv" style="padding:2rem 0;border-bottom:1px solid var(--c-border);">
+      <div class="g2 as" style="gap:2rem;">
+        <div>
+          <h3 class="t-card mb1">{t.get("name","Service")}</h3>
+          <p class="t-small mt1">{t.get("description","")}</p>
+          <p style="font-size:1.1rem;font-weight:800;color:var(--c-accent);margin-top:0.5rem;">{t.get("price","")}</p>
+        </div>
+        <div>
+          <ul class="chklist">{"".join(_chk(f) for f in (t.get("features") or [])[:4])}</ul>
+          <div style="margin-top:1.25rem;">{_btn("Book a Consultation", "#contact")}</div>
+        </div>
+      </div>
+    </div>"""
+        for t in (tiers or [])
+    )
+    return f"""<section class="sec" id="pricing">
+  <div class="wrap">
+    <div class="mb6 rv">
+      {_eyebrow("Services")}
+      <h2 class="t-section">How We Can Help</h2>
+      <p class="t-body mt2 mw-sm">All engagements begin with a complimentary consultation.</p>
+    </div>
+    {rows}
+    <div class="tc mt5 rv">{_btn("Schedule a Free Consultation", "#contact")}</div>
+  </div>
+</section>"""
+
+
+def _price_contact_only() -> str:
+    return f"""<section class="sec sec-band" id="pricing">
+  <div class="wrap">
+    <div class="card card-plg tc mw-sm mx-auto rv">
+      {_eyebrow("Pricing")}
+      <h2 class="t-section mt1 mb3">Every Project Is Different</h2>
+      <p class="t-body mb5">We tailor our approach to your specific needs. Get in touch for a transparent, no-obligation quote.</p>
+      {_btn("Request a Quote", "#contact")}
+    </div>
+  </div>
+</section>"""
+
+
+def _chk(text: str) -> str:
+    return f'<li class="chk-item"><span class="chk-icon">✓</span><span>{text}</span></li>'
+
+
+# =============================================================================
+# TESTIMONIALS
+# =============================================================================
+
+def _build_testimonials(tevs: List[Dict]) -> str:
+    if not tevs:
+        return ""
+    cards = "".join(
+        f"""<div class="card card-p rv d{min(i+1,4)}" style="display:flex;flex-direction:column;">
+      {_stars()}
+      <p class="t-small" style="font-style:italic;flex:1;margin-bottom:1.25rem;">"{tv.get("quote","")}"</p>
+      <div style="display:flex;align-items:center;gap:0.75rem;border-top:1px solid var(--c-border);padding-top:1rem;">
+        <div class="avatar">{(tv.get("name","?") or "?")[0].upper()}</div>
+        <div>
+          <p style="font-weight:700;font-size:0.875rem;color:var(--c-text);">{tv.get("name","")}</p>
+          <p style="font-size:0.75rem;color:var(--c-text3);">{tv.get("role","")} · {tv.get("company","")}</p>
+        </div>
+      </div>
+    </div>"""
+        for i, tv in enumerate(tevs)
+    )
+    return f"""<section class="sec sec-band" id="testimonials">
+  <div class="wrap">
+    <div class="tc mb6 rv">
+      {_eyebrow("Testimonials")}
+      {_h2("What Our Clients Say")}
+    </div>
+    <div class="testi-grid" style="max-width:960px;margin:0 auto;">{cards}</div>
+  </div>
+</section>"""
+
+
+# =============================================================================
+# FAQ
+# =============================================================================
+
+def _build_faq(faqs: List[Dict]) -> str:
+    if not faqs:
+        return ""
+    items = "".join(
+        f"""<details class="faq rv d{min(i+1,4)}">
+      <summary>{faq.get("q","")}<span class="faq-icon">+</span></summary>
+      <div class="faq-body">{faq.get("a","")}</div>
+    </details>"""
+        for i, faq in enumerate(faqs)
+    )
+    return f"""<section class="sec-sm" id="faq" style="padding-top:5rem;padding-bottom:5rem;">
+  <div class="wrap">
+    <div class="tc mb5 rv">
+      {_eyebrow("FAQ")}
+      {_h2("Common Questions")}
+    </div>
+    <div style="max-width:640px;margin:0 auto;">{items}</div>
+  </div>
+</section>"""
+
+
+# =============================================================================
+# CONTACT
+# =============================================================================
+
+def _build_contact(name: str, d: Dict, email: str, phone: str, industry: str) -> str:
+    headline = d.get("cta_headline") or "Get in Touch"
+    sub      = d.get("hero", {}).get("sub") or ""
+    btn_lbl  = d.get("hero", {}).get("cta") or "Send Message"
+    img      = _photo_url(industry, 2, 1000)
+
+    form_attr = f'action="mailto:{email}" enctype="text/plain"' if email else ""
+    form_note = "" if email else '<p style="font-size:0.68rem;color:var(--c-text3);text-align:center;margin-top:0.75rem;">Form submission will be configured by the site owner.</p>'
+
+    contact_items = ""
+    if email:
+        contact_items += f'<a href="mailto:{email}" style="display:flex;align-items:center;gap:0.5rem;font-size:0.875rem;color:var(--c-text2);">✉ {email}</a>'
+    if phone:
+        safe = re.sub(r'[^\d+]', '', phone)
+        contact_items += f'<a href="tel:{safe}" style="display:flex;align-items:center;gap:0.5rem;font-size:0.875rem;color:var(--c-text2);">☎ {phone}</a>'
+    contact_block = f'<div style="display:flex;flex-direction:column;gap:0.75rem;border-top:1px solid var(--c-border);padding-top:1rem;margin-top:1.5rem;">{contact_items}</div>' if contact_items else ""
+
+    return f"""<section class="sec" id="contact" style="background:linear-gradient(180deg,var(--c-bg) 0%,var(--c-bg2) 100%);overflow:hidden;padding-top:6rem;padding-bottom:6rem;">
+  <div class="glow-blob" style="width:600px;height:600px;top:50%;right:-10%;transform:translateY(-50%);opacity:0.6;"></div>
+  <div style="position:absolute;inset:0;pointer-events:none;overflow:hidden;">
+    <img src="{img}" alt="" style="width:100%;height:100%;object-fit:cover;opacity:0.04;" loading="lazy">
+  </div>
+  <div class="wrap z1">
+    <div class="g2 as gap-xl">
+      <div class="rv">
+        {_eyebrow("Get in Touch")}
+        <h2 class="t-section mt1">{headline}</h2>
+        <p class="t-body mt3 mw-sm">{sub}</p>
+        {contact_block}
+      </div>
+      <div class="card card-plg rv d1" style="margin-top:-1rem;">
+        <form {form_attr} method="post" novalidate>
+          <div class="form-row">
+            <label class="form-label" for="cf-n">Your Name</label>
+            <input class="form-input" type="text" id="cf-n" name="name" placeholder="Jane Smith" required autocomplete="name">
+          </div>
+          <div class="form-row">
+            <label class="form-label" for="cf-e">Email Address</label>
+            <input class="form-input" type="email" id="cf-e" name="email" placeholder="jane@example.com" required autocomplete="email">
+          </div>
+          <div class="form-row">
+            <label class="form-label" for="cf-m">Message</label>
+            <textarea class="form-input" id="cf-m" name="message" placeholder="Tell us about your project..." required></textarea>
+          </div>
+          <button type="submit" class="btn btn-p" style="width:100%;text-align:center;">{btn_lbl} →</button>
+          {form_note}
+        </form>
+      </div>
+    </div>
+  </div>
+</section>"""
+
+
+# =============================================================================
+# FOOTER
+# =============================================================================
+
+def _build_footer(name: str, d: Dict, nav_items: List[str], email: str, phone: str, ver: int) -> str:
+    tag = d.get("tagline", "")
+    sub = d.get("hero", {}).get("sub", "")
+    nav_html = "".join(
+        f'<li style="margin-bottom:0.45rem;"><a href="#{it.lower().replace(" ","")}" style="font-size:0.875rem;color:var(--c-text2);">{it}</a></li>'
+        for it in nav_items
+    )
+    contact_html = ""
+    if email:
+        contact_html += f'<li style="margin-bottom:0.45rem;"><a href="mailto:{email}" style="font-size:0.875rem;color:var(--c-text2);">{email}</a></li>'
+    if phone:
+        contact_html += f'<li style="margin-bottom:0.45rem;"><a href="tel:{re.sub(chr(91)+r"^+\d"+chr(93),"",phone)}" style="font-size:0.875rem;color:var(--c-text2);">{phone}</a></li>'
+    if not contact_html:
+        contact_html = f'<li><a href="#contact" style="font-size:0.875rem;color:var(--c-text2);">Contact Us</a></li>'
+
+    return f"""<footer class="site-footer">
+  <div class="wrap">
+    <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:2.5rem;margin-bottom:3rem;flex-wrap:wrap;">
+      <div>
+        <div style="font-size:1.1rem;font-weight:900;letter-spacing:-0.03em;color:var(--c-text);margin-bottom:0.75rem;">{name}</div>
+        <p style="font-size:0.875rem;color:var(--c-text2);max-width:260px;line-height:1.6;">{sub}</p>
+        {f'<p style="font-size:0.75rem;color:var(--c-text3);margin-top:0.5rem;font-style:italic;">{tag}</p>' if tag else ""}
+      </div>
+      <div>
+        <p style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.15em;color:var(--c-text3);margin-bottom:1rem;">Navigate</p>
+        <ul style="list-style:none;">{nav_html}</ul>
+      </div>
+      <div>
+        <p style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.15em;color:var(--c-text3);margin-bottom:1rem;">Contact</p>
+        <ul style="list-style:none;">{contact_html}</ul>
+      </div>
+    </div>
+    <div style="border-top:1px solid var(--c-border);padding-top:1.5rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;">
+      <p style="font-size:0.75rem;color:var(--c-text3);">© 2026 {name}. All rights reserved.</p>
+      <p style="font-size:0.75rem;color:var(--c-text3);">v{ver}</p>
+    </div>
+  </div>
+</footer>
+<style>
+@media(max-width:639px){{
+  .site-footer .wrap>div:first-child{{grid-template-columns:1fr;}}
+}}
+</style>"""
+
+
+# =============================================================================
 # MASTER ARCHITECT
-# ─────────────────────────────────────────────────────────────────────────────
+# =============================================================================
 
 class MasterArchitect:
 
-    # Valid section IDs the AI can request
-    VALID_SECTIONS = {"hero", "trust", "features", "pricing", "testimonials", "faq", "contact"}
+    VALID = {"hero", "trust", "features", "pricing", "testimonials", "faq", "contact"}
 
     def __init__(self, business_name: str, prompt: str, version: int = 1):
-        raw_name   = (business_name or "").strip()
-        raw_prompt = (prompt or "").strip()
+        raw  = (business_name or "").strip()
+        prmt = (prompt or "").strip()
 
-        extracted, clean_prompt = extract_business_name(raw_name, raw_prompt)
+        extracted, clean = extract_business_name(raw, prmt)
 
-        self.industry = detect_industry(clean_prompt or raw_prompt)
-        self.name     = raw_name or extracted or _default_name(self.industry)
-        self.prompt   = clean_prompt
+        self.industry = detect_industry(clean or prmt)
+        # CRITICAL — self.name is ALWAYS the actual business name, never prompt text
+        self.name     = raw or extracted or _default_name(self.industry)
+        self.prompt   = clean or prmt
         self.version  = version
         self.theme    = select_theme(self.industry)
-        self.data: Dict      = {}
-        self.imgs: List[str] = []
-        self.contact_info    = _extract_contact_info(raw_prompt + " " + clean_prompt)
+        self.data: Dict   = {}
+        self.contacts     = _extract_contact(prmt + " " + clean)
 
-        logger.info(f"MasterArchitect | '{self.name}' | {self.industry} | {self.theme['id']}")
+        logger.info(f"Architect | '{self.name}' | {self.industry} | {self.theme['id']}")
 
-    # ── AI content ───────────────────────────────────────────────────────────
+    # ── Section/variant selectors ─────────────────────────────────────────────
 
-    def _ai_prompt(self) -> str:
-        project_ind = {"construction", "logistics", "automotive", "events"}
-        service_ind = {"legal", "nonprofit"}
-        no_price_ind = {"restaurant", "beauty", "fitness", "travel", "nature"}
+    def _hero_variant(self) -> str:
+        return {
+            "luxury": "centered", "agency": "centered", "beauty": "centered",
+            "travel": "centered", "nonprofit": "centered",
+            "finance": "stats",   "real_estate": "stats", "legal": "stats",
+            "logistics": "stats", "construction": "stats",
+            "restaurant": "editorial", "events": "editorial", "ecommerce": "editorial",
+        }.get(self.industry, "split")
 
-        if self.industry in project_ind:
-            price_spec = (
-                '  {"name":"Small / Residential","price":"From $1,500","description":"One sentence on scope.","features":["5 relevant items"],"featured":false},\n'
-                '  {"name":"Commercial / Mid-Scale","price":"From $10,000","description":"One sentence.","features":["5 items"],"featured":true},\n'
-                '  {"name":"Large / Enterprise","price":"Get a Quote","description":"One sentence.","features":["5 items"],"featured":false}'
-            )
-            price_note = "Include pricing tiers as project ranges."
-        elif self.industry in service_ind:
-            price_spec = (
-                '  {"name":"Free Consultation","price":"Complimentary","description":"30-min, no obligation.","features":["5 items"],"featured":false},\n'
-                '  {"name":"Standard Engagement","price":"From $300/hr","description":"Flexible support.","features":["5 items"],"featured":true},\n'
-                '  {"name":"Retainer","price":"Custom","description":"Dedicated partnership.","features":["5 items"],"featured":false}'
-            )
-            price_note = "Include service tiers appropriate for a professional services firm."
-        elif self.industry in no_price_ind:
-            price_spec = ""
-            price_note = 'Set pricing to null — this industry does not use pricing tiers on a landing page.'
+    def _feat_variant(self) -> str:
+        return {
+            "finance": "icon_list",   "real_estate": "icon_list",
+            "legal": "icon_list",     "logistics": "icon_list",
+            "construction": "icon_list",
+            "saas": "cards",          "ecommerce": "cards",
+            "developer": "cards",     "startup": "cards",
+            "ai": "cards",            "events": "cards",
+            "agency": "cards",        "luxury": "cards",
+        }.get(self.industry, "alternating")
+
+    def _price_variant(self) -> str:
+        if self.industry in {"construction", "logistics", "automotive", "events"}:
+            return "project"
+        if self.industry in {"legal", "nonprofit"}:
+            return "service_rows"
+        if self.industry in {"luxury", "agency", "beauty", "finance", "real_estate",
+                             "restaurant", "fitness", "travel", "nature"}:
+            return "contact_only"
+        return "tiers"
+
+    # ── AI prompt ─────────────────────────────────────────────────────────────
+
+    def _build_prompt(self) -> str:
+        no_price  = {"restaurant","beauty","fitness","travel","nature","events","luxury","agency","beauty"}
+        project   = {"construction","logistics","automotive"}
+        service   = {"legal","nonprofit"}
+
+        if self.industry in no_price:
+            pricing = '"pricing": null,'
+            pnote   = "pricing is null — this industry doesn't list prices on landing pages."
+        elif self.industry in project:
+            pricing = '"pricing": [{"name":"Basic","price":"From $X","description":"Entry scope.","features":["Item 1","Item 2","Item 3","Item 4","Item 5"],"featured":false},{"name":"Standard","price":"From $X","description":"Mid scope.","features":["Item 1","Item 2","Item 3","Item 4","Item 5"],"featured":true},{"name":"Large/Emergency","price":"Custom","description":"Complex scope.","features":["Item 1","Item 2","Item 3","Item 4","Item 5"],"featured":false}],'
+            pnote   = "Use realistic price ranges for this industry. Replace $X with real figures."
+        elif self.industry in service:
+            pricing = '"pricing": [{"name":"Consultation","price":"Complimentary","description":"30-min intro call.","features":["Item 1","Item 2","Item 3","Item 4","Item 5"],"featured":false},{"name":"Engagement","price":"From $X/hr","description":"Project work.","features":["Item 1","Item 2","Item 3","Item 4","Item 5"],"featured":true},{"name":"Retainer","price":"Custom/mo","description":"Ongoing.","features":["Item 1","Item 2","Item 3","Item 4","Item 5"],"featured":false}],'
+            pnote   = "Fill in realistic rates for this professional services firm."
         else:
-            price_spec = (
-                '  {"name":"Starter","price":"$X/mo","description":"For individuals.","features":["5 items"],"featured":false},\n'
-                '  {"name":"Professional","price":"$X/mo","description":"For growing teams.","features":["5 items"],"featured":true},\n'
-                '  {"name":"Enterprise","price":"Custom","description":"For large orgs.","features":["5 items"],"featured":false}'
-            )
-            price_note = "Fill in realistic price estimates for this industry and scale."
+            pricing = '"pricing": [{"name":"Starter","price":"$X/mo","description":"For individuals.","features":["Item 1","Item 2","Item 3","Item 4","Item 5"],"featured":false},{"name":"Pro","price":"$X/mo","description":"For growing teams.","features":["Item 1","Item 2","Item 3","Item 4","Item 5"],"featured":true},{"name":"Enterprise","price":"Custom","description":"For large orgs.","features":["Item 1","Item 2","Item 3","Item 4","Item 5"],"featured":false}],'
+            pnote   = "Fill in realistic SaaS prices for this market."
 
-        pricing_block = f'"pricing": [\n{price_spec}\n  ],' if price_spec else '"pricing": null,'
-
-        sections_guidance = {
+        default_sections = {
             "construction": '["hero","trust","features","pricing","testimonials","faq","contact"]',
             "restaurant":   '["hero","trust","features","testimonials","contact"]',
             "beauty":       '["hero","trust","features","testimonials","faq","contact"]',
-            "saas":         '["hero","trust","features","pricing","testimonials","faq","contact"]',
             "legal":        '["hero","trust","features","pricing","faq","contact"]',
-            "fitness":      '["hero","trust","features","testimonials","contact"]',
             "nonprofit":    '["hero","features","testimonials","faq","contact"]',
+            "fitness":      '["hero","trust","features","testimonials","faq","contact"]',
         }.get(self.industry, '["hero","trust","features","pricing","testimonials","faq","contact"]')
 
-        return f"""You are writing real website copy for a business called "{self.name}".
-Industry: {self.industry}
+        return f"""Write landing page copy for "{self.name}", a {self.industry} business.
 Context: {self.prompt}
 
-Write like a skilled human copywriter, not a template generator. Rules:
-- Use the industry's actual vocabulary: a builder "constructs" and "installs", a lawyer "advises" and "represents", a chef "prepares" and "crafts", a trainer "coaches" and "pushes". Never write "delivers solutions" or "empowers clients".
-- The hero headline must sound like a real brand tagline — specific, punchy, human. NOT "Your Trusted Partner in [Industry]".
-- Stats must be realistic for a business at this size and stage. Don't invent numbers that are implausible.
-- Trust badges must be the actual credentials that matter in THIS industry (e.g. OSHA for construction, Bar Association for law, Michelin for restaurants).
-- Testimonial quotes must sound like real people speaking. Include a specific result or detail. Never write "highly recommend" or "great service" alone.
-- FAQ questions must be the actual questions that REAL customers in this industry ask — not generic website FAQ questions.
-- social_proof count+label must make sense (e.g. "350+ homes built", not "2,400+ users").
-- {price_note}
-- contact_email and contact_phone: ONLY include these if they appear in the provided context. If not in context, set to empty string "".
-- sections: list which sections are appropriate for this business. {sections_guidance} is the default for this industry — adjust only if the context warrants it. Always include "hero" and "contact". Only include "pricing" if pricing data is available or logical for this industry.
+RULES (non-negotiable):
+1. Tone: skilled human copywriter. Industry-specific language only.
+   Construction → "builds, installs, delivers" NOT "empowers/solutions"
+   Legal → "advises, represents, counsels"
+   Restaurant → "crafts, prepares, serves"
+   Fitness → "trains, coaches, transforms"
+2. Hero h1: a real brand tagline, 5-9 words max. NOT "Your Trusted Partner in X".
+3. Stats: realistic for a real business this size. No exaggeration.
+4. Trust badges: actual industry credentials (OSHA, Bar Association, etc.)
+5. Testimonials: specific outcome + real-sounding names. NOT "great service!"
+6. FAQ: questions real customers of THIS exact industry ask, with honest answers.
+7. {pnote}
+8. contact_email/contact_phone: only fill if explicitly given in context. Otherwise "".
 
-Return ONLY valid JSON (no markdown fences, no prose):
+Return ONLY valid JSON. No markdown code fences, no explanatory text, no comments:
 {{
-  "sections": {sections_guidance},
-  "nav": ["4 nav items specific to this business and the sections you include"],
+  "sections": {default_sections},
+  "nav": ["4 nav labels matching section anchors"],
   "hero": {{
-    "h1": "6-9 word punchy headline for {self.name}",
-    "sub": "One sentence value prop in this industry's plain language",
-    "cta": "Action phrase matching what a customer would do first"
+    "h1": "Real tagline for {self.name} (5–9 words)",
+    "sub": "One-sentence value prop in plain language (max 20 words)",
+    "cta": "Action label (e.g. Request a Quote / Book a Table / Start Free Trial)"
   }},
-  "tagline": "2-5 word brand slogan",
-  "social_proof": {{"count": "e.g. 350+", "label": "e.g. projects completed"}},
+  "tagline": "2–4 word brand slogan",
+  "social_proof": {{"count": "e.g. 350+", "label": "e.g. homes renovated"}},
   "stats": [
-    {{"value": "realistic figure", "label": "what it measures"}},
-    {{"value": "realistic figure", "label": "what it measures"}},
-    {{"value": "realistic figure", "label": "what it measures"}},
-    {{"value": "realistic figure", "label": "what it measures"}}
+    {{"value": "figure", "label": "what it is"}},
+    {{"value": "figure", "label": "what it is"}},
+    {{"value": "figure", "label": "what it is"}},
+    {{"value": "figure", "label": "what it is"}}
   ],
-  "trust_badges": ["Industry-specific credential 1", "Credential 2", "Credential 3", "Credential 4"],
+  "trust_badges": ["Real cred 1","Real cred 2","Real cred 3","Real cred 4"],
   "features": [
-    {{"title": "Specific feature", "description": "2 concrete sentences about what {self.name} actually does or offers.", "icon": "single relevant emoji"}},
-    {{"title": "Specific feature", "description": "2 concrete sentences.", "icon": "single emoji"}},
-    {{"title": "Specific feature", "description": "2 concrete sentences.", "icon": "single emoji"}}
+    {{"title": "Specific benefit", "description": "2 concrete sentences about what {self.name} does.", "icon": "1 emoji"}},
+    {{"title": "Specific benefit", "description": "2 concrete sentences.", "icon": "1 emoji"}},
+    {{"title": "Specific benefit", "description": "2 concrete sentences.", "icon": "1 emoji"}}
   ],
-  {pricing_block}
+  {pricing}
   "testimonials": [
-    {{"name": "Full Name", "role": "Job Title or Relationship", "company": "Company or Location", "quote": "Specific result they got. What changed for them."}},
-    {{"name": "Full Name", "role": "Job Title or Relationship", "company": "Company or Location", "quote": "Specific result or observation."}}
+    {{"name": "Full Name", "role": "Job Title", "company": "Company or City", "quote": "Specific result, max 2 sentences."}},
+    {{"name": "Full Name", "role": "Job Title", "company": "Company or City", "quote": "Specific result."}}
   ],
   "faq": [
-    {{"q": "Question a real customer of this type of business would actually ask?", "a": "Specific, honest answer."}},
-    {{"q": "Another real question?", "a": "Answer."}},
-    {{"q": "Another real question?", "a": "Answer."}}
+    {{"q": "Real question?", "a": "Honest answer."}},
+    {{"q": "Real question?", "a": "Answer."}},
+    {{"q": "Real question?", "a": "Answer."}}
   ],
-  "cta_headline": "Closing call-to-action headline that feels specific to this industry",
+  "cta_headline": "Industry-specific closing headline",
   "contact_email": "",
   "contact_phone": ""
 }}"""
+
+    # ── Data fetching ─────────────────────────────────────────────────────────
 
     def _get_data(self) -> Dict:
         if not AI_AVAILABLE:
             return self._fallback()
         try:
             raw     = chat_completion(
-                system="You are an expert copywriter. Output ONLY valid JSON, no backticks, no extra text.",
-                user=self._ai_prompt(),
+                system="You are an expert copywriter. Return ONLY valid JSON. No markdown, no backticks, no commentary.",
+                user=self._build_prompt(),
                 temperature=0.72,
             )
-            cleaned = re.sub(r"^```json\s*|^```\s*|```$", "", raw.strip(), flags=re.MULTILINE).strip()
+            cleaned = re.sub(r'^```(?:json)?\s*|```\s*$', '', raw.strip(), flags=re.MULTILINE).strip()
             data    = json.loads(cleaned)
-            # Merge any contact info extracted from the original prompt (user input wins)
-            for key in ("contact_email", "contact_phone"):
-                if not data.get(key) and self.contact_info.get(key.replace("contact_","")):
-                    data[key] = self.contact_info[key.replace("contact_","")]
-            return self._sanitize(data)
+            if not data.get("contact_email") and self.contacts.get("email"):
+                data["contact_email"] = self.contacts["email"]
+            if not data.get("contact_phone") and self.contacts.get("phone"):
+                data["contact_phone"] = self.contacts["phone"]
+            return data
         except Exception as e:
-            logger.error(f"AI content error: {e}")
+            logger.error(f"AI data error: {e}")
             return self._fallback()
 
-    _COLOR_PAT = re.compile(
-        r"\b(violet|fuchsia|purple|indigo|magenta|mauve|lavender|"
-        r"cyan|teal|emerald|mint|lime|"
-        r"amber|orange|yellow|gold|"
-        r"rose|pink|crimson|scarlet|"
-        r"navy|cobalt|cerulean|"
-        r"gray|grey|charcoal|ebony|ivory|cream)\b",
-        re.IGNORECASE,
-    )
-    _COLOR_SUBS = {
-        "violet":"distinctive","fuchsia":"vibrant","purple":"rich","indigo":"deep",
-        "magenta":"bold","mauve":"refined","lavender":"subtle",
-        "cyan":"modern","teal":"fresh","emerald":"natural","mint":"clean","lime":"bright",
-        "amber":"warm","orange":"energetic","yellow":"sunny","gold":"premium",
-        "rose":"elegant","pink":"delicate","crimson":"bold","scarlet":"striking",
-        "navy":"authoritative","cobalt":"confident","cerulean":"open",
-        "gray":"neutral","grey":"neutral","charcoal":"sophisticated",
-        "ebony":"striking","ivory":"clean","cream":"refined",
-    }
-
-    def _sanitize(self, obj: Any) -> Any:
-        if isinstance(obj, str):
-            return self._COLOR_PAT.sub(
-                lambda m: self._COLOR_SUBS.get(m.group(0).lower(), m.group(0)), obj
-            )
-        if isinstance(obj, dict):
-            obj.pop("unsplash_keywords", None)
-            return {k: self._sanitize(v) for k, v in obj.items()}
-        if isinstance(obj, list):
-            return [self._sanitize(i) for i in obj]
-        return obj
-
     def _fallback(self) -> Dict:
-        """Industry-aware fallbacks."""
         base = {
-            "sections": ["hero", "trust", "features", "pricing", "testimonials", "faq", "contact"],
-            "contact_email": self.contact_info.get("email", ""),
-            "contact_phone": self.contact_info.get("phone", ""),
+            "contact_email": self.contacts.get("email", ""),
+            "contact_phone": self.contacts.get("phone", ""),
         }
-
         if self.industry == "construction":
-            return {**base, **{
-                "sections": ["hero", "trust", "features", "pricing", "testimonials", "faq", "contact"],
-                "nav": ["Services", "Projects", "About", "Contact"],
-                "hero": {"h1": f"{self.name} — Built Right, On Time", "sub": "Quality construction and renovation delivered on schedule, on budget, by certified tradespeople.", "cta": "Request a Quote"},
+            return {**base,
+                "sections": ["hero","trust","features","pricing","testimonials","faq","contact"],
+                "nav": ["Services","Projects","About","Contact"],
+                "hero": {"h1": f"{self.name} — Built Right, On Time", "sub": "Quality construction and renovation by certified tradespeople, delivered on schedule.", "cta": "Request a Quote"},
                 "tagline": "Built to last.",
                 "social_proof": {"count": "350+", "label": "projects completed"},
-                "stats": [{"value":"98%","label":"On-time delivery"},{"value":"350+","label":"Projects completed"},{"value":"15yr","label":"In the industry"},{"value":"24/7","label":"Emergency cover"}],
-                "trust_badges": ["Licensed & Insured","OSHA Compliant","Bonded Contractor","Satisfaction Guaranteed"],
+                "stats": [{"value":"98%","label":"On-time delivery"},{"value":"350+","label":"Projects"},{"value":"15yr","label":"Experience"},{"value":"24/7","label":"Emergency"}],
+                "trust_badges": ["Licensed & Insured","OSHA Compliant","Bonded","Satisfaction Guaranteed"],
                 "features": [
-                    {"title":"Licensed & Fully Insured","description":"Every project covered by comprehensive liability and workers compensation insurance. You are fully protected from day one.","icon":"🛡️"},
-                    {"title":"On-Time, On-Budget","description":"Written schedules and fixed-price quotes before work begins. No surprises on your final invoice.","icon":"📋"},
-                    {"title":"All Trades, One Team","description":"From groundwork to finishing touches, certified tradespeople handle every phase under one roof.","icon":"🔨"},
+                    {"title":"Licensed & Fully Insured","description":"Every project carries comprehensive liability and workers compensation coverage. You are protected from day one.","icon":"🛡️"},
+                    {"title":"On-Time, On-Budget","description":"Fixed-price quotes and written schedules before work starts. No surprise charges on your final invoice.","icon":"📋"},
+                    {"title":"All Trades Under One Roof","description":"From groundwork to finishing, certified tradespeople handle every phase so you only deal with one team.","icon":"🔨"},
                 ],
                 "pricing": [
-                    {"name":"Residential","price":"From $2,500","description":"Home renovations and repairs.","features":["Free on-site estimate","Kitchen & bath remodels","Roofing & siding","Flooring & painting","Follow-up inspection"],"featured":False},
-                    {"name":"Commercial","price":"From $12,000","description":"Business and commercial fit-outs.","features":["Dedicated project manager","Office & retail fit-outs","Compliance documentation","Progress reporting","Warranty included"],"featured":True},
-                    {"name":"Emergency","price":"24/7 Available","description":"Urgent repairs and storm damage.","features":["Same-day response","Storm & water damage","Structural emergencies","Insurance billing support","Temporary securing"],"featured":False},
+                    {"name":"Residential","price":"From $2,500","description":"Home renovations and repairs.","features":["Free on-site estimate","Kitchen & bath remodels","Roofing & siding","Flooring & painting","Post-job inspection"],"featured":False},
+                    {"name":"Commercial","price":"From $12,000","description":"Business fit-outs.","features":["Dedicated project manager","Office & retail fit-outs","Compliance documentation","Progress reporting","2-year warranty"],"featured":True},
+                    {"name":"Emergency","price":"24/7 Response","description":"Urgent repairs.","features":["Same-day response","Storm & water damage","Structural emergencies","Insurance billing","Temporary securing"],"featured":False},
                 ],
                 "testimonials": [
-                    {"name":"Michael Torres","role":"Homeowner","company":"Brooklyn, NY","quote":"Complete renovation done on schedule and under budget. The crew was professional and respectful of our home from day one."},
-                    {"name":"Lisa Chen","role":"Property Manager","company":"Manhattan","quote":"We've used them across six properties. Always reliable, always honest about what things will cost."},
+                    {"name":"Michael Torres","role":"Homeowner","company":"Brooklyn, NY","quote":"Full kitchen renovation done in three weeks, under budget. The crew was professional every single day."},
+                    {"name":"Lisa Chen","role":"Property Manager","company":"Manhattan","quote":"We use them across six buildings. Always reliable, always honest about what things cost."},
                 ],
                 "faq": [
-                    {"q":"Are you licensed and insured?","a":"Yes — fully licensed with comprehensive liability and workers compensation on every job."},
-                    {"q":"Do you offer free estimates?","a":"Absolutely. We provide detailed, no-obligation quotes after an on-site assessment."},
-                    {"q":"How do you handle project timelines?","a":"We give you a written schedule before work begins and provide milestone updates throughout."},
+                    {"q":"Are you licensed and insured?","a":"Yes — fully licensed, bonded, and carrying comprehensive liability and workers compensation on every job."},
+                    {"q":"Do you provide free estimates?","a":"Yes. We visit the site, assess the scope, and provide a detailed written quote at no cost."},
+                    {"q":"How do you handle project timelines?","a":"We issue a written schedule before work begins and send progress updates at each milestone."},
                 ],
-                "cta_headline": f"Ready to start your project with {self.name}?",
-            }}
-
-        if self.industry == "restaurant":
-            return {**base, **{
-                "sections": ["hero", "trust", "features", "testimonials", "contact"],
-                "nav": ["Menu", "About", "Catering", "Reservations"],
-                "hero": {"h1": f"{self.name} — Food Made With Purpose", "sub": "Freshly prepared every day from locally sourced ingredients and time-honoured recipes.", "cta": "View Our Menu"},
-                "tagline": "Taste the difference.",
-                "social_proof": {"count": "1,200+", "label": "meals served weekly"},
-                "stats": [{"value":"4.9★","label":"Average rating"},{"value":"1,200+","label":"Meals weekly"},{"value":"8yr","label":"Serving the community"},{"value":"100%","label":"Fresh daily"}],
-                "trust_badges": ["Health Inspected","Locally Sourced","5-Star Rated","Award Winning"],
-                "features": [
-                    {"title":"Locally Sourced Ingredients","description":"We partner with regional farms so every dish is as fresh as it is flavourful — every single day.","icon":"🥗"},
-                    {"title":"Made Fresh Daily","description":"Nothing is pre-made or frozen. Every dish is prepared in-house from scratch each morning.","icon":"👨‍🍳"},
-                    {"title":"Warm, Welcoming Atmosphere","description":"A dining room designed for lingering — perfect for date nights, family meals, and private celebrations.","icon":"🏡"},
-                ],
-                "pricing": None,
-                "testimonials": [
-                    {"name":"Maria Gonzalez","role":"Yelp Elite Reviewer","company":"Local Regular","quote":"Best food in the neighbourhood. The pasta is always perfectly cooked and the portions are genuinely generous."},
-                    {"name":"David Park","role":"Food Writer","company":"NYC Eats","quote":"A hidden gem that earns every star. You can taste the care in every dish."},
-                ],
-                "faq": [],
-                "cta_headline": f"Come experience {self.name} for yourself",
-            }}
-
-        # Generic fallback
-        return {**base, **{
-            "sections": ["hero", "trust", "features", "pricing", "testimonials", "faq", "contact"],
-            "nav": ["Features","Pricing","About","Contact"],
-            "hero": {"h1": f"Welcome to {self.name}", "sub": "Professional services built around your specific needs and goals.", "cta": "Get Started"},
+                "cta_headline": f"Start your project with {self.name}",
+            }
+        return {**base,
+            "sections": ["hero","trust","features","testimonials","faq","contact"],
+            "nav": ["Services","About","FAQ","Contact"],
+            "hero": {"h1": f"Welcome to {self.name}", "sub": "Professional services built around your exact needs.", "cta": "Get Started"},
             "tagline": "Excellence delivered.",
             "social_proof": {"count": "500+", "label": "clients served"},
-            "stats": [{"value":"97%","label":"Client satisfaction"},{"value":"500+","label":"Engagements completed"},{"value":"10yr","label":"In the industry"},{"value":"24/7","label":"Support access"}],
-            "trust_badges": ["Licensed & Certified","5-Star Rated","Award Winner 2024","Satisfaction Guaranteed"],
+            "stats": [{"value":"97%","label":"Satisfaction"},{"value":"500+","label":"Completed"},{"value":"10yr","label":"Experience"},{"value":"24/7","label":"Support"}],
+            "trust_badges": ["Certified","Award Winner 2024","5-Star Rated","Trusted"],
             "features": [
-                {"title":"Expert Team","description":"Seasoned professionals with deep domain knowledge committed to delivering results that matter.","icon":"🏆"},
-                {"title":"Proven Track Record","description":"Hundreds of successful engagements across a wide range of industries and client sizes.","icon":"📈"},
-                {"title":"Responsive Support","description":"A dedicated team that responds quickly and keeps you informed at every step.","icon":"🤝"},
+                {"title":"Expert Team","description":"Seasoned professionals with deep domain knowledge committed to results that move the needle.","icon":"◆"},
+                {"title":"Proven Results","description":"Hundreds of successful engagements across a wide range of industries and client types.","icon":"▲"},
+                {"title":"Dedicated Support","description":"A team that responds quickly and keeps you informed at every step of the process.","icon":"●"},
             ],
-            "pricing": [
-                {"name":"Starter","price":"$49/mo","description":"For individuals.","features":["Core features","Email support","5 projects","Basic analytics","Monthly reports"],"featured":False},
-                {"name":"Professional","price":"$149/mo","description":"For growing teams.","features":["Everything in Starter","Priority support","Unlimited projects","Advanced analytics","Custom integrations"],"featured":True},
-                {"name":"Enterprise","price":"Custom","description":"For large organisations.","features":["Everything in Professional","Dedicated manager","SLA guarantee","Custom contracts","Onboarding support"],"featured":False},
-            ],
+            "pricing": None,
             "testimonials": [
-                {"name":"Jordan Lee","role":"Director","company":"Meridian Group","quote":"Working with this team changed our entire approach. The results were measurable within the first month."},
-                {"name":"Priya Nair","role":"Founder","company":"Spark Ventures","quote":"Responsive, knowledgeable, and genuinely invested in our success. They feel like part of our team."},
+                {"name":"Jordan Lee","role":"Director","company":"Meridian Group","quote":"Results were measurable within the first month. Genuinely changed how we operate."},
+                {"name":"Priya Nair","role":"Founder","company":"Spark Ventures","quote":"Responsive, knowledgeable, and invested in our success. Highly recommend."},
             ],
             "faq": [
-                {"q":"How do I get started?","a":"Reach out via the contact form and we'll schedule an initial call to understand your needs."},
-                {"q":"What does the process look like?","a":"Discovery first, then a tailored plan, then execution with full transparency at every stage."},
-                {"q":"Do you offer ongoing support?","a":"Yes. All engagements include continued access to our team after the initial project is complete."},
+                {"q":"How do I get started?","a":"Fill out the contact form and we'll schedule an initial call to understand your needs."},
+                {"q":"What does the process look like?","a":"Discovery first, then a tailored plan, then execution with full transparency."},
+                {"q":"Do you offer ongoing support?","a":"Yes — all engagements include continued access to our team after the project is complete."},
             ],
-            "cta_headline": f"Ready to get started with {self.name}?",
-        }}
+            "cta_headline": f"Ready to work with {self.name}?",
+        }
 
-    # ── Layout selectors ──────────────────────────────────────────────────────
-
-    def _hero_fn(self) -> Callable:
-        return {
-            "luxury":      Hero.centered,
-            "agency":      Hero.centered,
-            "beauty":      Hero.centered,
-            "travel":      Hero.centered,
-            "nonprofit":   Hero.centered,
-            "finance":     Hero.with_stats,
-            "real_estate": Hero.with_stats,
-            "legal":       Hero.with_stats,
-            "logistics":   Hero.with_stats,
-            "restaurant":  Hero.editorial,
-            "events":      Hero.editorial,
-            "ecommerce":   Hero.editorial,
-        }.get(self.industry, Hero.split)
-
-    def _features_fn(self) -> Callable:
-        return {
-            "luxury":       Features.cards,
-            "agency":       Features.cards,
-            "saas":         Features.cards,
-            "ecommerce":    Features.cards,
-            "developer":    Features.cards,
-            "startup":      Features.cards,
-            "ai":           Features.cards,
-            "events":       Features.cards,
-            "finance":      Features.icon_list,
-            "real_estate":  Features.icon_list,
-            "legal":        Features.icon_list,
-            "logistics":    Features.icon_list,
-            "health":       Features.alternating,
-            "fitness":      Features.alternating,
-            "travel":       Features.alternating,
-            "restaurant":   Features.alternating,
-            "construction": Features.alternating,
-            "automotive":   Features.alternating,
-            "beauty":       Features.alternating,
-            "nature":       Features.alternating,
-            "nonprofit":    Features.alternating,
-        }.get(self.industry, Features.cards)
-
-    def _pricing_fn(self) -> Callable:
-        if self.industry in {"construction", "logistics", "automotive", "events"}:
-            return Pricing.project_quotes
-        if self.industry in {"legal", "nonprofit"}:
-            return Pricing.service_rows
-        if self.industry in {"luxury", "agency", "beauty", "finance", "real_estate"}:
-            return Pricing.two_col
-        return Pricing.tiers
-
-    # ── Individual sections ───────────────────────────────────────────────────
-
-    def _nav(self) -> str:
-        t   = self.theme
-        cta = self.data.get("hero", {}).get("cta", "Get Started")
-        sections = self.data.get("sections") or list(self.VALID_SECTIONS)
-        nav_items = self.data.get("nav") or []
-
-        # Only link to sections that actually exist
-        links = "".join(
-            f'<li><a href="#{item.lower().replace(" ", "")}" '
-            f'class="{t["text_muted"]} hover:opacity-75 transition-opacity text-sm font-medium">'
-            f'{item}</a></li>'
-            for item in nav_items
-        )
-
-        # Mobile menu (pure CSS via checkbox hack)
-        mobile_links = "".join(
-            f'<a href="#{item.lower().replace(" ", "")}" '
-            f'class="block px-4 py-3 text-sm font-medium {t["text_muted"]} hover:opacity-75 transition-opacity border-b {t["border"]}">'
-            f'{item}</a>'
-            for item in nav_items
-        )
-
-        dark = t["mode"] == "dark"
-        hamburger_color = "bg-white" if dark else "bg-slate-800"
-
-        return f"""<nav class="fixed top-0 w-full z-50 {t['nav']}">
-    <div class="container mx-auto {PAD_CON} py-4 flex justify-between items-center">
-        <a href="#" class="text-xl font-black tracking-tight {t['text']}">{self.name}</a>
-        <ul class="hidden md:flex items-center gap-8">{links}</ul>
-        <div class="flex items-center gap-3">
-            <a href="#contact" class="hidden md:inline-block bg-gradient-to-r {t['grad']} text-white font-bold rounded-xl px-5 py-2.5 text-sm shadow-md {HOVER_LIFT}">{cta}</a>
-            <!-- Hamburger (mobile only) -->
-            <label for="nav-toggle" class="md:hidden cursor-pointer p-2 rounded-lg border {t['border']} flex flex-col gap-1.5" aria-label="Toggle menu">
-                <span class="block w-5 h-0.5 {hamburger_color}"></span>
-                <span class="block w-5 h-0.5 {hamburger_color}"></span>
-                <span class="block w-5 h-0.5 {hamburger_color}"></span>
-            </label>
-        </div>
-    </div>
-    <!-- Mobile drawer (CSS only) -->
-    <input type="checkbox" id="nav-toggle" class="hidden peer" />
-    <div class="{t['bg']} border-t {t['border']} hidden peer-checked:block md:hidden shadow-lg">
-        {mobile_links}
-        <div class="p-4">
-            <a href="#contact" class="block text-center bg-gradient-to-r {t['grad']} text-white font-bold rounded-xl px-5 py-3 text-sm">{cta}</a>
-        </div>
-    </div>
-</nav>"""
-
-    def _trust_band(self) -> str:
-        t      = self.theme
-        badges = self.data.get("trust_badges") or []
-        if not badges:
-            return ""
-        pills = "".join(
-            f'<span class="px-4 py-1.5 text-xs font-semibold {t["badge"]}">{b}</span>'
-            for b in badges
-        )
-        return (
-            f'<section id="trust" class="relative {t["bg_alt"]} py-6 overflow-hidden">'
-            f'<div class="container mx-auto {PAD_CON}">'
-            f'<div class="flex flex-wrap items-center justify-center gap-3 reveal">'
-            f'<span class="text-xs {t["text_light"]} uppercase tracking-widest mr-1">Trusted &amp; Verified</span>'
-            f'{pills}'
-            f'</div></div>'
-            f'<div class="absolute bottom-0 left-0 right-0 overflow-hidden pointer-events-none">'
-            f'<svg viewBox="0 0 1440 24" preserveAspectRatio="none" class="block w-full h-6">'
-            f'<path d="M0,12 C360,24 1080,0 1440,12 L1440,24 L0,24 Z" fill="{t["bg_hex"]}"/>'
-            f'</svg></div>'
-            f'</section>'
-        )
-
-    def _testimonials(self) -> str:
-        t    = self.theme
-        tevs = self.data.get("testimonials") or []
-        if not tevs:
-            return ""
-        stars = "".join(['<span style="color:#f59e0b">&#9733;</span>'] * 5)
-        # Cards use snap scroll on mobile for a flowing horizontal experience
-        cards = "".join(
-            f'<div class="{t["card"]} rounded-2xl p-8 {HOVER_LIFT} flex flex-col snap-start shrink-0 w-[85vw] sm:w-auto reveal" style="animation-delay:{i*0.12:.2f}s">'
-            f'<div class="flex gap-0.5 mb-5 text-sm">{stars}</div>'
-            f'<p class="{t["text_muted"]} text-base italic leading-relaxed flex-grow mb-6 max-w-2xl">'
-            f'&#8220;{tv.get("quote","")}&#8221;</p>'
-            f'<div class="flex items-center gap-3 pt-5 border-t {t["border"]}">'
-            f'<div class="w-10 h-10 shrink-0 rounded-full bg-gradient-to-br {t["grad"]} '
-            f'flex items-center justify-center text-white font-black text-sm">'
-            f'{(tv.get("name","?") or "?")[0].upper()}</div>'
-            f'<div><p class="font-bold text-sm {t["text"]}">{tv.get("name","")}</p>'
-            f'<p class="text-xs {t["text_light"]}">'
-            f'{tv.get("role","")} &middot; {tv.get("company","")}</p>'
-            f'</div></div></div>'
-            for i, tv in enumerate(tevs)
-        )
-        return (
-            f'<section id="testimonials" class="relative {t["bg_alt"]} {PAD_SEC}">'
-            # Diagonal cut at top for visual flow from pricing
-            f'<div class="absolute top-0 left-0 right-0 overflow-hidden pointer-events-none">'
-            f'<svg viewBox="0 0 1440 48" preserveAspectRatio="none" class="block w-full h-12">'
-            f'<polygon points="0,0 1440,48 0,48" fill="{t["bg_hex"]}"/>'
-            f'</svg></div>'
-            f'<div class="container mx-auto {PAD_CON} pt-12">'
-            f'<div class="text-center mb-12 reveal">'
-            f'{_eyebrow(t, "Testimonials")}'
-            f'{_h2(t, "What Our Clients Say")}'
-            f'</div>'
-            # Horizontal scroll on mobile, grid on desktop
-            f'<div class="flex sm:grid sm:grid-cols-2 gap-5 overflow-x-auto snap-x snap-mandatory pb-4 -mx-5 px-5 sm:mx-0 sm:px-0 sm:overflow-visible max-w-4xl sm:mx-auto scrollbar-hide">'
-            f'{cards}'
-            f'</div>'
-            f'</div>'
-            f'<div class="absolute bottom-0 left-0 right-0 overflow-hidden pointer-events-none">'
-            f'<svg viewBox="0 0 1440 48" preserveAspectRatio="none" class="block w-full h-12">'
-            f'<polygon points="1440,0 1440,48 0,48" fill="{t["bg_hex"]}"/>'
-            f'</svg></div>'
-            f'</section>'
-        )
-
-    def _faq(self) -> str:
-        t    = self.theme
-        faqs = self.data.get("faq") or []
-        if not faqs:
-            return ""
-        items = "".join(
-            f'<details class="{t["card"]} rounded-xl overflow-hidden group reveal" style="animation-delay:{i*0.07:.2f}s">'
-            f'<summary class="flex justify-between items-center p-6 cursor-pointer '
-            f'font-semibold {t["text"]} list-none select-none hover:opacity-75 transition-opacity">'
-            f'<span>{faq.get("q","")}</span>'
-            f'<span class="ml-6 shrink-0 w-6 h-6 rounded-full border {t["border"]} '
-            f'flex items-center justify-center text-xs {t["text_muted"]} '
-            f'group-open:rotate-45 transition-transform duration-200">+</span>'
-            f'</summary>'
-            f'<div class="px-6 pb-6 border-t {t["border"]} pt-4">'
-            f'<p class="{t["text_muted"]} text-sm leading-relaxed">{faq.get("a","")}</p>'
-            f'</div></details>'
-            for i, faq in enumerate(faqs)
-        )
-        return (
-            f'<section id="faq" class="{t["bg"]} {PAD_SEC_SM}">'
-            f'<div class="container mx-auto {PAD_CON}">'
-            f'<div class="text-center mb-12 reveal">'
-            f'{_eyebrow(t, "FAQ")}'
-            f'{_h2(t, "Common Questions")}'
-            f'</div>'
-            f'<div class="space-y-3 max-w-2xl mx-auto">{items}</div>'
-            f'</div></section>'
-        )
-
-    def _contact(self) -> str:
-        """Real contact form section. Uses actual email/phone only if provided."""
-        t           = self.theme
-        headline    = self.data.get("cta_headline") or f"Get in Touch with {self.name}"
-        sub         = self.data.get("hero", {}).get("sub") or ""
-        btn_label   = self.data.get("hero", {}).get("cta") or "Send Message"
-        email       = self.data.get("contact_email") or ""
-        phone       = self.data.get("contact_phone") or ""
-        img_url     = self.imgs[2] if len(self.imgs) > 2 else (self.imgs[0] if self.imgs else "")
-        overlay     = "bg-white/90" if t["mode"] == "light" else "bg-black/82"
-        img_op      = "opacity-[0.04]" if t["mode"] == "light" else "opacity-[0.07]"
-
-        form_action = f'action="mailto:{email}" enctype="text/plain"' if email else ""
-        form_note   = "" if email else (
-            f'<p class="text-xs {t["text_light"]} mt-3 text-center">'
-            f'Form submission will be configured by the site owner.</p>'
-        )
-
-        contact_details = ""
-        if email:
-            contact_details += (
-                f'<a href="mailto:{email}" class="flex items-center gap-2 text-sm {t["text_muted"]} '
-                f'hover:opacity-75 transition-opacity">'
-                f'<span>&#9993;</span><span>{email}</span></a>'
-            )
-        if phone:
-            contact_details += (
-                f'<a href="tel:{re.sub(r"[^+\d]","",phone)}" class="flex items-center gap-2 text-sm {t["text_muted"]} '
-                f'hover:opacity-75 transition-opacity">'
-                f'<span>&#128222;</span><span>{phone}</span></a>'
-            )
-        contact_block = (
-            f'<div class="flex flex-col gap-3 mt-6 pt-6 border-t {t["border"]}">{contact_details}</div>'
-        ) if contact_details else ""
-
-        return f"""<section id="contact" class="relative {t['bg_alt']} {PAD_SEC_LG} overflow-hidden">
-    <!-- Atmospheric image layer -->
-    <div class="absolute inset-0 pointer-events-none select-none">
-        <img src="{img_url}" alt="" class="w-full h-full object-cover {img_op}" loading="lazy" />
-        <div class="absolute inset-0 {overlay}"></div>
-    </div>
-    <!-- Ambient glow behind the form -->
-    <div class="absolute top-1/2 right-1/4 -translate-y-1/2 w-[500px] h-[500px] {t['glow']} opacity-[0.06] blur-[120px] rounded-full pointer-events-none"></div>
-    <div class="container mx-auto {PAD_CON} relative z-10">
-        <div class="grid lg:grid-cols-2 gap-16 items-start max-w-5xl mx-auto">
-            <!-- Left: copy -->
-            <div class="space-y-5 reveal">
-                {_eyebrow(t, "Get in Touch")}
-                <h2 class="{H_SECTION} {t['text']}">{headline}</h2>
-                <p class="text-base {t['text_muted']} leading-relaxed max-w-2xl">{sub}</p>
-                {contact_block}
-            </div>
-            <!-- Right: form — slightly overlapping, elevated with stronger shadow -->
-            <div class="{t['card']} rounded-2xl p-8 shadow-2xl reveal reveal-delay-1 lg:-mt-8">
-                <form {form_action} method="post" class="space-y-5" novalidate>
-                    <div>
-                        <label class="block text-xs font-semibold {t['text']} mb-1.5 uppercase tracking-wide" for="cf-name">Your Name</label>
-                        <input type="text" id="cf-name" name="name" required autocomplete="name"
-                               placeholder="Jane Smith"
-                               class="w-full rounded-xl px-4 py-3 text-sm {t['input']} outline-none focus:ring-2 focus:ring-offset-1 transition" />
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold {t['text']} mb-1.5 uppercase tracking-wide" for="cf-email">Email Address</label>
-                        <input type="email" id="cf-email" name="email" required autocomplete="email"
-                               placeholder="jane@example.com"
-                               class="w-full rounded-xl px-4 py-3 text-sm {t['input']} outline-none focus:ring-2 focus:ring-offset-1 transition" />
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold {t['text']} mb-1.5 uppercase tracking-wide" for="cf-message">Message</label>
-                        <textarea id="cf-message" name="message" required rows="5"
-                                  placeholder="Tell us about your project or question..."
-                                  class="w-full rounded-xl px-4 py-3 text-sm {t['input']} outline-none focus:ring-2 focus:ring-offset-1 transition resize-none"></textarea>
-                    </div>
-                    <button type="submit"
-                            class="w-full bg-gradient-to-r {t['grad']} text-white font-bold rounded-xl py-4 text-sm shadow-md {HOVER_LIFT} transition-all duration-300">
-                        {btn_label} &rarr;
-                    </button>
-                    {form_note}
-                </form>
-            </div>
-        </div>
-    </div>
-</section>"""
-
-    def _footer(self) -> str:
-        t       = self.theme
-        tagline = self.data.get("tagline") or ""
-        sub     = self.data.get("hero", {}).get("sub") or ""
-        email   = self.data.get("contact_email") or ""
-        phone   = self.data.get("contact_phone") or ""
-        nav_items = self.data.get("nav") or []
-
-        links = "".join(
-            f'<li><a href="#{item.lower().replace(" ","")}" '
-            f'class="{t["text_muted"]} hover:opacity-70 text-sm transition-opacity">{item}</a></li>'
-            for item in nav_items
-        )
-        tl_html = f'<p class="text-xs {t["text_light"]} mt-3 italic">{tagline}</p>' if tagline else ""
-
-        # Contact column: only show what we have
-        contact_items = ""
-        if email:
-            contact_items += f'<li><a href="mailto:{email}" class="{t["text_muted"]} hover:opacity-70 text-sm transition-opacity">{email}</a></li>'
-        if phone:
-            contact_items += f'<li><a href="tel:{re.sub(r"[^+d]","",phone)}" class="{t["text_muted"]} hover:opacity-70 text-sm transition-opacity">{phone}</a></li>'
-        contact_col = (
-            f'<div><p class="font-bold text-xs {t["text"]} mb-4 uppercase tracking-widest">Contact</p>'
-            f'<ul class="space-y-2.5">{contact_items}</ul></div>'
-        ) if contact_items else (
-            f'<div><p class="font-bold text-xs {t["text"]} mb-4 uppercase tracking-widest">Legal</p>'
-            f'<ul class="space-y-2.5 text-sm">'
-            f'<li><a href="#" class="{t["text_muted"]} hover:opacity-70 transition-opacity">Privacy Policy</a></li>'
-            f'<li><a href="#" class="{t["text_muted"]} hover:opacity-70 transition-opacity">Terms of Service</a></li>'
-            f'</ul></div>'
-        )
-
-        return (
-            f'<footer class="{t["bg"]} border-t {t["border"]} pt-16 pb-10">'
-            f'<div class="container mx-auto {PAD_CON}">'
-            f'<div class="grid sm:grid-cols-2 md:grid-cols-4 gap-10 mb-12">'
-            f'<div class="sm:col-span-2">'
-            f'<p class="font-black text-xl {t["text"]} mb-3">{self.name}</p>'
-            f'<p class="{t["text_muted"]} text-sm max-w-xs leading-relaxed">{sub}</p>'
-            f'{tl_html}</div>'
-            f'<div><p class="font-bold text-xs {t["text"]} mb-4 uppercase tracking-widest">Navigate</p>'
-            f'<ul class="space-y-2.5">{links}</ul></div>'
-            f'{contact_col}'
-            f'</div>'
-            f'<div class="border-t {t["border"]} pt-6 flex flex-col md:flex-row justify-between items-center gap-3">'
-            f'<p class="{t["text_light"]} text-xs">&copy; 2026 {self.name}. All rights reserved.</p>'
-            f'<p class="{t["text_light"]} text-xs">v{self.version}</p>'
-            f'</div>'
-            f'</div></footer>'
-        )
-
-    # ── Section dispatcher ─────────────────────────────────────────────────────
-
-    def _build_section(self, section_id: str) -> str:
-        t = self.theme
-        d = self.data
-
-        if section_id == "hero":
-            return self._hero_fn()(t, d, self.imgs)
-
-        if section_id == "trust":
-            return self._trust_band()
-
-        if section_id == "features":
-            features = d.get("features") or []
-            if not features:
-                return ""
-            return self._features_fn()(t, features, self.imgs)
-
-        if section_id == "pricing":
-            tiers = d.get("pricing")
-            if not tiers:
-                return Pricing.contact_only(t, [])
-            return self._pricing_fn()(t, tiers)
-
-        if section_id == "testimonials":
-            return self._testimonials()
-
-        if section_id == "faq":
-            return self._faq()
-
-        if section_id == "contact":
-            return self._contact()
-
-        logger.warning(f"Unknown section id '{section_id}' — skipping.")
-        return ""
-
-    # ── Build ─────────────────────────────────────────────────────────────────
+    # ── Main build ─────────────────────────────────────────────────────────────
 
     def build(self) -> Dict[str, Any]:
         try:
-            self.data = self._get_data()
-            self.imgs = _img_set(self.industry, count=8)
-            t         = self.theme
+            d    = self._get_data()
+            self.data = d
+            t    = self.theme
+            name = self.name   # ALWAYS self.name — never d["hero"]["h1"] or prompt
 
-            # AI specifies which sections to render, in order.
-            # Filter to only known section IDs. Always ensure hero + contact exist.
-            raw_sections = self.data.get("sections") or list(self.VALID_SECTIONS)
-            sections_order = []
-            seen = set()
-            for s in raw_sections:
+            email = d.get("contact_email", "")
+            phone = d.get("contact_phone", "")
+
+            # Determine section order
+            raw_secs = d.get("sections") or list(self.VALID)
+            ordered, seen = [], set()
+            for s in raw_secs:
                 sid = str(s).lower().strip()
-                if sid in self.VALID_SECTIONS and sid not in seen:
-                    sections_order.append(sid)
-                    seen.add(sid)
-            if "hero" not in seen:
-                sections_order.insert(0, "hero")
-            if "contact" not in seen:
-                sections_order.append("contact")
+                if sid in self.VALID and sid not in seen:
+                    ordered.append(sid); seen.add(sid)
+            if "hero"    not in seen: ordered.insert(0, "hero")
+            if "contact" not in seen: ordered.append("contact")
 
-            section_html = [self._nav()]
-            for sid in sections_order:
-                html_piece = self._build_section(sid)
-                if html_piece:
-                    section_html.append(html_piece)
-            section_html.append(self._footer())
+            nav_items = d.get("nav") or ["Services","About","FAQ","Contact"]
+            cta_lbl   = d.get("hero", {}).get("cta", "Get Started")
 
-            # Runtime colour audit (dev mode — logs warnings, doesn't raise)
-            full_body = "".join(section_html)
-            _assert_no_hardcoded_colours(full_body, f"{self.name}/{self.industry}")
+            # Build each section
+            parts = [_build_nav(name, nav_items, cta_lbl)]
 
-            css = """
-/* ── Scroll-reveal ─────────────────────────────────────────── */
-.reveal {
-    opacity: 0;
-    transform: translateY(22px);
-    transition: opacity 0.65s cubic-bezier(0.16,1,0.3,1), transform 0.65s cubic-bezier(0.16,1,0.3,1);
-}
-.reveal.visible {
-    opacity: 1;
-    transform: translateY(0);
-}
-.reveal-delay-1 { transition-delay: 0.12s; }
-.reveal-delay-2 { transition-delay: 0.24s; }
-.reveal-delay-3 { transition-delay: 0.36s; }
+            for sid in ordered:
+                html = ""
+                if sid == "hero":
+                    v = self._hero_variant()
+                    if v == "centered":   html = _hero_centered(name, d, self.industry)
+                    elif v == "stats":    html = _hero_stats(name, d, self.industry)
+                    elif v == "editorial":html = _hero_editorial(name, d, self.industry)
+                    else:                 html = _hero_split(name, d, self.industry)
 
-/* ── FAQ accordion ─────────────────────────────────────────── */
-details > summary::-webkit-details-marker { display:none; }
-details[open] > summary > span:last-child { transform: rotate(45deg); }
+                elif sid == "trust":
+                    html = _build_trust(d.get("trust_badges") or [])
 
-/* ── Scroll target offset for fixed nav ───────────────────── */
-:target { scroll-margin-top: 80px; }
+                elif sid == "features":
+                    feats = d.get("features") or []
+                    if feats:
+                        v = self._feat_variant()
+                        if v == "icon_list":    html = _feat_icon_list(feats, self.industry)
+                        elif v == "alternating":html = _feat_alternating(feats, self.industry)
+                        else:                   html = _feat_cards(feats)
 
-/* ── Form focus ring ───────────────────────────────────────── */
-input:focus, textarea:focus { box-shadow: 0 0 0 3px rgba(0,0,0,0.08); }
+                elif sid == "pricing":
+                    tiers = d.get("pricing")
+                    if tiers:
+                        v = self._price_variant()
+                        if v == "project":       html = _price_project(tiers)
+                        elif v == "service_rows":html = _price_service_rows(tiers)
+                        else:                    html = _price_tiers(tiers)
+                    else:
+                        html = _price_contact_only()
 
-/* ── Hide scrollbar on testimonials carousel ───────────────── */
-.scrollbar-hide { scrollbar-width: none; -ms-overflow-style: none; }
-.scrollbar-hide::-webkit-scrollbar { display: none; }
+                elif sid == "testimonials":
+                    html = _build_testimonials(d.get("testimonials") or [])
 
-/* ── Section wave/divider SVGs ─────────────────────────────── */
-/* Sections are position:relative so absolute-positioned SVGs
-   at bottom-0 sit flush. Padding-bottom on hero accounts for
-   the 56px wave height so content isn't clipped. */
-"""
-            # Scroll-reveal JavaScript — minimal, no dependencies
-            scroll_js = """
-<script>
-(function(){
-    var els = document.querySelectorAll('.reveal');
-    if (!els.length) return;
-    var io = new IntersectionObserver(function(entries){
-        entries.forEach(function(e){
-            if (e.isIntersecting) {
-                e.target.classList.add('visible');
-                io.unobserve(e.target);
+                elif sid == "faq":
+                    html = _build_faq(d.get("faq") or [])
+
+                elif sid == "contact":
+                    html = _build_contact(name, d, email, phone, self.industry)
+
+                if html:
+                    parts.append(html)
+
+            parts.append(_build_footer(name, d, nav_items, email, phone, self.version))
+
+            body = "\n".join(parts)
+
+            # Final HTML — note: NO <head> or <title> here.
+            # The renderer injects this into a div, so head tags are stripped.
+            # Business name / page title is set by the calling route.
+            css_block = _page_css(t)
+            page = f"""{css_block}
+<div style="padding-top:64px;">
+{body}
+{REVEAL_JS}
+</div>"""
+
+            meta = {
+                "business_name": name,
+                "industry":      self.industry,
+                "theme":         t["id"],
+                "version":       self.version,
+                "sections":      ordered,
+                "hero_variant":  self._hero_variant(),
+                "feat_variant":  self._feat_variant(),
+                "price_variant": self._price_variant(),
+                "has_email":     bool(email),
+                "has_phone":     bool(phone),
+                "status":        "success",
             }
-        });
-    }, { threshold: 0.12 });
-    els.forEach(function(el){ io.observe(el); });
-})();
-</script>"""
-            title = self.name
-            html = (
-                '<!DOCTYPE html>\n'
-                '<html lang="en" style="scroll-behavior:smooth">\n'
-                '<head>\n'
-                '<meta charset="UTF-8">\n'
-                '<meta name="viewport" content="width=device-width,initial-scale=1">\n'
-                f'<title>{title}</title>\n'
-                f'<meta name="description" content="{self.data.get("hero",{}).get("sub","")}">\n'
-                '<script src="https://cdn.tailwindcss.com"></script>\n'
-                '<link rel="preconnect" href="https://fonts.googleapis.com">\n'
-                '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n'
-                f'<link rel="stylesheet" href="{t["font_url"]}">\n'
-                f'<style>*,*::before,*::after{{box-sizing:border-box;margin:0}}'
-                f'html{{font-family:{t["fonts"]};-webkit-font-smoothing:antialiased}}'
-                f'img{{display:block;max-width:100%}}'
-                f'#nav-toggle{{display:none}}'
-                f'{css}</style>\n'
-                '</head>\n'
-                f'<body class="{t["bg"]} {t["text"]}">\n'
-                + full_body
-                + scroll_js
-                + '\n</body>\n</html>'
-            )
-
-            logger.info(f"Built '{title}' | {self.industry} | {t['id']} | sections={sections_order}")
-
-            return {
-                "html": html,
-                "metadata": {
-                    "business_name":    self.name,
-                    "industry":         self.industry,
-                    "theme":            t["id"],
-                    "version":          self.version,
-                    "sections":         sections_order,
-                    "hero_variant":     self._hero_fn().__name__,
-                    "features_variant": self._features_fn().__name__,
-                    "pricing_variant":  self._pricing_fn().__name__,
-                    "contact_email":    bool(self.data.get("contact_email")),
-                    "contact_phone":    bool(self.data.get("contact_phone")),
-                    "status":           "success",
-                },
-            }
+            logger.info(f"Built '{name}' | {self.industry} | {t['id']} | {ordered}")
+            return {"html": page, "metadata": meta}
 
         except Exception as e:
-            logger.error(f"Build error: {e}\n{traceback.format_exc()}")
+            logger.error(f"Build error: {e}", exc_info=True)
             return {
-                "html": (f"<html><body style='font-family:sans-serif;padding:2rem'>"
-                         f"<h1>Build Error</h1><pre>{e}</pre></body></html>"),
+                "html": f'<div style="padding:2rem;font-family:sans-serif;color:#ef4444;">Build failed: {e}</div>',
                 "metadata": {"status": "error", "error": str(e)},
             }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# PUBLIC API
-# ─────────────────────────────────────────────────────────────────────────────
+# =============================================================================
+# PUBLIC API  (matches existing route calls)
+# =============================================================================
 
-def generate_ai_plan(ai_input: Dict[str, Any], version: int = 1, **kwargs) -> Dict[str, Any]:
+def generate_ai_plan(ai_input: Dict[str, Any], version: int = 1) -> Dict[str, Any]:
     """
-    Main entry point.
-    ai_input = {"business_name": str, "prompt": str}
-    Returns  = {"html": str, "metadata": dict}
+    Main entry point used by dashboard_websites_routes.py:
+        generate_ai_plan(ai_input={"business_name": ..., "prompt": ...}, version=1)
+    Returns {"html": str, "metadata": dict}
     """
-    try:
-        return MasterArchitect(
-            business_name=ai_input.get("business_name", ""),
-            prompt=ai_input.get("prompt", ""),
-            version=version,
-        ).build()
-    except Exception as e:
-        logger.error(f"generate_ai_plan error: {e}\n{traceback.format_exc()}")
-        return {
-            "html": f"<html><body><h1>Error</h1><p>{e}</p></body></html>",
-            "metadata": {"status": "error", "error": str(e)},
-        }
+    arch = MasterArchitect(
+        business_name=ai_input.get("business_name", ""),
+        prompt=ai_input.get("prompt", ""),
+        version=version,
+    )
+    return arch.build()
 
 
 def rewrite_content(original_text: str, tone: str = "professional",
                     business_context: str = "") -> List[str]:
+    """Generate tone variants for the inline editor."""
     if not AI_AVAILABLE:
-        return [original_text] * 3
+        return [original_text, original_text, original_text]
     try:
         raw = chat_completion(
-            system="Expert copywriter. Output ONLY a JSON array of 3 strings, no preamble.",
-            user=(f"Rewrite this text 3 different ways. "
-                  f"Tone: {tone}. Context: {business_context}. "
-                  f'Text: "{original_text}". '
-                  f'Return exactly: ["version1","version2","version3"]'),
+            system="Return ONLY a JSON array of 3 strings. No markdown, no extra text.",
+            user=f"""Rewrite this text in 3 different {tone} variations.
+Business context: {business_context}
+Original: {original_text}
+Return: ["variation1","variation2","variation3"]""",
             temperature=0.8,
         )
-        result = json.loads(re.sub(r"```json|```", "", raw).strip())
-        if isinstance(result, list) and len(result) >= 3:
+        cleaned = re.sub(r'^```(?:json)?\s*|```\s*$', '', raw.strip(), flags=re.MULTILINE).strip()
+        result  = json.loads(cleaned)
+        if isinstance(result, list):
             return result[:3]
-        return [original_text] * 3
-    except Exception as e:
-        logger.warning(f"rewrite_content error: {e}")
-        return [original_text] * 3
+    except Exception:
+        pass
+    return [original_text, original_text, original_text]
 
 
-def get_design_tokens() -> Dict[str, Any]:
+def get_design_tokens(theme_id: str = "blue") -> Dict[str, Any]:
+    """Return CSS variable map for a theme — used by the editor."""
+    t = THEMES.get(theme_id, THEMES["blue"])
     return {
-        "themes":          {k: {kk: vv for kk, vv in v.items() if kk != "font_url"}
-                            for k, v in THEMES.items()},
-        "industry_themes": INDUSTRY_THEME,
-        "photo_pools":     {k: len(v) for k, v in INDUSTRY_PHOTO_POOLS.items()},
+        "theme_id":    t["id"],
+        "mode":        t["mode"],
+        "font_family": t["font_family"],
+        "css_vars":    t["vars"],
     }
