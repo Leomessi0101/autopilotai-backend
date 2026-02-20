@@ -288,6 +288,7 @@ INDUSTRY_THEME: Dict[str, str] = {
     "luxury":       "noir",
     "beauty":       "rose",
     "ecommerce":    "ocean",
+    "cleaning":     "forest",
 }
 
 # =============================================================================
@@ -295,43 +296,83 @@ INDUSTRY_THEME: Dict[str, str] = {
 # =============================================================================
 
 INDUSTRY_KEYWORDS: Dict[str, List[str]] = {
-    "saas":         ["software", "app", "platform", "cloud", "api", "saas", "dashboard", "workflow", "automation", "crm", "subscription"],
-    "ai":           ["ai", "artificial intelligence", "machine learning", "ml", "neural", "llm", "gpt", "data science", "model"],
-    "developer":    ["developer", "engineer", "code", "open source", "github", "devtools", "ide", "terminal", "cli", "programming"],
+    # Cleaning gets top priority — very specific keywords so it never misdetects
+    "cleaning":     ["cleaning", "cleaner", "clean", "maid", "housekeeping", "janitor", "janitorial",
+                     "spotless", "scrub", "vacuum", "dust", "mop", "sanitize", "disinfect",
+                     "tidy", "sweep", "laundry", "windows cleaning", "deep clean", "spring clean",
+                     "move out clean", "move in clean", "office cleaning", "commercial cleaning"],
+    "construction": ["construction", "contractor", "builder", "renovation", "remodel", "plumbing",
+                     "electrical", "roofing", "flooring", "masonry", "carpentry", "landscaping",
+                     "painting", "hvac", "handyman", "concrete", "drywall", "framing", "tiling",
+                     "deck", "fence", "waterproofing", "insulation", "general contractor"],
+    "restaurant":   ["restaurant", "food", "cafe", "bakery", "catering", "cuisine", "dining",
+                     "menu", "chef", "bar", "bistro", "eatery", "takeout", "delivery food",
+                     "coffee shop", "pizzeria", "sushi", "burger", "taco", "brunch", "kitchen"],
+    "health":       ["health", "medical", "wellness", "clinic", "doctor", "hospital", "therapy",
+                     "nutrition", "physio", "chiropractic", "dentist", "mental health", "counseling",
+                     "psychology", "psychiatry", "optometry", "dermatology", "pediatric"],
+    "fitness":      ["fitness", "gym", "personal trainer", "workout", "yoga", "crossfit",
+                     "athletics", "exercise", "pilates", "bootcamp", "martial arts", "boxing",
+                     "swimming", "running", "cycling", "weight loss", "strength training"],
+    "beauty":       ["beauty", "salon", "spa", "skincare", "cosmetic", "makeup", "aesthetics",
+                     "bridal", "hair", "nail", "waxing", "lash", "brow", "facial", "massage",
+                     "manicure", "pedicure", "barbershop", "tanning", "tattoo"],
+    "saas":         ["software", "app", "platform", "cloud", "api", "saas", "dashboard",
+                     "workflow", "automation", "crm", "subscription", "b2b software", "tool"],
+    "ai":           ["artificial intelligence", "machine learning", "neural", "llm", "gpt",
+                     "data science", "deep learning", "computer vision", "nlp", "ai model"],
+    "developer":    ["developer", "engineer", "code", "open source", "github", "devtools",
+                     "ide", "terminal", "cli", "programming", "web development", "mobile app"],
     "startup":      ["startup", "founder", "seed", "venture", "mvp", "launch", "pitch", "scale"],
-    "finance":      ["finance", "banking", "investment", "crypto", "payment", "fintech", "trading", "insurance", "wealth", "accounting", "tax", "advisor"],
-    "legal":        ["law", "lawyer", "attorney", "legal", "firm", "counsel", "litigation", "contract", "court", "compliance"],
-    "real_estate":  ["real estate", "property", "realty", "housing", "apartment", "mortgage", "agent", "broker"],
-    "logistics":    ["logistics", "shipping", "freight", "delivery", "supply chain", "warehouse", "trucking", "transport", "courier"],
-    "construction": ["construction", "contractor", "builder", "renovation", "remodel", "plumbing", "electrical", "roofing", "flooring", "masonry", "carpentry", "landscaping", "painting", "hvac", "handyman", "concrete", "drywall"],
-    "automotive":   ["auto", "car", "vehicle", "mechanic", "garage", "dealership", "repair", "tire", "bodywork", "detailing"],
-    "restaurant":   ["restaurant", "food", "cafe", "bakery", "catering", "cuisine", "dining", "menu", "chef", "bar", "bistro", "eatery", "takeout"],
-    "events":       ["event", "wedding", "conference", "venue", "entertainment", "party", "corporate event", "photography", "videography"],
-    "travel":       ["travel", "hotel", "tour", "booking", "vacation", "resort", "hospitality", "airbnb"],
-    "health":       ["health", "medical", "wellness", "clinic", "doctor", "hospital", "therapy", "nutrition", "physio", "chiropractic", "dentist"],
-    "fitness":      ["fitness", "gym", "personal trainer", "workout", "yoga", "crossfit", "athletics", "exercise", "pilates", "bootcamp"],
-    "nature":       ["organic", "eco", "sustainable", "farm", "agriculture", "environment", "garden", "zero waste", "green"],
-    "nonprofit":    ["nonprofit", "charity", "foundation", "ngo", "volunteer", "donation", "cause", "community"],
-    "education":    ["education", "course", "learn", "training", "school", "university", "tutoring", "edtech", "bootcamp", "coaching"],
-    "agency":       ["agency", "design", "creative", "marketing", "brand", "advertising", "studio", "media", "social media"],
-    "luxury":       ["luxury", "high-end", "exclusive", "bespoke", "couture", "prestige", "elite", "premium"],
-    "beauty":       ["beauty", "salon", "spa", "skincare", "cosmetic", "makeup", "aesthetics", "bridal", "hair", "nail", "waxing", "lash"],
-    "ecommerce":    ["shop", "store", "ecommerce", "e-commerce", "sell", "product", "cart", "marketplace", "retail"],
+    "finance":      ["finance", "banking", "investment", "crypto", "payment", "fintech",
+                     "trading", "insurance", "wealth", "accounting", "tax", "advisor", "bookkeeping"],
+    "legal":        ["law", "lawyer", "attorney", "legal", "firm", "counsel", "litigation",
+                     "contract", "court", "compliance", "notary", "paralegal"],
+    "real_estate":  ["real estate", "property", "realty", "housing", "apartment", "mortgage",
+                     "agent", "broker", "home buying", "home selling", "rental"],
+    "logistics":    ["logistics", "shipping", "freight", "delivery", "supply chain", "warehouse",
+                     "trucking", "transport", "courier", "moving company", "relocation"],
+    "automotive":   ["auto", "car", "vehicle", "mechanic", "garage", "dealership", "repair",
+                     "tire", "bodywork", "detailing", "oil change", "transmission", "brake"],
+    "events":       ["event", "wedding", "conference", "venue", "entertainment", "party",
+                     "corporate event", "photography", "videography", "dj", "florist", "catering"],
+    "travel":       ["travel", "hotel", "tour", "booking", "vacation", "resort", "hospitality",
+                     "airbnb", "bed and breakfast", "tourism", "cruise"],
+    "nature":       ["organic", "eco", "sustainable", "farm", "agriculture", "environment",
+                     "garden", "zero waste", "green energy", "solar", "recycling"],
+    "nonprofit":    ["nonprofit", "charity", "foundation", "ngo", "volunteer", "donation",
+                     "cause", "community", "social impact", "humanitarian"],
+    "education":    ["education", "course", "learn", "training", "school", "university",
+                     "tutoring", "edtech", "bootcamp", "coaching", "mentoring", "workshop"],
+    "agency":       ["agency", "design", "creative", "marketing", "brand", "advertising",
+                     "studio", "media", "social media", "seo", "pr agency", "copywriting"],
+    "luxury":       ["luxury", "high-end", "exclusive", "bespoke", "couture", "prestige",
+                     "elite", "premium", "concierge", "vip"],
+    "ecommerce":    ["shop", "store", "ecommerce", "e-commerce", "sell", "product", "cart",
+                     "marketplace", "retail", "dropshipping", "merch"],
 }
 
 def detect_industry(text: str) -> str:
     tl = (text or "").lower()
     scores: Dict[str, int] = {}
     for ind, kws in INDUSTRY_KEYWORDS.items():
-        scores[ind] = sum(len(kw.split()) for kw in kws if kw in tl)
+        score = 0
+        for kw in kws:
+            if kw in tl:
+                # Multi-word keywords score higher — "deep clean" beats "clean"
+                score += len(kw.split()) * 2
+        scores[ind] = score
     best = max(scores, key=lambda k: scores[k])
-    return best if scores[best] > 0 else "saas"
+    # Only use detected industry if score is meaningful
+    return best if scores[best] > 0 else "construction"  # Default to something generic, not AI
 
 # =============================================================================
 # UNSPLASH PHOTO POOLS — curated per industry
 # =============================================================================
 
 INDUSTRY_PHOTOS: Dict[str, List[str]] = {
+    "cleaning":     ["photo-1581578731548-c64695cc6952","photo-1558618666-fcd25c85cd64","photo-1527515545081-5db817172677",
+                     "photo-1584820927498-cfe5211fd8bf","photo-1563453392212-326f5e854473","photo-1628177142898-93e36e4e3a50"],
     "construction": ["photo-1504307651254-35680f356dfd","photo-1541888946425-d81bb19240f5","photo-1590674899484-d5640e854abe","photo-1565117623394-5f93fd4c7a06","photo-1530836176759-510f6ca9f76f"],
     "legal":        ["photo-1589578527966-fdac0f44566c","photo-1505664194779-8beaceb5c7c7","photo-1521791055366-0d553872952f","photo-1450101499163-c8848c66ca85"],
     "logistics":    ["photo-1504493188-45c49f65c6ba","photo-1586528116311-ad8dd3c8310d","photo-1601584115197-04ecc0da31d7","photo-1494412574643-ff11b0a5c1c3"],
@@ -1242,21 +1283,27 @@ def _build_ai_prompt(name: str, prompt: str, industry: str) -> str:
     boilerplate like 'We empower businesses' or irrelevant pricing tiers.
     """
 
+    # Check if user explicitly says pricing is quote/visit-based — force null
+    prompt_lower = prompt.lower()
+    user_wants_no_price = any(phrase in prompt_lower for phrase in [
+        "price after", "prices after", "pricing after", "quote after",
+        "decided after", "based on visit", "after visit", "after assessment",
+        "free quote", "free estimate", "custom quote", "contact for price",
+        "price on request", "call for price", "varies", "depends on",
+        "per job", "by quote", "get a quote",
+    ])
+
     # Industry-specific pricing guidance
     no_price_industries   = {"restaurant", "beauty", "fitness", "travel", "nature", "events", "luxury", "agency"}
-    project_industries    = {"construction", "logistics", "automotive", "events"}
+    project_industries    = {"construction", "logistics", "automotive", "events", "cleaning"}
     service_industries    = {"legal", "nonprofit", "health", "real_estate"}
 
-    if industry in no_price_industries:
+    if user_wants_no_price or industry in no_price_industries or industry in project_industries:
         pricing_schema = '"pricing": null'
-        pricing_note   = "pricing MUST be null — this industry never lists prices on a landing page."
-    elif industry in project_industries:
-        pricing_schema = '''"pricing": [
-    {"name": "Small/Residential", "price": "From $X,XXX", "description": "Scope description.", "features": ["item","item","item","item","item"], "featured": false},
-    {"name": "Mid/Commercial", "price": "From $XX,XXX", "description": "Scope description.", "features": ["item","item","item","item","item"], "featured": true},
-    {"name": "Large/Emergency", "price": "Custom Quote", "description": "Scope description.", "features": ["item","item","item","item","item"], "featured": false}
-  ]'''
-        pricing_note   = f"Use realistic price ranges for a real {industry} business. Replace $X with real figures."
+        pricing_note   = (
+            "pricing MUST be null — either the user said prices are determined after a visit/assessment, "
+            "or this industry does not list prices on landing pages. Do NOT invent any prices whatsoever."
+        )
     elif industry in service_industries:
         pricing_schema = '''"pricing": [
     {"name": "Consultation", "price": "Complimentary", "description": "Initial meeting.", "features": ["item","item","item","item","item"], "featured": false},
