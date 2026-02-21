@@ -367,41 +367,50 @@ def detect_industry(text: str) -> str:
     return best if scores[best] > 0 else "construction"  # Default to something generic, not AI
 
 # =============================================================================
-# UNSPLASH PHOTO POOLS — curated per industry
+# PHOTO SYSTEM — dynamic search queries per industry
+# Uses Unsplash Source API which resolves keywords to real matching photos.
+# This is far more reliable than hardcoded IDs which can become irrelevant.
 # =============================================================================
 
-INDUSTRY_PHOTOS: Dict[str, List[str]] = {
-    "cleaning":     ["photo-1581578731548-c64695cc6952","photo-1558618666-fcd25c85cd64","photo-1527515545081-5db817172677",
-                     "photo-1584820927498-cfe5211fd8bf","photo-1563453392212-326f5e854473","photo-1628177142898-93e36e4e3a50"],
-    "construction": ["photo-1504307651254-35680f356dfd","photo-1541888946425-d81bb19240f5","photo-1590674899484-d5640e854abe","photo-1565117623394-5f93fd4c7a06","photo-1530836176759-510f6ca9f76f"],
-    "legal":        ["photo-1589578527966-fdac0f44566c","photo-1505664194779-8beaceb5c7c7","photo-1521791055366-0d553872952f","photo-1450101499163-c8848c66ca85"],
-    "logistics":    ["photo-1504493188-45c49f65c6ba","photo-1586528116311-ad8dd3c8310d","photo-1601584115197-04ecc0da31d7","photo-1494412574643-ff11b0a5c1c3"],
-    "automotive":   ["photo-1492144534655-ae79c964c9d7","photo-1503376780353-7e6692767b70","photo-1544636331-e26879cd4d9b","photo-1549317661-bd32c8ce0db2"],
-    "restaurant":   ["photo-1414235077428-338989a2e8c0","photo-1555396273-367ea4eb4db5","photo-1517248135467-4c7edcad34c4","photo-1504674900247-0877df9cc836","photo-1467003909585-2f8a72700288"],
-    "health":       ["photo-1576091160550-2173dba999ef","photo-1559757148-5c350d0d3c56","photo-1571772996211-2f02c9727629","photo-1631217868264-e5b90bb7e133"],
-    "fitness":      ["photo-1534438327276-14e5300c3a48","photo-1571019613454-1cb2f99b2d8b","photo-1549060279-7e168fcee0c2","photo-1526506118085-60ce8714f8c5"],
-    "beauty":       ["photo-1487412947147-5cebf100ffc2","photo-1560066984-138dadb4c035","photo-1522337360788-8b13dee7a37e","photo-1571019613576-2b22c76fd955"],
-    "finance":      ["photo-1611974789855-9c2a0a7236a3","photo-1468254095679-bbcba94a7066","photo-1454165804606-c3d57bc86b40","photo-1460925895917-afdab827c52f"],
-    "real_estate":  ["photo-1560518883-ce09059eeffa","photo-1570129477492-45c003edd2be","photo-1501183638710-841dd1904471","photo-1486325212027-8081e485255e"],
-    "education":    ["photo-1503676260728-1c00da094a0b","photo-1456513080510-7bf3a84b82f8","photo-1522202176988-66273c2fd55f","photo-1434030216411-0b793f4b4173"],
-    "travel":       ["photo-1501854140801-50d01698950b","photo-1476514525535-07fb3b4ae5f1","photo-1530521954074-e64f6810b32d","photo-1488085061387-422e29b40080"],
-    "ecommerce":    ["photo-1556742049-0cfed4f6a45d","photo-1472851294608-062f824d29cc","photo-1523275335684-37898b6baf30","photo-1526170375885-4d8ecf77b99f"],
-    "saas":         ["photo-1518770660439-4636190af475","photo-1461749280684-dccba630e2f6","photo-1551434678-e076c223a692","photo-1497366216548-37526070297c"],
-    "ai":           ["photo-1677442135703-1787eea5ce01","photo-1620712943543-bcc4688e7485","photo-1535378917042-10a22c95931a","photo-1593508512255-86ab42a8e620"],
-    "developer":    ["photo-1461749280684-dccba630e2f6","photo-1498050108023-c5249f4df085","photo-1555066931-4365d14bab8c","photo-1607799279861-4dd421887fb3"],
-    "agency":       ["photo-1558655146-9f40138edfeb","photo-1524758631624-e2822e304c36","photo-1497366754035-f200968a6e72","photo-1542744173-8e7e53415bb0"],
-    "nature":       ["photo-1441974231531-c6227db76b6e","photo-1469474968028-56623f02e42e","photo-1518173946687-a4c8892bbd9f","photo-1540979388789-6cee28a1cdc9"],
-    "events":       ["photo-1540575467063-178a50c2df87","photo-1511795409834-ef04bbd61622","photo-1464366400600-7168b8af9bc3","photo-1519167758481-83f550bb49b3"],
-    "nonprofit":    ["photo-1593113630400-ea4288922559","photo-1532629345422-7515f3d16bb6","photo-1491438590914-bc09fcaaf77a","photo-1488521787991-ed7bbaae773c"],
-    "fitness_alt":  ["photo-1517836357463-d25dfeac3438","photo-1574680178050-55c6a6a96e0a"],
-    "luxury":       ["photo-1519501025264-65ba15a82390","photo-1549298916-b41d501d3772","photo-1441984904996-e0b6ba687e04"],
+# Each industry has a list of search queries, one per "slot" (hero, feature1, feature2, contact).
+# Queries go from most general (hero) to more specific (detail shots).
+INDUSTRY_PHOTO_QUERIES: Dict[str, List[str]] = {
+    "cleaning":     ["professional house cleaning service","cleaner wiping kitchen surface","clean bright apartment","cleaning supplies organized"],
+    "construction": ["construction workers building site","contractor renovation project","home renovation interior","construction tools professional"],
+    "restaurant":   ["restaurant dining interior elegant","chef cooking professional kitchen","food plating fine dining","restaurant atmosphere warm lighting"],
+    "health":       ["modern medical clinic interior","doctor patient consultation","healthcare professional office","medical wellness center"],
+    "fitness":      ["modern gym fitness center","personal trainer workout session","fitness class exercise studio","gym equipment professional"],
+    "beauty":       ["luxury beauty salon interior","skincare spa treatment","hair salon professional styling","beauty treatment relaxing spa"],
+    "legal":        ["professional law office interior","lawyer desk suit professional","legal documents office","conference room corporate"],
+    "finance":      ["modern financial office city","professional business meeting","finance charts analytics","corporate office building"],
+    "real_estate":  ["luxury modern home exterior","bright modern living room interior","real estate agent showing home","beautiful kitchen renovation"],
+    "construction_trades": ["electrician professional working","plumber fixing pipes home","contractor handyman tools","trade professional uniform"],
+    "automotive":   ["auto mechanic garage professional","car engine repair shop","clean modern car dealership","automotive workshop tools"],
+    "logistics":    ["logistics warehouse professional","delivery truck shipping","supply chain warehouse interior","courier service professional"],
+    "events":       ["elegant event venue setup","wedding reception decoration","corporate event conference","event planning decoration flowers"],
+    "travel":       ["luxury hotel lobby interior","travel destination landscape","resort swimming pool sunset","travel adventure scenic view"],
+    "education":    ["modern classroom learning environment","university library students","online learning laptop education","teacher classroom professional"],
+    "agency":       ["creative agency office modern","design team working collaboration","marketing brainstorm meeting","creative studio workspace"],
+    "saas":         ["modern tech office workspace","software developer laptop coding","dashboard analytics screen","tech startup office team"],
+    "ai":           ["artificial intelligence data center","tech innovation abstract digital","machine learning research lab","futuristic technology concept"],
+    "developer":    ["programmer coding dual monitors","software development workspace","tech developer laptop coffee","code screen dark theme"],
+    "startup":      ["startup office modern coworking","entrepreneur team meeting whiteboard","modern business launch team","startup founders working"],
+    "ecommerce":    ["online shopping product photography","e-commerce warehouse fulfillment","retail product display modern","online store product packaging"],
+    "nature":       ["organic farm sustainable agriculture","eco friendly green products","sustainable nature environment","organic garden fresh produce"],
+    "nonprofit":    ["community volunteers helping together","charity donation event people","nonprofit team working community","social impact volunteer work"],
+    "luxury":       ["luxury penthouse interior design","high-end fashion boutique elegant","premium lifestyle product photography","luxury hotel suite interior"],
+    "events_wedding": ["elegant wedding venue flowers","wedding ceremony decoration beautiful","wedding reception elegant table","bridal preparation morning light"],
 }
-_DEFAULT_PHOTOS = ["photo-1552664730-d307ca884978","photo-1497366216548-37526070297c","photo-1460925895917-afdab827c52f"]
+
+_DEFAULT_QUERIES = ["professional business office modern","team working collaboration","business service professional","modern workspace clean"]
 
 def _photo(industry: str, idx: int, w: int = 1200) -> str:
-    pool = INDUSTRY_PHOTOS.get(industry, _DEFAULT_PHOTOS)
-    pid  = pool[idx % len(pool)]
-    return f"https://images.unsplash.com/{pid}?w={w}&auto=format&fit=crop&q=80"
+    """Return a photo URL using Unsplash's source API with a descriptive search query."""
+    queries = INDUSTRY_PHOTO_QUERIES.get(industry, _DEFAULT_QUERIES)
+    query   = queries[idx % len(queries)]
+    # URL-encode the query
+    encoded = query.replace(" ", ",")
+    return f"https://source.unsplash.com/featured/{w}x{int(w*0.67)}/?{encoded}"
 
 # =============================================================================
 # CSS ENGINE — generates the complete stylesheet from theme tokens
@@ -972,9 +981,133 @@ def _trust_band(badges: List[str]) -> str:
   </div>
 </div>"""
 
-# =============================================================================
-# FEATURES — 3 variants
-# =============================================================================
+def _hero_minimal(name: str, d: Dict, ind: str) -> str:
+    """Typography-first minimal hero — no image, pure text with accent line. Clean services, consulting."""
+    h     = d.get("hero", {})
+    stats = d.get("stats") or []
+    stat_html = ""
+    if stats:
+        items = "".join(
+            f'<div class="rv d{min(i+1,4)}">'
+            f'<div class="stat-num">{s.get("value","")}</div>'
+            f'<div class="stat-label">{s.get("label","")}</div></div>'
+            for i, s in enumerate(stats[:4])
+        )
+        stat_html = f'<div class="g4 mt6" style="padding-top:2.5rem;border-top:1px solid var(--border);">{items}</div>'
+
+    return f"""<section class="sec-hero" style="padding-top:6rem;padding-bottom:4rem;min-height:70vh;display:flex;align-items:center;">
+  <div class="blob" style="width:700px;height:400px;top:10%;left:-10%;opacity:0.5;"></div>
+  <div class="wrap z1">
+    <div style="max-width:700px;" class="rv">
+      <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1.5rem;">
+        <div style="width:40px;height:3px;background:var(--accent);border-radius:2px;"></div>
+        <span style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.2em;color:var(--accent);">{d.get("tagline","")}</span>
+      </div>
+      <h1 class="h-display">{h.get("h1", f"Welcome to {name}")}</h1>
+      <p class="body-lg mt4" style="max-width:520px;">{h.get("sub","")}</p>
+      <div class="btn-row mt5">
+        {_btn(h.get("cta","Get Started"), "#contact")}
+        {_btn("See our work →", "#features", "outline")}
+      </div>
+    </div>
+    {stat_html}
+  </div>
+</section>"""
+
+
+def _hero_image_left(name: str, d: Dict, ind: str) -> str:
+    """Image on left, text on right — reversal of split for variety."""
+    h     = d.get("hero", {})
+    img   = _photo(ind, 0, 1100)
+    proof = d.get("social_proof") or {}
+
+    proof_html = ""
+    if proof.get("count") and proof.get("label"):
+        proof_html = f'<div class="flex ai-c gap3 mt4" style="padding-top:1.25rem;border-top:1px solid var(--border);"><span class="body-sm"><strong style="color:var(--accent)">{proof["count"]}</strong> {proof["label"]}</span></div>'
+
+    return f"""<section class="sec-hero" style="padding-top:5.5rem;overflow:hidden;">
+  <div class="blob" style="width:500px;height:500px;top:-10%;left:-8%;opacity:0.6;"></div>
+  <div class="wrap z1">
+    <div class="g2 ai gap-xl">
+      <div class="rv">
+        <div class="img-wrap img-tall" style="position:relative;">
+          <img src="{img}" alt="{name}" class="img-fill" loading="eager">
+          <div style="position:absolute;bottom:1.5rem;left:1.5rem;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:0.9rem 1.2rem;backdrop-filter:blur(10px);">
+            <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.15em;color:var(--text3);margin-bottom:0.25rem;">Est. reputation</div>
+            <div style="display:flex;gap:2px;">{("⭐" * 5)}</div>
+          </div>
+        </div>
+      </div>
+      <div class="rv d1">
+        {_eyebrow(d.get("tagline",""))}
+        <h1 class="h-display mt2">{h.get("h1", f"Welcome to {name}")}</h1>
+        <p class="body-lg mt4 mw-sm">{h.get("sub","")}</p>
+        <div class="btn-row mt5">
+          {_btn(h.get("cta","Get Started"), "#contact")}
+          {_btn("Learn more ↓", "#features", "outline")}
+        </div>
+        {proof_html}
+      </div>
+    </div>
+  </div>
+</section>"""
+
+
+def _hero_bold_bg(name: str, d: Dict, ind: str) -> str:
+    """Bold accent-colored left panel with text, photo fills right half — striking for trades/services."""
+    h   = d.get("hero", {})
+    img = _photo(ind, 0, 900)
+
+    return f"""<section style="min-height:88vh;display:grid;grid-template-columns:1fr 1fr;overflow:hidden;padding-top:64px;">
+  <div style="background:var(--accent);display:flex;align-items:center;padding:4rem 3rem 4rem 4rem;position:relative;overflow:hidden;">
+    <div style="position:absolute;top:-80px;right:-80px;width:300px;height:300px;border-radius:50%;background:rgba(255,255,255,0.06);"></div>
+    <div style="position:absolute;bottom:-60px;left:-60px;width:200px;height:200px;border-radius:50%;background:rgba(255,255,255,0.04);"></div>
+    <div class="rv" style="position:relative;z-index:1;">
+      <span style="display:inline-block;font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.2em;color:rgba(255,255,255,0.65);margin-bottom:1.25rem;">{d.get("tagline","")}</span>
+      <h1 style="font-size:clamp(2.2rem,4vw,4rem);font-weight:800;letter-spacing:-0.03em;line-height:1.06;color:#ffffff;margin-bottom:1.5rem;">{h.get("h1", f"Welcome to {name}")}</h1>
+      <p style="font-size:1.05rem;color:rgba(255,255,255,0.82);line-height:1.7;margin-bottom:2.5rem;max-width:380px;">{h.get("sub","")}</p>
+      <div class="btn-row">
+        <a href="#contact" style="display:inline-flex;align-items:center;background:#ffffff;color:var(--accent) !important;font-weight:800;font-size:0.95rem;padding:0.9rem 2rem;border-radius:10px;transition:all 0.2s;">{h.get("cta","Get Started")}</a>
+        <a href="#features" style="display:inline-flex;align-items:center;background:transparent;color:rgba(255,255,255,0.85) !important;border:2px solid rgba(255,255,255,0.3);font-weight:600;font-size:0.9rem;padding:0.85rem 1.75rem;border-radius:10px;transition:all 0.2s;">How it works ↓</a>
+      </div>
+    </div>
+  </div>
+  <div style="overflow:hidden;">
+    <img src="{img}" alt="{name}" style="width:100%;height:100%;object-fit:cover;display:block;" loading="eager">
+  </div>
+  <style>@media(max-width:767px){{section[style*="grid-template-columns:1fr 1fr"]{{grid-template-columns:1fr!important}}section[style*="grid-template-columns:1fr 1fr"]>div:last-child{{height:280px}}}}</style>
+</section>"""
+
+
+def _hero_video_style(name: str, d: Dict, ind: str) -> str:
+    """Full-bleed image with a floating card overlay — modern editorial feel."""
+    h   = d.get("hero", {})
+    img = _photo(ind, 0, 1500)
+    img2 = _photo(ind, 1, 600)
+
+    return f"""<section style="position:relative;min-height:88vh;overflow:hidden;padding-top:64px;">
+  <img src="{img}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;" loading="eager">
+  <div style="position:absolute;inset:0;background:linear-gradient(120deg,rgba(0,0,0,0.75) 0%,rgba(0,0,0,0.2) 60%,rgba(0,0,0,0.05) 100%);"></div>
+  <div class="wrap z1" style="padding-top:4rem;padding-bottom:4rem;min-height:calc(88vh - 64px);display:flex;align-items:center;">
+    <div style="max-width:560px;" class="rv">
+      <span style="display:inline-block;font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.2em;color:rgba(255,255,255,0.65);margin-bottom:1.25rem;">{d.get("tagline","")}</span>
+      <h1 style="font-size:clamp(2.8rem,5.5vw,5rem);font-weight:800;letter-spacing:-0.03em;line-height:1.06;color:#ffffff;margin-bottom:1.5rem;">{h.get("h1",f"Welcome to {name}")}</h1>
+      <p style="font-size:1.1rem;color:rgba(255,255,255,0.82);line-height:1.7;margin-bottom:2.5rem;max-width:440px;">{h.get("sub","")}</p>
+      <div class="btn-row">
+        <a href="#contact" style="display:inline-flex;align-items:center;background:var(--cta);color:var(--cta-text) !important;font-weight:700;font-size:0.95rem;padding:0.9rem 2rem;border-radius:10px;">{h.get("cta","Get Started")}</a>
+        <a href="#features" style="display:inline-flex;align-items:center;background:rgba(255,255,255,0.12);backdrop-filter:blur(8px);color:#fff !important;border:1px solid rgba(255,255,255,0.25);font-weight:600;font-size:0.9rem;padding:0.85rem 1.75rem;border-radius:10px;">Learn more ↓</a>
+      </div>
+    </div>
+    <div style="position:absolute;bottom:2.5rem;right:2.5rem;width:260px;border-radius:16px;overflow:hidden;box-shadow:0 25px 60px rgba(0,0,0,0.4);display:none;" class="rv d2">
+      <img src="{img2}" alt="" style="width:100%;height:160px;object-fit:cover;display:block;" loading="lazy">
+      <div style="background:rgba(255,255,255,0.96);padding:1rem 1.25rem;">
+        <p style="font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:var(--accent);margin-bottom:0.3rem;">Why choose us</p>
+        <p style="font-size:0.875rem;font-weight:600;color:#111;line-height:1.4;">{name} — trusted by locals</p>
+      </div>
+    </div>
+  </div>
+  <style>@media(min-width:900px){{section[style*="min-height:88vh"] .rv.d2{{display:block!important}}}}</style>
+</section>"""
 
 def _feat_cards(feats: List[Dict]) -> str:
     cards = "".join(
@@ -1044,9 +1177,146 @@ def _feat_icon_list(feats: List[Dict], ind: str) -> str:
   </div>
 </section>"""
 
+
+def _feat_big_numbers(feats: List[Dict]) -> str:
+    """Feature section with large numbered steps — great for process-oriented businesses."""
+    cards = "".join(
+        f"""<div class="rv d{min(i+1,4)}" style="display:flex;gap:1.5rem;align-items:flex-start;padding:2rem 0;border-bottom:1px solid var(--border);">
+      <span style="font-size:3.5rem;font-weight:900;line-height:1;color:rgba(var(--accent-r),0.12);min-width:70px;letter-spacing:-0.05em;">{str(i+1).zfill(2)}</span>
+      <div>
+        <div style="font-size:1.3rem;margin-bottom:0.5rem;">{f.get("icon","◆")}</div>
+        <h3 class="h-card mb2">{f.get("title","")}</h3>
+        <p class="body-sm">{f.get("description","")}</p>
+      </div>
+    </div>"""
+        for i, f in enumerate(feats)
+    )
+    return f"""<section class="sec" id="features">
+  <div class="wrap">
+    <div class="g2 gap-xl" style="align-items:start;">
+      <div class="rv">
+        {_eyebrow("Our Services")}
+        <h2 class="h-section mt2">Everything you need, handled.</h2>
+        <p class="body-lg mt3 mw-sm">We take care of the details so you don't have to.</p>
+        <a href="#contact" class="btn btn-primary mt5">Get in touch →</a>
+      </div>
+      <div>{cards}</div>
+    </div>
+  </div>
+</section>"""
+
+
+def _feat_checklist_split(feats: List[Dict], ind: str) -> str:
+    """Simple checklist on left, image right — clean and scannable for service businesses."""
+    img   = _photo(ind, 1, 900)
+    items = "".join(
+        f"""<div class="rv d{min(i+1,4)}" style="display:flex;gap:1rem;align-items:flex-start;margin-bottom:1.25rem;">
+      <div style="width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;color:var(--cta-text);font-size:0.65rem;font-weight:900;flex-shrink:0;margin-top:2px;">✓</div>
+      <div>
+        <p style="font-weight:700;font-size:0.95rem;color:var(--text);margin-bottom:0.2rem;">{f.get("title","")}</p>
+        <p class="body-sm">{f.get("description","")}</p>
+      </div>
+    </div>"""
+        for i, f in enumerate(feats)
+    )
+    return f"""<section class="sec band" id="features">
+  <div class="wrap">
+    <div class="g2 ai gap-xl">
+      <div class="rv">
+        {_eyebrow("What We Offer")}
+        <h2 class="h-section mt2 mb5">Why clients choose us</h2>
+        {items}
+        <a href="#contact" class="btn btn-primary mt4">{_btn("Book Now", "#contact")}</a>
+      </div>
+      <div class="rv d2">
+        <div class="img-wrap img-tall">
+          <img src="{img}" alt="" class="img-fill" loading="lazy">
+        </div>
+      </div>
+    </div>
+  </div>
+</section>"""
+
+
+def _feat_three_columns_icons(feats: List[Dict]) -> str:
+    """Three equal columns with large emoji icons — bold and modern, great for SaaS/agency."""
+    cards = "".join(
+        f"""<div class="rv d{min(i+1,4)}" style="text-align:center;padding:2.5rem 1.5rem;">
+      <div style="font-size:2.5rem;margin-bottom:1.25rem;">{f.get("icon","◆")}</div>
+      <h3 class="h-card mb3">{f.get("title","")}</h3>
+      <p class="body-sm">{f.get("description","")}</p>
+    </div>"""
+        for i, f in enumerate(feats)
+    )
+    return f"""<section class="sec" id="features">
+  <div class="wrap">
+    {_section_header("Features", "Built for results", "No fluff. No bloat. Just what works.")}
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:0;border:1px solid var(--border);border-radius:16px;overflow:hidden;">
+      {cards.replace('<div class="rv', '<div class="rv" style="border-right:1px solid var(--border);').rstrip()}
+    </div>
+  </div>
+</section>"""
+
+
 # =============================================================================
-# PRICING — only rendered when AI returns real data
+# PROCESS / HOW IT WORKS — new section type
 # =============================================================================
+
+def _process_steps(d: Dict) -> str:
+    """Horizontal step-by-step process — how the service works."""
+    feats = d.get("features") or []
+    if not feats:
+        return ""
+    steps = feats[:4]
+    items = "".join(
+        f"""<div class="rv d{min(i+1,4)}" style="flex:1;min-width:180px;text-align:center;padding:0 1rem;position:relative;">
+      {"" if i == 0 else '<div style="position:absolute;top:20px;left:-50%;width:100%;height:2px;background:linear-gradient(to right,var(--accent),rgba(var(--accent-r),0.2));z-index:0;"></div>'}
+      <div style="width:44px;height:44px;border-radius:50%;background:var(--accent);color:var(--cta-text);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:0.9rem;margin:0 auto 1rem;position:relative;z-index:1;">{i+1}</div>
+      <h4 style="font-weight:700;font-size:0.9rem;color:var(--text);margin-bottom:0.5rem;">{s.get("title","")}</h4>
+      <p style="font-size:0.78rem;color:var(--text2);line-height:1.55;">{(s.get("description","") or "")[:90]}...</p>
+    </div>"""
+        for i, s in enumerate(steps)
+    )
+    return f"""<section class="sec-sm band" id="process" style="padding:5rem 0;">
+  <div class="wrap">
+    {_section_header("How It Works", "Simple from start to finish", "Getting started takes less than a minute.")}
+    <div style="display:flex;flex-wrap:wrap;gap:1.5rem;justify-content:center;position:relative;">
+      {items}
+    </div>
+  </div>
+</section>"""
+
+
+# =============================================================================
+# PHOTO GALLERY — new section type
+# =============================================================================
+
+def _gallery(ind: str, name: str) -> str:
+    """Asymmetric masonry-style photo grid — great for service businesses, restaurants, beauty."""
+    imgs = [_photo(ind, i, 800) for i in range(5)]
+    return f"""<section class="sec-sm" id="gallery" style="padding:4rem 0;overflow:hidden;">
+  <div class="wrap">
+    {_section_header("Our Work", "Results speak for themselves", "", center=True)}
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:200px 200px;gap:0.75rem;border-radius:16px;overflow:hidden;">
+      <div style="grid-column:1/2;grid-row:1/3;overflow:hidden;border-radius:12px;" class="rv">
+        <img src="{imgs[0]}" alt="{name} gallery" style="width:100%;height:100%;object-fit:cover;display:block;transition:transform 0.5s;" onmouseover="this.style.transform='scale(1.04)'" onmouseout="this.style.transform='scale(1)'">
+      </div>
+      <div style="overflow:hidden;border-radius:12px;" class="rv d1">
+        <img src="{imgs[1]}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;transition:transform 0.5s;" onmouseover="this.style.transform='scale(1.04)'" onmouseout="this.style.transform='scale(1)'">
+      </div>
+      <div style="overflow:hidden;border-radius:12px;" class="rv d2">
+        <img src="{imgs[2]}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;transition:transform 0.5s;" onmouseover="this.style.transform='scale(1.04)'" onmouseout="this.style.transform='scale(1)'">
+      </div>
+      <div style="overflow:hidden;border-radius:12px;" class="rv d1">
+        <img src="{imgs[3]}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;transition:transform 0.5s;" onmouseover="this.style.transform='scale(1.04)'" onmouseout="this.style.transform='scale(1)'">
+      </div>
+      <div style="overflow:hidden;border-radius:12px;" class="rv d2">
+        <img src="{imgs[4]}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;transition:transform 0.5s;" onmouseover="this.style.transform='scale(1.04)'" onmouseout="this.style.transform='scale(1)'">
+      </div>
+    </div>
+    <p style="text-align:center;margin-top:1.5rem;font-size:0.8rem;color:var(--text3);">See our latest projects and results</p>
+  </div>
+</section>"""
 
 def _price_tiers(tiers: List[Dict]) -> str:
     def _tier(t: Dict, idx: int) -> str:
@@ -1432,41 +1702,67 @@ VALID_SECTIONS = {"hero","trust","features","pricing","testimonials","faq","cont
 class MasterArchitect:
 
     def __init__(self, business_name: str, prompt: str, version: int = 1):
-        # ── CRITICAL: self.name is ALWAYS the actual business name passed in.
-        # It is NEVER derived from prompt text or AI-generated copy.
-        # This name appears in: nav logo, footer, headings, page title.
         self.name     = (business_name or "").strip() or "My Business"
         self.prompt   = (prompt or "").strip()
         self.version  = version
         self.industry = detect_industry(self.prompt)
         self.theme    = THEMES.get(INDUSTRY_THEME.get(self.industry, "ocean"), THEMES["ocean"])
         self.contacts = _extract_contact(self.prompt)
-        logger.info(f"MasterArchitect | name='{self.name}' | industry={self.industry} | theme={self.theme['id']}")
+        # Deterministic variety seed — same business always gets same layout,
+        # but different business names get different layout picks
+        self._seed    = sum(ord(c) for c in self.name) % 10
+        logger.info(f"MasterArchitect | name='{self.name}' | industry={self.industry} | theme={self.theme['id']} | seed={self._seed}")
 
     # ── Variant selectors ─────────────────────────────────────────────────────
 
     def _hero_variant(self) -> str:
-        if self.industry in {"restaurant","travel","events"}:
-            return "restaurant"
-        if self.industry in {"luxury","beauty","agency","noir"}:
-            return "centered"
-        if self.industry in {"construction","legal","finance","logistics","real_estate"}:
-            return "stats"
-        return "split"
+        # Full-bleed cinematic — restaurants, travel, events
+        if self.industry in {"restaurant", "travel", "events"}:
+            return ["restaurant", "video_style"][self._seed % 2]
+        # Editorial centered — luxury, beauty, agency
+        if self.industry in {"luxury", "beauty", "agency"}:
+            return ["centered", "video_style"][self._seed % 2]
+        # Stats-heavy — trust-first industries
+        if self.industry in {"construction", "legal", "finance", "logistics", "real_estate", "cleaning"}:
+            return ["stats", "bold_bg", "minimal"][self._seed % 3]
+        # Tech/SaaS — modern, minimal
+        if self.industry in {"saas", "ai", "developer", "startup", "ecommerce", "education"}:
+            return ["split", "minimal", "image_left"][self._seed % 3]
+        # Default — rotate through all non-cinematic variants
+        return ["split", "image_left", "minimal", "stats"][self._seed % 4]
 
     def _feat_variant(self) -> str:
-        if self.industry in {"construction","legal","logistics","finance","health","real_estate"}:
-            return "icon_list"
-        if self.industry in {"saas","developer","ai","startup","ecommerce","education"}:
-            return "cards"
-        return "alternating"
+        if self.industry in {"construction", "legal", "logistics", "real_estate", "cleaning", "automotive"}:
+            return ["icon_list", "checklist_split", "big_numbers"][self._seed % 3]
+        if self.industry in {"saas", "developer", "ai", "startup"}:
+            return ["cards", "three_columns", "big_numbers"][self._seed % 3]
+        if self.industry in {"restaurant", "beauty", "events", "travel", "luxury"}:
+            return ["alternating", "checklist_split"][self._seed % 2]
+        if self.industry in {"finance", "health", "education", "nonprofit"}:
+            return ["icon_list", "big_numbers", "alternating"][self._seed % 3]
+        return ["cards", "alternating", "icon_list", "checklist_split"][self._seed % 4]
 
     def _price_variant(self, tiers) -> str:
         if not tiers:
             return "none"
-        if self.industry in {"construction","logistics","automotive","events"}:
+        if self.industry in {"construction", "logistics", "automotive", "events", "cleaning"}:
             return "project"
         return "tiers"
+
+    def _extra_sections(self, d: Dict) -> Dict[str, str]:
+        """Generate optional extra sections based on industry + seed."""
+        extras = {}
+        # Process steps — great for service businesses
+        if self.industry in {"cleaning", "construction", "health", "legal", "logistics",
+                              "automotive", "saas", "education", "finance", "real_estate"}:
+            if self._seed % 2 == 0:
+                extras["process"] = _process_steps(d)
+        # Gallery — visual industries benefit a lot
+        if self.industry in {"restaurant", "beauty", "construction", "cleaning",
+                              "events", "travel", "fitness", "real_estate", "agency"}:
+            if self._seed % 3 != 0:  # show 2 out of 3 times
+                extras["gallery"] = _gallery(self.industry, self.name)
+        return extras
 
     # ── Data fetching ─────────────────────────────────────────────────────────
 
@@ -1508,12 +1804,11 @@ class MasterArchitect:
         try:
             d     = self._get_data()
             t     = self.theme
-            name  = self.name  # ← ALWAYS self.name. Never d["hero"]["h1"]. Never the prompt.
+            name  = self.name
 
             email = d.get("contact_email", "")
             phone = d.get("contact_phone", "")
 
-            # Determine ordered sections — trust AI's section list
             raw_secs = d.get("sections") or list(VALID_SECTIONS)
             ordered, seen = [], set()
             for s in raw_secs:
@@ -1527,18 +1822,28 @@ class MasterArchitect:
             nav_items = d.get("nav") or ["Services","About","FAQ","Contact"]
             cta_label = d.get("hero", {}).get("cta", "Get Started")
 
-            # ── Assemble HTML ─────────────────────────────────────────────────
+            hero_v  = self._hero_variant()
+            feat_v  = self._feat_variant()
+            extras  = self._extra_sections(d)
+
             parts = [_nav(name, nav_items, cta_label)]
 
             for sid in ordered:
                 html = ""
 
                 if sid == "hero":
-                    v = self._hero_variant()
-                    if   v == "restaurant": html = _hero_restaurant(name, d, self.industry)
-                    elif v == "centered":   html = _hero_centered(name, d, self.industry)
-                    elif v == "stats":      html = _hero_stats(name, d, self.industry)
-                    else:                   html = _hero_split(name, d, self.industry)
+                    if   hero_v == "restaurant":  html = _hero_restaurant(name, d, self.industry)
+                    elif hero_v == "centered":    html = _hero_centered(name, d, self.industry)
+                    elif hero_v == "stats":       html = _hero_stats(name, d, self.industry)
+                    elif hero_v == "minimal":     html = _hero_minimal(name, d, self.industry)
+                    elif hero_v == "image_left":  html = _hero_image_left(name, d, self.industry)
+                    elif hero_v == "bold_bg":     html = _hero_bold_bg(name, d, self.industry)
+                    elif hero_v == "video_style": html = _hero_video_style(name, d, self.industry)
+                    else:                         html = _hero_split(name, d, self.industry)
+
+                    # Inject process steps right after hero for eligible industries
+                    if "process" in extras:
+                        html += extras.pop("process")
 
                 elif sid == "trust":
                     html = _trust_band(d.get("trust_badges") or [])
@@ -1546,22 +1851,25 @@ class MasterArchitect:
                 elif sid == "features":
                     feats = d.get("features") or []
                     if feats:
-                        v = self._feat_variant()
-                        if   v == "icon_list":    html = _feat_icon_list(feats, self.industry)
-                        elif v == "alternating":  html = _feat_alternating(feats, self.industry)
-                        else:                     html = _feat_cards(feats)
+                        if   feat_v == "icon_list":       html = _feat_icon_list(feats, self.industry)
+                        elif feat_v == "alternating":     html = _feat_alternating(feats, self.industry)
+                        elif feat_v == "big_numbers":     html = _feat_big_numbers(feats)
+                        elif feat_v == "checklist_split": html = _feat_checklist_split(feats, self.industry)
+                        elif feat_v == "three_columns":   html = _feat_three_columns_icons(feats)
+                        else:                             html = _feat_cards(feats)
+
+                    # Inject gallery after features for visual industries
+                    if "gallery" in extras:
+                        html += extras.pop("gallery")
 
                 elif sid == "pricing":
                     tiers = d.get("pricing")
-                    # ── BUG 4 FIX: only render pricing if tiers is a non-empty list ──
                     if isinstance(tiers, list) and len(tiers) > 0:
                         v = self._price_variant(tiers)
                         if v == "project": html = _price_project(tiers)
                         else:              html = _price_tiers(tiers)
                     elif tiers is None:
-                        # If AI explicitly said null, render a simple CTA instead
                         html = _price_contact_cta()
-                    # If tiers is an empty list [], skip entirely
 
                 elif sid == "testimonials":
                     html = _testimonials(d.get("testimonials") or [])
@@ -1580,7 +1888,6 @@ class MasterArchitect:
             body_html = "\n".join(parts)
             css_block = _build_css(t)
 
-            # Final output — no <html>/<head>/<body> — injected via .innerHTML
             page = f"""{css_block}
 <div style="padding-top:64px;">
 {body_html}
@@ -1593,14 +1900,15 @@ class MasterArchitect:
                 "theme":         t["id"],
                 "version":       self.version,
                 "sections":      ordered,
-                "hero_variant":  self._hero_variant(),
-                "feat_variant":  self._feat_variant(),
+                "hero_variant":  hero_v,
+                "feat_variant":  feat_v,
+                "seed":          self._seed,
                 "has_email":     bool(email),
                 "has_phone":     bool(phone),
                 "status":        "success",
             }
 
-            logger.info(f"Built | '{name}' | {self.industry} | {t['id']} | sections={ordered}")
+            logger.info(f"Built | '{name}' | {self.industry} | {t['id']} | hero={hero_v} | feat={feat_v} | seed={self._seed}")
             return {"html": page, "metadata": metadata}
 
         except Exception as e:
