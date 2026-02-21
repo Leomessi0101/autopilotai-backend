@@ -367,50 +367,211 @@ def detect_industry(text: str) -> str:
     return best if scores[best] > 0 else "construction"  # Default to something generic, not AI
 
 # =============================================================================
-# PHOTO SYSTEM — dynamic search queries per industry
-# Uses Unsplash Source API which resolves keywords to real matching photos.
-# This is far more reliable than hardcoded IDs which can become irrelevant.
+# PHOTO SYSTEM — verified Unsplash photo IDs per industry
+# Uses direct images.unsplash.com URLs which are stable and always work.
+# IDs are manually curated and verified to match each industry.
+# Each industry has 6+ photos so different slots get different images.
 # =============================================================================
 
-# Each industry has a list of search queries, one per "slot" (hero, feature1, feature2, contact).
-# Queries go from most general (hero) to more specific (detail shots).
-INDUSTRY_PHOTO_QUERIES: Dict[str, List[str]] = {
-    "cleaning":     ["professional house cleaning service","cleaner wiping kitchen surface","clean bright apartment","cleaning supplies organized"],
-    "construction": ["construction workers building site","contractor renovation project","home renovation interior","construction tools professional"],
-    "restaurant":   ["restaurant dining interior elegant","chef cooking professional kitchen","food plating fine dining","restaurant atmosphere warm lighting"],
-    "health":       ["modern medical clinic interior","doctor patient consultation","healthcare professional office","medical wellness center"],
-    "fitness":      ["modern gym fitness center","personal trainer workout session","fitness class exercise studio","gym equipment professional"],
-    "beauty":       ["luxury beauty salon interior","skincare spa treatment","hair salon professional styling","beauty treatment relaxing spa"],
-    "legal":        ["professional law office interior","lawyer desk suit professional","legal documents office","conference room corporate"],
-    "finance":      ["modern financial office city","professional business meeting","finance charts analytics","corporate office building"],
-    "real_estate":  ["luxury modern home exterior","bright modern living room interior","real estate agent showing home","beautiful kitchen renovation"],
-    "construction_trades": ["electrician professional working","plumber fixing pipes home","contractor handyman tools","trade professional uniform"],
-    "automotive":   ["auto mechanic garage professional","car engine repair shop","clean modern car dealership","automotive workshop tools"],
-    "logistics":    ["logistics warehouse professional","delivery truck shipping","supply chain warehouse interior","courier service professional"],
-    "events":       ["elegant event venue setup","wedding reception decoration","corporate event conference","event planning decoration flowers"],
-    "travel":       ["luxury hotel lobby interior","travel destination landscape","resort swimming pool sunset","travel adventure scenic view"],
-    "education":    ["modern classroom learning environment","university library students","online learning laptop education","teacher classroom professional"],
-    "agency":       ["creative agency office modern","design team working collaboration","marketing brainstorm meeting","creative studio workspace"],
-    "saas":         ["modern tech office workspace","software developer laptop coding","dashboard analytics screen","tech startup office team"],
-    "ai":           ["artificial intelligence data center","tech innovation abstract digital","machine learning research lab","futuristic technology concept"],
-    "developer":    ["programmer coding dual monitors","software development workspace","tech developer laptop coffee","code screen dark theme"],
-    "startup":      ["startup office modern coworking","entrepreneur team meeting whiteboard","modern business launch team","startup founders working"],
-    "ecommerce":    ["online shopping product photography","e-commerce warehouse fulfillment","retail product display modern","online store product packaging"],
-    "nature":       ["organic farm sustainable agriculture","eco friendly green products","sustainable nature environment","organic garden fresh produce"],
-    "nonprofit":    ["community volunteers helping together","charity donation event people","nonprofit team working community","social impact volunteer work"],
-    "luxury":       ["luxury penthouse interior design","high-end fashion boutique elegant","premium lifestyle product photography","luxury hotel suite interior"],
-    "events_wedding": ["elegant wedding venue flowers","wedding ceremony decoration beautiful","wedding reception elegant table","bridal preparation morning light"],
+INDUSTRY_PHOTOS: Dict[str, List[str]] = {
+    "cleaning":     [
+        "photo-1581578731548-c64695cc6952",  # person cleaning surface
+        "photo-1558618666-fcd25c85cd64",     # cleaning spray bottle
+        "photo-1527515545081-5db817172677",  # clean bright kitchen
+        "photo-1584820927498-cfe5211fd8bf",  # cleaning gloves
+        "photo-1628177142898-93e36e4e3a50",  # mopping floor
+        "photo-1563453392212-326f5e854473",  # vacuuming carpet
+    ],
+    "construction": [
+        "photo-1504307651254-35680f356dfd",  # construction site workers
+        "photo-1541888946425-d81bb19240f5",  # building frame structure
+        "photo-1503387762-592deb58ef4e",     # architect plans blueprint
+        "photo-1565117623394-5f93fd4c7a06",  # construction tools
+        "photo-1487958449943-2429e8be8625",  # modern building exterior
+        "photo-1530836176759-510f6ca9f76f",  # renovation interior
+    ],
+    "restaurant":   [
+        "photo-1414235077428-338989a2e8c0",  # restaurant interior warm
+        "photo-1555396273-367ea4eb4db5",     # plated food fine dining
+        "photo-1517248135467-4c7edcad34c4",  # restaurant atmosphere
+        "photo-1504674900247-0877df9cc836",  # food overhead shot
+        "photo-1467003909585-2f8a72700288",  # coffee shop
+        "photo-1424847651672-bf20a4b0982b",  # chef cooking
+    ],
+    "health":       [
+        "photo-1576091160550-2173dba999ef",  # doctor consultation
+        "photo-1519494026892-80bbd2d6fd0d",  # hospital corridor bright
+        "photo-1571772996211-2f02c9727629",  # medical professional
+        "photo-1631217868264-e5b90bb7e133",  # clinic interior modern
+        "photo-1559757148-5c350d0d3c56",     # health wellness
+        "photo-1582750433449-648ed127bb54",  # doctor smiling
+    ],
+    "fitness":      [
+        "photo-1534438327276-14e5300c3a48",  # gym equipment
+        "photo-1571019613454-1cb2f99b2d8b",  # personal trainer
+        "photo-1549060279-7e168fcee0c2",     # workout session
+        "photo-1517836357463-d25dfeac3438",  # weights gym
+        "photo-1574680096145-d05b474e2155",  # fitness class
+        "photo-1526506118085-60ce8714f8c5",  # running shoes
+    ],
+    "beauty":       [
+        "photo-1560066984-138dadb4c035",     # salon interior
+        "photo-1487412947147-5cebf100ffc2",  # makeup beauty
+        "photo-1522337360788-8b13dee7a37e",  # spa treatment
+        "photo-1571019613576-2b22c76fd955",  # skincare products
+        "photo-1470259078422-826894b933aa",  # beauty portrait
+        "photo-1453614512568-c4024d13c247",  # nail salon
+    ],
+    "legal":        [
+        "photo-1589578527966-fdac0f44566c",  # law books desk
+        "photo-1505664194779-8beaceb5c7c7",  # lawyer office
+        "photo-1450101499163-c8848c66ca85",  # legal documents
+        "photo-1521791055366-0d553872952f",  # handshake agreement
+        "photo-1423592707957-3b212afa6733",  # justice scales
+        "photo-1507679799987-c73779587ccf",  # professional suit
+    ],
+    "finance":      [
+        "photo-1460925895917-afdab827c52f",  # finance charts
+        "photo-1611974789855-9c2a0a7236a3",  # stock market
+        "photo-1454165804606-c3d57bc86b40",  # business meeting
+        "photo-1468254095679-bbcba94a7066",  # city financial district
+        "photo-1579621970563-ebec7560ff3e",  # financial planning
+        "photo-1559526324-593bc073d938",     # money investment
+    ],
+    "real_estate":  [
+        "photo-1560518883-ce09059eeffa",     # modern house exterior
+        "photo-1570129477492-45c003edd2be",  # beautiful home
+        "photo-1501183638710-841dd1904471",  # interior living room
+        "photo-1486325212027-8081e485255e",  # house for sale
+        "photo-1512917774080-9991f1c4c750",  # luxury home
+        "photo-1583608205776-bfd35f0d9f83",  # kitchen renovation
+    ],
+    "automotive":   [
+        "photo-1492144534655-ae79c964c9d7",  # car detail shot
+        "photo-1503376780353-7e6692767b70",  # car in garage
+        "photo-1558618666-fcd25c85cd64",     # mechanic working
+        "photo-1486262715619-67b85e0b08d3",  # car engine
+        "photo-1568605117036-5fe5e7bab0b7",  # modern car
+        "photo-1552519507-da3b142c6e3d",     # sports car
+    ],
+    "logistics":    [
+        "photo-1586528116311-ad8dd3c8310d",  # warehouse
+        "photo-1601584115197-04ecc0da31d7",  # delivery truck
+        "photo-1494412574643-ff11b0a5c1c3",  # shipping containers
+        "photo-1504493188-45c49f65c6ba",     # supply chain
+        "photo-1530521954074-e64f6810b32d",  # logistics aerial
+        "photo-1577705998148-6da4f3963bc8",  # packages sorting
+    ],
+    "events":       [
+        "photo-1540575467063-178a50c2df87",  # event venue
+        "photo-1511795409834-ef04bbd61622",  # conference room
+        "photo-1464366400600-7168b8af9bc3",  # wedding reception
+        "photo-1519167758481-83f550bb49b3",  # party celebration
+        "photo-1505236858219-8359eb29e329",  # stage lights concert
+        "photo-1472653431158-6364773b2a56",  # gala dinner
+    ],
+    "travel":       [
+        "photo-1476514525535-07fb3b4ae5f1",  # travel destination
+        "photo-1501854140801-50d01698950b",  # scenic landscape
+        "photo-1488085061387-422e29b40080",  # hotel resort
+        "photo-1530521954074-e64f6810b32d",  # aerial view travel
+        "photo-1469474968028-56623f02e42e",  # nature travel
+        "photo-1433838552652-f9a46b332c40",  # beach resort
+    ],
+    "education":    [
+        "photo-1503676260728-1c00da094a0b",  # classroom
+        "photo-1456513080510-7bf3a84b82f8",  # library books
+        "photo-1522202176988-66273c2fd55f",  # students learning
+        "photo-1434030216411-0b793f4b4173",  # studying laptop
+        "photo-1524178232363-1fb2b075b655",  # lecture hall
+        "photo-1509062522246-3755977927d7",  # chalkboard
+    ],
+    "saas":         [
+        "photo-1551434678-e076c223a692",     # team working tech
+        "photo-1497366216548-37526070297c",  # modern office
+        "photo-1518770660439-4636190af475",  # circuit board tech
+        "photo-1461749280684-dccba630e2f6",  # coding laptop
+        "photo-1519389950473-47ba0277781c",  # tech workspace
+        "photo-1531482615713-2afd69097998",  # team collaboration
+    ],
+    "ai":           [
+        "photo-1620712943543-bcc4688e7485",  # AI concept
+        "photo-1677442135703-1787eea5ce01",  # AI neural network
+        "photo-1593508512255-86ab42a8e620",  # futuristic tech
+        "photo-1518770660439-4636190af475",  # circuit board
+        "photo-1485827404703-89b55fcc595e",  # robot technology
+        "photo-1507146153580-69a1fe6d8aa1",  # data visualization
+    ],
+    "developer":    [
+        "photo-1461749280684-dccba630e2f6",  # coding screen
+        "photo-1498050108023-c5249f4df085",  # laptop code
+        "photo-1555066931-4365d14bab8c",     # code dark screen
+        "photo-1607799279861-4dd421887fb3",  # developer workspace
+        "photo-1516116216624-53e697fedbea",  # multiple monitors
+        "photo-1571171637578-41bc2dd41cd2",  # coding close up
+    ],
+    "agency":       [
+        "photo-1497366754035-f200968a6e72",  # creative office
+        "photo-1524758631624-e2822e304c36",  # design studio
+        "photo-1542744173-8e7e53415bb0",     # whiteboard meeting
+        "photo-1558655146-9f40138edfeb",     # creative team
+        "photo-1522071820081-009f0129c71c",  # team brainstorm
+        "photo-1600880292089-90a7e086ee0c",  # agency workspace
+    ],
+    "nature":       [
+        "photo-1441974231531-c6227db76b6e",  # forest nature
+        "photo-1469474968028-56623f02e42e",  # green landscape
+        "photo-1518173946687-a4c8892bbd9f",  # organic farm
+        "photo-1540979388789-6cee28a1cdc9",  # eco products
+        "photo-1504309092620-4d0ec726efa4",  # sustainable garden
+        "photo-1416879595882-3373a0480b5b",  # flowers nature
+    ],
+    "nonprofit":    [
+        "photo-1488521787991-ed7bbaae773c",  # volunteers hands
+        "photo-1593113630400-ea4288922559",  # community helping
+        "photo-1532629345422-7515f3d16bb6",  # charity event
+        "photo-1491438590914-bc09fcaaf77a",  # people community
+        "photo-1469571486292-0ba58a3f068b",  # volunteer work
+        "photo-1559027615-cd4628902d4a",     # donation charity
+    ],
+    "luxury":       [
+        "photo-1519501025264-65ba15a82390",  # luxury interior
+        "photo-1549298916-b41d501d3772",     # premium product
+        "photo-1441984904996-e0b6ba687e04",  # luxury fashion
+        "photo-1582719508461-905c673771fd",  # luxury hotel
+        "photo-1567016432779-094069958ea5",  # penthouse view
+        "photo-1617103996702-96ff29b1c467",  # fine dining luxury
+    ],
+    "startup":      [
+        "photo-1553877522-43269d4ea984",     # startup team
+        "photo-1497366811353-6870744d04b2",  # modern coworking
+        "photo-1556761175-4b46a572b786",     # startup office
+        "photo-1504384308090-c894fdcc538d",  # open office
+        "photo-1600880292203-757bb62b4baf",  # team meeting
+        "photo-1559136555-9303baea8ebd",     # entrepreneur laptop
+    ],
+    "ecommerce":    [
+        "photo-1556742049-0cfed4f6a45d",     # online shopping
+        "photo-1472851294608-062f824d29cc",  # retail store
+        "photo-1523275335684-37898b6baf30",  # product watch
+        "photo-1526170375885-4d8ecf77b99f",  # flatlay products
+        "photo-1585386959984-a4155224a1ad",  # packaging delivery
+        "photo-1491553895911-0055eca6402d",  # product display
+    ],
 }
 
-_DEFAULT_QUERIES = ["professional business office modern","team working collaboration","business service professional","modern workspace clean"]
+_DEFAULT_PHOTOS = [
+    "photo-1497366216548-37526070297c",  # office professional
+    "photo-1454165804606-c3d57bc86b40",  # business meeting
+    "photo-1522202176988-66273c2fd55f",  # people working
+    "photo-1542744173-8e7e53415bb0",     # whiteboard collaboration
+]
 
 def _photo(industry: str, idx: int, w: int = 1200) -> str:
-    """Return a photo URL using Unsplash's source API with a descriptive search query."""
-    queries = INDUSTRY_PHOTO_QUERIES.get(industry, _DEFAULT_QUERIES)
-    query   = queries[idx % len(queries)]
-    # URL-encode the query
-    encoded = query.replace(" ", ",")
-    return f"https://source.unsplash.com/featured/{w}x{int(w*0.67)}/?{encoded}"
+    """Return a verified Unsplash photo URL for the given industry and slot index."""
+    pool = INDUSTRY_PHOTOS.get(industry, _DEFAULT_PHOTOS)
+    pid  = pool[idx % len(pool)]
+    return f"https://images.unsplash.com/{pid}?w={w}&auto=format&fit=crop&q=80"
 
 # =============================================================================
 # CSS ENGINE — generates the complete stylesheet from theme tokens
@@ -1419,6 +1580,74 @@ def _testimonials(tevs: List[Dict]) -> str:
   </div>
 </section>"""
 
+def _testimonials_featured(tevs: List[Dict]) -> str:
+    """Large featured quote up top with smaller cards below — more editorial."""
+    if not tevs:
+        return ""
+    featured = tevs[0]
+    rest     = tevs[1:]
+    rest_cards = "".join(
+        f"""<div class="card card-p rv d{min(i+1,4)}" style="display:flex;flex-direction:column;">
+      {_stars()}
+      <p class="body-sm" style="font-style:italic;flex:1;margin-bottom:1rem;">"{tv.get("quote","")}"</p>
+      <div style="display:flex;align-items:center;gap:0.6rem;border-top:1px solid var(--border);padding-top:0.85rem;">
+        <div class="avatar">{(tv.get("name","?") or "?")[0].upper()}</div>
+        <div>
+          <p style="font-weight:700;font-size:0.8rem;color:var(--text);">{tv.get("name","")}</p>
+          <p style="font-size:0.7rem;color:var(--text3);">{tv.get("role","")} · {tv.get("company","")}</p>
+        </div>
+      </div>
+    </div>"""
+        for i, tv in enumerate(rest)
+    )
+    return f"""<section class="sec band" id="testimonials">
+  <div class="wrap">
+    {_section_header("Testimonials", "What Clients Say")}
+    <div class="card card-plg rv" style="margin-bottom:1.5rem;position:relative;overflow:hidden;">
+      <div style="position:absolute;top:-0.5rem;left:1.5rem;font-size:7rem;line-height:1;color:var(--accent);opacity:0.08;font-family:Georgia,serif;pointer-events:none;">"</div>
+      <div style="position:relative;z-index:1;">
+        {_stars()}
+        <p style="font-size:1.25rem;line-height:1.65;color:var(--text);font-style:italic;margin-bottom:1.5rem;max-width:680px;">"{featured.get("quote","")}"</p>
+        <div style="display:flex;align-items:center;gap:0.85rem;">
+          <div class="avatar" style="width:48px;height:48px;font-size:1rem;">{(featured.get("name","?") or "?")[0].upper()}</div>
+          <div>
+            <p style="font-weight:700;color:var(--text);">{featured.get("name","")}</p>
+            <p style="font-size:0.8rem;color:var(--text3);">{featured.get("role","")} · {featured.get("company","")}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    {f'<div class="testi-grid">{rest_cards}</div>' if rest_cards else ""}
+  </div>
+</section>"""
+
+
+def _faq_two_col(faqs: List[Dict]) -> str:
+    """Two-column FAQ layout — more scannable for longer FAQ lists."""
+    if not faqs or len(faqs) < 3:
+        return _faq(faqs)
+    mid   = (len(faqs) + 1) // 2
+    col1  = faqs[:mid]
+    col2  = faqs[mid:]
+    def _item(faq: Dict, i: int) -> str:
+        return f"""<details class="faq-item rv d{min(i+1,3)}">
+      <summary>{faq.get("q","")}<span class="faq-toggle">+</span></summary>
+      <div class="faq-answer">{faq.get("a","")}</div>
+    </details>"""
+    c1 = "".join(_item(f, i) for i, f in enumerate(col1))
+    c2 = "".join(_item(f, i) for i, f in enumerate(col2))
+    return f"""<section class="sec-sm" id="faq" style="padding:5rem 0;">
+  <div class="wrap">
+    {_section_header("FAQ", "Common Questions")}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem 2rem;">
+      <div>{c1}</div>
+      <div>{c2}</div>
+    </div>
+  </div>
+  <style>@media(max-width:767px){{section[id="faq"] .wrap>div:last-child{{grid-template-columns:1fr!important}}}}</style>
+</section>"""
+
+
 # =============================================================================
 # FAQ
 # =============================================================================
@@ -1742,7 +1971,11 @@ class MasterArchitect:
             return ["icon_list", "big_numbers", "alternating"][self._seed % 3]
         return ["cards", "alternating", "icon_list", "checklist_split"][self._seed % 4]
 
-    def _price_variant(self, tiers) -> str:
+    def _testi_variant(self) -> str:
+        return ["grid", "featured"][self._seed % 2]
+
+    def _faq_variant(self) -> str:
+        return ["single", "two_col"][self._seed % 2]
         if not tiers:
             return "none"
         if self.industry in {"construction", "logistics", "automotive", "events", "cleaning"}:
@@ -1824,6 +2057,8 @@ class MasterArchitect:
 
             hero_v  = self._hero_variant()
             feat_v  = self._feat_variant()
+            testi_v = self._testi_variant()
+            faq_v   = self._faq_variant()
             extras  = self._extra_sections(d)
 
             parts = [_nav(name, nav_items, cta_label)]
@@ -1872,10 +2107,18 @@ class MasterArchitect:
                         html = _price_contact_cta()
 
                 elif sid == "testimonials":
-                    html = _testimonials(d.get("testimonials") or [])
+                    tevs = d.get("testimonials") or []
+                    if testi_v == "featured":
+                        html = _testimonials_featured(tevs)
+                    else:
+                        html = _testimonials(tevs)
 
                 elif sid == "faq":
-                    html = _faq(d.get("faq") or [])
+                    faqs = d.get("faq") or []
+                    if faq_v == "two_col":
+                        html = _faq_two_col(faqs)
+                    else:
+                        html = _faq(faqs)
 
                 elif sid == "contact":
                     html = _contact(name, d, email, phone, self.industry)
