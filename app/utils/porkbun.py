@@ -1,7 +1,4 @@
-"""
-Porkbun API Service
-Save this file to: C:\Users\Raidi\autopilotai-backend\app\utils\porkbun.py
-"""
+#porkbun
 
 import asyncio
 import httpx

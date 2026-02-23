@@ -1,7 +1,4 @@
-"""
-Domains Router
-Save this file to: C:\Users\Raidi\autopilotai-backend\app\routes\domains.py
-"""
+# Domains Router
 
 import asyncio
 import logging

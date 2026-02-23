@@ -1,7 +1,4 @@
-"""
-DNS Verification Service
-Save this file to: C:\Users\Raidi\autopilotai-backend\app\utils\dns_verification.py
-"""
+#dns
 
 import asyncio
 import logging
