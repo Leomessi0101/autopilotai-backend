@@ -6,10 +6,34 @@ print("PRICE_GROWTH FROM ENV:", os.getenv("PRICE_GROWTH"))
 print(">>> Python executable:", sys.executable)
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+# -------------------- APP SETUP (MUST BE FIRST) --------------------
+app = FastAPI()
+
+# -------------------- CORS (MUST BE BEFORE ROUTERS) --------------------
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://www.autopilotai.dev",
+        "https://autopilotai.dev",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=86400,
+)
+
 # -------------------- DATABASE --------------------
 from app.database.session import engine
-from app.database import models   # ensures all models register
+from app.database import models
 from app.database.models import Base
+
+# -------------------- CREATE DATABASE TABLES --------------------
+Base.metadata.create_all(bind=engine)
+
 # -------------------- ROUTERS --------------------
 from app.routes.profile_routes import router as profile_router
 from app.routes.usage_routes import router as usage_router
@@ -28,26 +52,8 @@ from app.routes.restaurant_websites import domains_router
 from app.routes import websites_routes
 from app.routes import dashboard_websites_routes
 from app.routes import public_websites_routes
-from app.routes.domains import router as custom_domains_router   # ← NEW
-# -------------------- APP SETUP --------------------
-app = FastAPI()
-# -------------------- CREATE DATABASE TABLES --------------------
-Base.metadata.create_all(bind=engine)
-# -------------------- CORS --------------------
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "https://www.autopilotai.dev",
-        "https://autopilotai.dev",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["*"],
-    max_age=86400,
-)
+from app.routes.domains import router as custom_domains_router
+
 # -------------------- ROUTES --------------------
 app.include_router(auth_router, prefix="/api/auth")
 app.include_router(history_router, prefix="/api")
@@ -68,11 +74,13 @@ app.include_router(restaurant_websites_router)
 # ✅ Custom domain resolver (old)
 app.include_router(domains_router)
 # ✅ New custom domain system (Porkbun + DNS verification)
-app.include_router(custom_domains_router, prefix="/api")   # ← NEW
+app.include_router(custom_domains_router, prefix="/api")
+
 # AI Routes
 app.include_router(content_router, prefix="/api/content")
 app.include_router(email_router, prefix="/api/email")
 app.include_router(ads_router, prefix="/api/ads")
+
 # -------------------- DEBUG: PRINT ROUTES --------------------
 @app.on_event("startup")
 def print_routes():
@@ -80,6 +88,7 @@ def print_routes():
     for r in app.routes:
         print(r.path, r.methods)
     print("===== END ROUTES =====")
+
 # -------------------- ROOT --------------------
 @app.get("/")
 def read_root():
