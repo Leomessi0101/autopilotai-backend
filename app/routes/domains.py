@@ -1,23 +1,22 @@
 """
 Domains Router
-All endpoints for connecting domains, verifying DNS, purchasing through Porkbun.
 Save this file to: C:\Users\Raidi\autopilotai-backend\app\routes\domains.py
 """
 
+import asyncio
 import logging
 import os
 import re
-from datetime import datetime
 from typing import Optional
-from uuid import UUID
 
 import stripe
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Header
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from jose import jwt
 
-from app.database.session import get_db
-from app.routes.auth_routes import get_current_user
+from app.database.session import SessionLocal
+from app.database.models import User
 from app.utils.porkbun import porkbun, PorkbunError
 from app.utils.dns_verification import dns_service
 
@@ -26,12 +25,50 @@ router = APIRouter(prefix="/domains", tags=["domains"])
 
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "")
 
+SECRET = os.getenv("JWT_SECRET", "supersecretkey")
+ALGORITHM = "HS256"
 WORKER_SECRET = os.getenv("WORKER_SECRET", "")
 MAX_DOMAINS_PER_USER = int(os.getenv("MAX_DOMAINS_PER_USER", "10"))
 DOMAIN_MARKUP_PERCENT = float(os.getenv("DOMAIN_MARKUP_PERCENT", "30"))
 CF_KV_NAMESPACE_ID = os.getenv("CF_KV_NAMESPACE_ID")
 CF_API_TOKEN = os.getenv("CF_API_TOKEN")
 CF_ACCOUNT_ID = os.getenv("CF_ACCOUNT_ID")
+
+
+# ─────────────────────────────────────────────────────────
+# DATABASE
+# ─────────────────────────────────────────────────────────
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+# ─────────────────────────────────────────────────────────
+# AUTH — matches the pattern in your auth_routes.py
+# ─────────────────────────────────────────────────────────
+
+def get_current_user(Authorization: str = Header(None), db: Session = Depends(get_db)) -> User:
+    if not Authorization:
+        raise HTTPException(401, "Missing Authorization header")
+
+    token = Authorization.replace("Bearer ", "")
+
+    try:
+        payload = jwt.decode(token, SECRET, algorithms=[ALGORITHM])
+        user_id = payload["user_id"]
+    except:
+        raise HTTPException(401, "Invalid token")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+
+    return user
+
 
 # ─────────────────────────────────────────────────────────
 # HELPERS
@@ -58,7 +95,7 @@ def validate_domain(domain: str) -> str:
 
 
 # ─────────────────────────────────────────────────────────
-# PYDANTIC SCHEMAS
+# SCHEMAS
 # ─────────────────────────────────────────────────────────
 
 class ConnectDomainRequest(BaseModel):
@@ -85,15 +122,6 @@ class PurchaseDomainRequest(BaseModel):
 
 
 # ─────────────────────────────────────────────────────────
-# NOTE ON AUTH
-# ─────────────────────────────────────────────────────────
-# The routes below use `get_current_user` from your existing auth_routes.
-# If your function is named differently (e.g. get_user, current_user),
-# update the import at the top of this file to match.
-# ─────────────────────────────────────────────────────────
-
-
-# ─────────────────────────────────────────────────────────
 # 1. CONNECT AN EXISTING DOMAIN
 # ─────────────────────────────────────────────────────────
 
@@ -101,12 +129,11 @@ class PurchaseDomainRequest(BaseModel):
 def connect_domain(
     body: ConnectDomainRequest,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     domain = validate_domain(body.domain)
     apex = domain.removeprefix("www.")
 
-    # Check not already taken
     existing = db.execute(
         "SELECT id, user_id FROM custom_domains WHERE domain = :d OR apex_domain = :a",
         {"d": domain, "a": apex},
@@ -117,19 +144,14 @@ def connect_domain(
             raise HTTPException(status_code=409, detail="You've already connected this domain")
         raise HTTPException(status_code=409, detail="This domain is already in use")
 
-    # Check domain limit
     count = db.execute(
         "SELECT COUNT(*) FROM custom_domains WHERE user_id = :uid AND status != 'suspended'",
         {"uid": current_user.id},
     ).scalar()
 
     if count >= MAX_DOMAINS_PER_USER:
-        raise HTTPException(
-            status_code=429,
-            detail=f"Maximum of {MAX_DOMAINS_PER_USER} domains per account"
-        )
+        raise HTTPException(status_code=429, detail=f"Maximum of {MAX_DOMAINS_PER_USER} domains per account")
 
-    # Insert pending domain
     result = db.execute(
         """
         INSERT INTO custom_domains (user_id, domain, apex_domain, status, source)
@@ -161,7 +183,7 @@ def verify_domain_dns(
     domain_id: str,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     row = db.execute(
         "SELECT * FROM custom_domains WHERE id = :id AND user_id = :uid",
@@ -174,7 +196,6 @@ def verify_domain_dns(
     if row.status == "active":
         return {"verified": True, "status": "active", "method": row.verification_method}
 
-    import asyncio
     result = asyncio.run(dns_service.verify(row.domain))
 
     if result.verified:
@@ -198,7 +219,7 @@ def verify_domain_dns(
             ON CONFLICT (domain) DO UPDATE
             SET username = :username, user_id = :uid, cached_at = NOW()
             """,
-            {"domain": row.domain, "username": current_user.username, "uid": current_user.id},
+            {"domain": row.domain, "username": current_user.name, "uid": current_user.id},
         )
         db.commit()
 
@@ -230,7 +251,7 @@ def verify_domain_dns(
 
 
 # ─────────────────────────────────────────────────────────
-# 3. INTERNAL: Domain Resolution (for Cloudflare Worker)
+# 3. INTERNAL: Domain Resolution (called by Cloudflare Worker)
 # ─────────────────────────────────────────────────────────
 
 @router.get("/resolve")
@@ -244,7 +265,6 @@ def resolve_domain(
 
     host = host.lower().strip().removeprefix("www.")
 
-    # Check cache first
     cached = db.execute(
         "SELECT username FROM domain_resolution_cache WHERE domain = :d",
         {"d": host},
@@ -253,10 +273,9 @@ def resolve_domain(
     if cached:
         return {"username": cached.username, "source": "cache"}
 
-    # Fall back to main table
     result = db.execute(
         """
-        SELECT u.username
+        SELECT u.name as username
         FROM custom_domains cd
         JOIN users u ON u.id = cd.user_id
         WHERE (cd.domain = :host OR cd.apex_domain = :host)
@@ -279,7 +298,7 @@ def resolve_domain(
 @router.get("/search")
 async def search_domains(
     q: str,
-    current_user=Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     q = q.lower().strip()
 
@@ -299,7 +318,6 @@ async def search_domains(
                 "domain": r.domain,
                 "available": r.available,
                 "tld": r.tld,
-                "price_cents": r.price_cents,
                 "display_price_cents": int(r.price_cents * (1 + MARKUP)),
                 "renewal_price_cents": int(r.renewal_cents * (1 + MARKUP)),
                 "display_price": f"${r.price_cents * (1 + MARKUP) / 100:.2f}",
@@ -319,7 +337,7 @@ async def purchase_domain(
     body: PurchaseDomainRequest,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     domain = validate_domain(body.domain)
 
@@ -331,7 +349,6 @@ async def purchase_domain(
     price_cents = int(availability.price_cents * (1 + MARKUP))
     renewal_cents = int(availability.renewal_cents * (1 + MARKUP))
 
-    # Stripe payment
     try:
         intent = stripe.PaymentIntent.create(
             amount=price_cents,
@@ -355,7 +372,6 @@ async def purchase_domain(
     if intent.status not in ("succeeded", "requires_capture"):
         raise HTTPException(status_code=402, detail="Payment not completed")
 
-    # Save purchase record
     registrant = body.registrant
     purchase_result = db.execute(
         """
@@ -386,13 +402,12 @@ async def purchase_domain(
     ).fetchone()
     db.commit()
 
-    # Register with Porkbun in background
     background_tasks.add_task(
         _complete_domain_registration,
         purchase_id=str(purchase_result.id),
         domain=domain,
         user_id=str(current_user.id),
-        username=current_user.username,
+        username=current_user.name,
         registrant={
             "firstName": registrant.first_name,
             "lastName": registrant.last_name,
@@ -411,10 +426,7 @@ async def purchase_domain(
         "domain": domain,
         "status": "paid",
         "price_charged_cents": price_cents,
-        "message": (
-            "Payment successful! We're registering your domain now. "
-            "This usually takes under 60 seconds."
-        ),
+        "message": "Payment successful! We're registering your domain now. Usually takes under 60 seconds.",
     }
 
 
@@ -425,7 +437,6 @@ async def _complete_domain_registration(
     username: str,
     registrant: dict,
 ):
-    from app.database.session import SessionLocal
     db = SessionLocal()
     try:
         reg_result = await porkbun.register_domain(domain, registrant)
@@ -492,7 +503,7 @@ async def _complete_domain_registration(
 @router.get("/")
 def list_domains(
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     result = db.execute(
         """
@@ -518,7 +529,7 @@ def list_domains(
 def delete_domain(
     domain_id: str,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     row = db.execute(
         "SELECT domain FROM custom_domains WHERE id = :id AND user_id = :uid",
@@ -542,7 +553,7 @@ def delete_domain(
 @router.get("/purchases")
 def list_purchases(
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     result = db.execute(
         """
