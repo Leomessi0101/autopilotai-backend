@@ -1,4 +1,5 @@
 # Domains Router
+# Save to: C:\Users\Raidi\autopilotai-backend\app\routes\domains.py
 
 import asyncio
 import logging
@@ -10,11 +11,12 @@ import stripe
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Header
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from jose import jwt
 
 from app.database.session import SessionLocal
 from app.database.models import User
-from app.utils.porkbun import porkbun, PorkbunError
+from app.utils.porkbun import porkbun
 from app.utils.dns_verification import dns_service
 
 logger = logging.getLogger(__name__)
@@ -27,9 +29,6 @@ ALGORITHM = "HS256"
 WORKER_SECRET = os.getenv("WORKER_SECRET", "")
 MAX_DOMAINS_PER_USER = int(os.getenv("MAX_DOMAINS_PER_USER", "10"))
 DOMAIN_MARKUP_PERCENT = float(os.getenv("DOMAIN_MARKUP_PERCENT", "30"))
-CF_KV_NAMESPACE_ID = os.getenv("CF_KV_NAMESPACE_ID")
-CF_API_TOKEN = os.getenv("CF_API_TOKEN")
-CF_ACCOUNT_ID = os.getenv("CF_ACCOUNT_ID")
 
 
 # ─────────────────────────────────────────────────────────
@@ -45,25 +44,21 @@ def get_db():
 
 
 # ─────────────────────────────────────────────────────────
-# AUTH — matches the pattern in your auth_routes.py
+# AUTH
 # ─────────────────────────────────────────────────────────
 
 def get_current_user(Authorization: str = Header(None), db: Session = Depends(get_db)) -> User:
     if not Authorization:
         raise HTTPException(401, "Missing Authorization header")
-
     token = Authorization.replace("Bearer ", "")
-
     try:
         payload = jwt.decode(token, SECRET, algorithms=[ALGORITHM])
         user_id = payload["user_id"]
     except:
         raise HTTPException(401, "Invalid token")
-
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(404, "User not found")
-
     return user
 
 
@@ -72,15 +67,11 @@ def get_current_user(Authorization: str = Header(None), db: Session = Depends(ge
 # ─────────────────────────────────────────────────────────
 
 DOMAIN_REGEX = re.compile(
-    r"^(?:[a-zA-Z0-9]"
-    r"(?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+"
-    r"[a-zA-Z]{2,}$"
+    r"^(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$"
 )
-
 
 def normalize_domain(domain: str) -> str:
     return domain.lower().strip().removeprefix("https://").removeprefix("http://").rstrip("/")
-
 
 def validate_domain(domain: str) -> str:
     domain = normalize_domain(domain)
@@ -98,7 +89,6 @@ def validate_domain(domain: str) -> str:
 class ConnectDomainRequest(BaseModel):
     domain: str
 
-
 class RegistrantInfo(BaseModel):
     first_name: str
     last_name: str
@@ -109,7 +99,6 @@ class RegistrantInfo(BaseModel):
     state: str
     postal_code: str
     country: str = "US"
-
 
 class PurchaseDomainRequest(BaseModel):
     domain: str
@@ -132,7 +121,7 @@ def connect_domain(
     apex = domain.removeprefix("www.")
 
     existing = db.execute(
-        "SELECT id, user_id FROM custom_domains WHERE domain = :d OR apex_domain = :a",
+        text("SELECT id, user_id FROM custom_domains WHERE domain = :d OR apex_domain = :a"),
         {"d": domain, "a": apex},
     ).fetchone()
 
@@ -142,7 +131,7 @@ def connect_domain(
         raise HTTPException(status_code=409, detail="This domain is already in use")
 
     count = db.execute(
-        "SELECT COUNT(*) FROM custom_domains WHERE user_id = :uid AND status != 'suspended'",
+        text("SELECT COUNT(*) FROM custom_domains WHERE user_id = :uid AND status != 'suspended'"),
         {"uid": current_user.id},
     ).scalar()
 
@@ -150,11 +139,11 @@ def connect_domain(
         raise HTTPException(status_code=429, detail=f"Maximum of {MAX_DOMAINS_PER_USER} domains per account")
 
     result = db.execute(
-        """
-        INSERT INTO custom_domains (user_id, domain, apex_domain, status, source)
-        VALUES (:uid, :domain, :apex, 'pending', 'connected')
-        RETURNING id, created_at
-        """,
+        text("""
+            INSERT INTO custom_domains (user_id, domain, apex_domain, status, source)
+            VALUES (:uid, :domain, :apex, 'pending', 'connected')
+            RETURNING id, created_at
+        """),
         {"uid": current_user.id, "domain": domain, "apex": apex},
     ).fetchone()
     db.commit()
@@ -183,7 +172,7 @@ def verify_domain_dns(
     current_user: User = Depends(get_current_user),
 ):
     row = db.execute(
-        "SELECT * FROM custom_domains WHERE id = :id AND user_id = :uid",
+        text("SELECT * FROM custom_domains WHERE id = :id AND user_id = :uid"),
         {"id": domain_id, "uid": current_user.id},
     ).fetchone()
 
@@ -197,29 +186,28 @@ def verify_domain_dns(
 
     if result.verified:
         db.execute(
-            """
-            UPDATE custom_domains
-            SET status = 'active',
-                verification_method = :method,
-                last_dns_value = :value,
-                verified_at = NOW(),
-                last_checked_at = NOW(),
-                check_failures = 0
-            WHERE id = :id
-            """,
+            text("""
+                UPDATE custom_domains
+                SET status = 'active',
+                    verification_method = :method,
+                    last_dns_value = :value,
+                    verified_at = NOW(),
+                    last_checked_at = NOW(),
+                    check_failures = 0
+                WHERE id = :id
+            """),
             {"id": domain_id, "method": result.method, "value": result.resolved_value},
         )
         db.execute(
-            """
-            INSERT INTO domain_resolution_cache (domain, username, user_id)
-            VALUES (:domain, :username, :uid)
-            ON CONFLICT (domain) DO UPDATE
-            SET username = :username, user_id = :uid, cached_at = NOW()
-            """,
+            text("""
+                INSERT INTO domain_resolution_cache (domain, username, user_id)
+                VALUES (:domain, :username, :uid)
+                ON CONFLICT (domain) DO UPDATE
+                SET username = :username, user_id = :uid, cached_at = NOW()
+            """),
             {"domain": row.domain, "username": current_user.name, "uid": current_user.id},
         )
         db.commit()
-
         return {
             "verified": True,
             "status": "active",
@@ -228,17 +216,16 @@ def verify_domain_dns(
         }
     else:
         db.execute(
-            """
-            UPDATE custom_domains
-            SET last_checked_at = NOW(),
-                last_dns_value = :value,
-                check_failures = check_failures + 1
-            WHERE id = :id
-            """,
+            text("""
+                UPDATE custom_domains
+                SET last_checked_at = NOW(),
+                    last_dns_value = :value,
+                    check_failures = check_failures + 1
+                WHERE id = :id
+            """),
             {"id": domain_id, "value": result.resolved_value},
         )
         db.commit()
-
         return {
             "verified": False,
             "status": row.status,
@@ -263,7 +250,7 @@ def resolve_domain(
     host = host.lower().strip().removeprefix("www.")
 
     cached = db.execute(
-        "SELECT username FROM domain_resolution_cache WHERE domain = :d",
+        text("SELECT username FROM domain_resolution_cache WHERE domain = :d"),
         {"d": host},
     ).fetchone()
 
@@ -271,14 +258,14 @@ def resolve_domain(
         return {"username": cached.username, "source": "cache"}
 
     result = db.execute(
-        """
-        SELECT u.name as username
-        FROM custom_domains cd
-        JOIN users u ON u.id = cd.user_id
-        WHERE (cd.domain = :host OR cd.apex_domain = :host)
-          AND cd.status = 'active'
-        LIMIT 1
-        """,
+        text("""
+            SELECT u.name as username
+            FROM custom_domains cd
+            JOIN users u ON u.id = cd.user_id
+            WHERE (cd.domain = :host OR cd.apex_domain = :host)
+              AND cd.status = 'active'
+            LIMIT 1
+        """),
         {"host": host},
     ).fetchone()
 
@@ -353,17 +340,12 @@ async def purchase_domain(
             payment_method=body.stripe_payment_method_id,
             confirm=True,
             automatic_payment_methods={"enabled": True, "allow_redirects": "never"},
-            metadata={
-                "type": "domain_purchase",
-                "domain": domain,
-                "user_id": str(current_user.id),
-            },
+            metadata={"type": "domain_purchase", "domain": domain, "user_id": str(current_user.id)},
             description=f"Domain registration: {domain} (1 year)",
         )
     except stripe.error.CardError as e:
         raise HTTPException(status_code=402, detail=f"Payment failed: {e.user_message}")
     except stripe.error.StripeError as e:
-        logger.error(f"Stripe error for {domain}: {e}")
         raise HTTPException(status_code=500, detail="Payment processing error")
 
     if intent.status not in ("succeeded", "requires_capture"):
@@ -371,21 +353,20 @@ async def purchase_domain(
 
     registrant = body.registrant
     purchase_result = db.execute(
-        """
-        INSERT INTO domain_purchases (
-            user_id, domain, tld,
-            registrant_first_name, registrant_last_name, registrant_email,
-            registrant_phone, registrant_address1, registrant_city,
-            registrant_state, registrant_postal_code, registrant_country,
-            purchase_price_cents, registrar_price_cents, renewal_price_cents,
-            stripe_payment_intent_id, status
-        ) VALUES (
-            :uid, :domain, :tld,
-            :first, :last, :email, :phone, :addr, :city, :state, :zip, :country,
-            :price, :reg_price, :renewal,
-            :intent_id, 'paid'
-        ) RETURNING id
-        """,
+        text("""
+            INSERT INTO domain_purchases (
+                user_id, domain, tld,
+                registrant_first_name, registrant_last_name, registrant_email,
+                registrant_phone, registrant_address1, registrant_city,
+                registrant_state, registrant_postal_code, registrant_country,
+                purchase_price_cents, registrar_price_cents, renewal_price_cents,
+                stripe_payment_intent_id, status
+            ) VALUES (
+                :uid, :domain, :tld,
+                :first, :last, :email, :phone, :addr, :city, :state, :zip, :country,
+                :price, :reg_price, :renewal, :intent_id, 'paid'
+            ) RETURNING id
+        """),
         {
             "uid": current_user.id, "domain": domain, "tld": domain.split(".")[-1],
             "first": registrant.first_name, "last": registrant.last_name,
@@ -406,14 +387,10 @@ async def purchase_domain(
         user_id=str(current_user.id),
         username=current_user.name,
         registrant={
-            "firstName": registrant.first_name,
-            "lastName": registrant.last_name,
-            "email": registrant.email,
-            "phone": registrant.phone,
-            "address1": registrant.address1,
-            "city": registrant.city,
-            "state": registrant.state,
-            "postalCode": registrant.postal_code,
+            "firstName": registrant.first_name, "lastName": registrant.last_name,
+            "email": registrant.email, "phone": registrant.phone,
+            "address1": registrant.address1, "city": registrant.city,
+            "state": registrant.state, "postalCode": registrant.postal_code,
             "country": registrant.country,
         },
     )
@@ -423,69 +400,63 @@ async def purchase_domain(
         "domain": domain,
         "status": "paid",
         "price_charged_cents": price_cents,
-        "message": "Payment successful! We're registering your domain now. Usually takes under 60 seconds.",
+        "message": "Payment successful! Registering your domain now — usually under 60 seconds.",
     }
 
 
 async def _complete_domain_registration(
-    purchase_id: str,
-    domain: str,
-    user_id: str,
-    username: str,
-    registrant: dict,
+    purchase_id: str, domain: str, user_id: str, username: str, registrant: dict,
 ):
     db = SessionLocal()
     try:
         reg_result = await porkbun.register_domain(domain, registrant)
 
         if not reg_result.success:
-            logger.error(f"Porkbun registration failed for {domain}: {reg_result.error}")
             db.execute(
-                "UPDATE domain_purchases SET status = 'failed' WHERE id = :id",
+                text("UPDATE domain_purchases SET status = 'failed' WHERE id = :id"),
                 {"id": purchase_id}
             )
             db.commit()
             return
 
         db.execute(
-            """
-            UPDATE domain_purchases
-            SET status = 'registered', registered_at = NOW(),
-                expires_at = NOW() + INTERVAL '1 year',
-                registrar_domain_id = :rid
-            WHERE id = :id
-            """,
+            text("""
+                UPDATE domain_purchases
+                SET status = 'registered', registered_at = NOW(),
+                    expires_at = NOW() + INTERVAL '1 year',
+                    registrar_domain_id = :rid
+                WHERE id = :id
+            """),
             {"id": purchase_id, "rid": reg_result.registrar_id},
         )
 
         await porkbun.setup_autopilot_dns(domain)
 
         cd_result = db.execute(
-            """
-            INSERT INTO custom_domains
-                (user_id, domain, apex_domain, status, source, verification_method, verified_at)
-            VALUES
-                (:uid, :domain, :apex, 'active', 'purchased', 'cname', NOW())
-            RETURNING id
-            """,
+            text("""
+                INSERT INTO custom_domains
+                    (user_id, domain, apex_domain, status, source, verification_method, verified_at)
+                VALUES (:uid, :domain, :apex, 'active', 'purchased', 'cname', NOW())
+                RETURNING id
+            """),
             {"uid": user_id, "domain": domain, "apex": domain},
         ).fetchone()
 
         db.execute(
-            "UPDATE domain_purchases SET custom_domain_id = :cd WHERE id = :id",
+            text("UPDATE domain_purchases SET custom_domain_id = :cd WHERE id = :id"),
             {"cd": cd_result.id, "id": purchase_id},
         )
 
         db.execute(
-            """
-            INSERT INTO domain_resolution_cache (domain, username, user_id)
-            VALUES (:domain, :username, :uid)
-            ON CONFLICT (domain) DO UPDATE SET username = :username, cached_at = NOW()
-            """,
+            text("""
+                INSERT INTO domain_resolution_cache (domain, username, user_id)
+                VALUES (:domain, :username, :uid)
+                ON CONFLICT (domain) DO UPDATE SET username = :username, cached_at = NOW()
+            """),
             {"domain": domain, "username": username, "uid": user_id},
         )
         db.commit()
-        logger.info(f"Domain {domain} fully registered and active for {username}")
+        logger.info(f"Domain {domain} registered and active for {username}")
 
     except Exception as e:
         logger.exception(f"Fatal error registering {domain}: {e}")
@@ -503,19 +474,19 @@ def list_domains(
     current_user: User = Depends(get_current_user),
 ):
     result = db.execute(
-        """
-        SELECT cd.id, cd.domain, cd.status, cd.source,
-               cd.verified_at, cd.created_at,
-               dp.expires_at, dp.renewal_price_cents, dp.auto_renew
-        FROM custom_domains cd
-        LEFT JOIN domain_purchases dp ON dp.custom_domain_id = cd.id
-        WHERE cd.user_id = :uid
-        ORDER BY cd.created_at DESC
-        """,
+        text("""
+            SELECT cd.id, cd.domain, cd.status, cd.source,
+                   cd.verified_at, cd.created_at,
+                   dp.expires_at, dp.renewal_price_cents, dp.auto_renew
+            FROM custom_domains cd
+            LEFT JOIN domain_purchases dp ON dp.custom_domain_id = cd.id
+            WHERE cd.user_id = :uid
+            ORDER BY cd.created_at DESC
+        """),
         {"uid": current_user.id},
     ).fetchall()
 
-    return {"domains": [dict(r) for r in result]}
+    return {"domains": [dict(r._mapping) for r in result]}
 
 
 # ─────────────────────────────────────────────────────────
@@ -529,15 +500,15 @@ def delete_domain(
     current_user: User = Depends(get_current_user),
 ):
     row = db.execute(
-        "SELECT domain FROM custom_domains WHERE id = :id AND user_id = :uid",
+        text("SELECT domain FROM custom_domains WHERE id = :id AND user_id = :uid"),
         {"id": domain_id, "uid": current_user.id},
     ).fetchone()
 
     if not row:
         raise HTTPException(status_code=404, detail="Domain not found")
 
-    db.execute("DELETE FROM custom_domains WHERE id = :id", {"id": domain_id})
-    db.execute("DELETE FROM domain_resolution_cache WHERE domain = :d", {"d": row.domain})
+    db.execute(text("DELETE FROM custom_domains WHERE id = :id"), {"id": domain_id})
+    db.execute(text("DELETE FROM domain_resolution_cache WHERE domain = :d"), {"d": row.domain})
     db.commit()
 
     return {"deleted": True, "domain": row.domain}
@@ -553,14 +524,14 @@ def list_purchases(
     current_user: User = Depends(get_current_user),
 ):
     result = db.execute(
-        """
-        SELECT id, domain, status, purchase_price_cents, renewal_price_cents,
-               registered_at, expires_at, auto_renew, created_at
-        FROM domain_purchases
-        WHERE user_id = :uid
-        ORDER BY created_at DESC
-        """,
+        text("""
+            SELECT id, domain, status, purchase_price_cents, renewal_price_cents,
+                   registered_at, expires_at, auto_renew, created_at
+            FROM domain_purchases
+            WHERE user_id = :uid
+            ORDER BY created_at DESC
+        """),
         {"uid": current_user.id},
     ).fetchall()
 
-    return {"purchases": [dict(r) for r in result]}
+    return {"purchases": [dict(r._mapping) for r in result]}
