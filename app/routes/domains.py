@@ -583,3 +583,22 @@ def list_purchases(
     except Exception as e:
         logger.exception(f"list_purchases error: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to load purchases: {str(e)}")
+
+@router.get("/test-porkbun")
+async def test_porkbun():
+    import os
+    key = os.getenv("PORKBUN_API_KEY", "NOT SET")
+    secret = os.getenv("PORKBUN_SECRET_KEY", "NOT SET")
+    try:
+        data = await porkbun._post("pricing/get/com")
+        return {
+            "key_prefix": key[:8] if len(key) > 8 else key,
+            "secret_prefix": secret[:8] if len(secret) > 8 else secret,
+            "porkbun_response": data
+        }
+    except Exception as e:
+        return {
+            "key_prefix": key[:8] if len(key) > 8 else key,
+            "secret_prefix": secret[:8] if len(secret) > 8 else secret,
+            "error": str(e)
+        }
