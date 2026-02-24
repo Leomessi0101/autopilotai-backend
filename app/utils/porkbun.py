@@ -17,8 +17,8 @@ PORKBUN_BASE = "https://api.porkbun.com/api/json/v3"
 class DomainAvailability:
     domain: str
     available: bool
-    price_cents: int      # registrar's wholesale price
-    renewal_cents: int    # registrar's wholesale renewal
+    price_cents: int
+    renewal_cents: int
     tld: str
 
 
@@ -55,68 +55,52 @@ class PorkbunService:
             data = response.json()
             if data.get("status") != "SUCCESS":
                 error_msg = data.get("message", "Unknown Porkbun error")
-                logger.error(f"Porkbun API error on {endpoint}: {error_msg} (HTTP {response.status_code})")
+                logger.error(f"Porkbun error on {endpoint}: {error_msg} (HTTP {response.status_code})")
                 raise PorkbunError(error_msg)
             return data
 
     async def check_domain(self, domain: str) -> DomainAvailability:
-        """Check if a single domain is available and get its price."""
+        """
+        Check if a domain is available and get its price.
+        Uses the correct endpoint: domain/checkDomain/{domain}
+        Response includes: avail (yes/no), price, regularPrice,
+        additional.renewal.price
+        """
         tld = domain.split(".", 1)[-1]
         try:
-            # Correct endpoint: pricing/get/{tld} for price, then check availability
-            # First get pricing for the TLD
-            pricing_data = await self._post(f"pricing/get/{tld}")
-            pricing = pricing_data.get("pricing", {})
+            data = await self._post(f"domain/checkDomain/{domain}")
+            response = data.get("response", {})
 
-            # registration price (string like "9.73")
-            reg_price_str = pricing.get("registration", "0")
-            renewal_price_str = pricing.get("renewal", reg_price_str)
+            available = response.get("avail", "no").lower() == "yes"
 
-            price_cents = int(float(reg_price_str) * 100)
-            renewal_cents = int(float(renewal_price_str) * 100)
+            # Price for first year (may be promo price)
+            price_str = response.get("price", response.get("regularPrice", "0"))
+            # Renewal price
+            renewal_str = (
+                response.get("additional", {})
+                .get("renewal", {})
+                .get("price", price_str)
+            )
 
-            # Now check if this specific domain is available
-            avail_data = await self._post("domain/checkAndGetSingleDomainPrice", {"domain": domain})
-            # If we get here without exception, domain is available
-            # Some porkbun responses include price in the availability check
-            if "price" in avail_data:
-                price_cents = int(float(avail_data["price"]) * 100)
+            price_cents = int(float(price_str) * 100)
+            renewal_cents = int(float(renewal_str) * 100)
 
             return DomainAvailability(
                 domain=domain,
-                available=True,
+                available=available,
                 price_cents=price_cents,
                 renewal_cents=renewal_cents,
                 tld=tld,
             )
 
-        except PorkbunError as e:
-            err = str(e).lower()
-            # If error mentions "invalid domain" or "not available" = taken
-            if any(x in err for x in ["invalid domain", "not available", "already", "taken", "registered"]):
-                return DomainAvailability(
-                    domain=domain,
-                    available=False,
-                    price_cents=0,
-                    renewal_cents=0,
-                    tld=tld,
-                )
-            # Otherwise re-raise
+        except PorkbunError:
             raise
-
-    async def get_tld_pricing(self, tld: str) -> tuple[int, int]:
-        """Get wholesale registration and renewal price for a TLD in cents."""
-        try:
-            data = await self._post(f"pricing/get/{tld}")
-            pricing = data.get("pricing", {})
-            reg = int(float(pricing.get("registration", "0")) * 100)
-            renewal = int(float(pricing.get("renewal", "0")) * 100)
-            return reg, renewal
-        except Exception:
-            return 0, 0
+        except Exception as e:
+            logger.error(f"check_domain error for {domain}: {e}")
+            raise PorkbunError(str(e))
 
     async def check_multiple_domains(self, base_name: str) -> list:
-        """Search a base name across multiple TLDs."""
+        """Search a base name across popular TLDs."""
         tlds = ["com", "io", "co", "dev", "net", "org", "app", "ai"]
         domains = [f"{base_name}.{tld}" for tld in tlds]
 
@@ -132,17 +116,17 @@ class PorkbunService:
             else:
                 logger.warning(f"Domain check failed: {r}")
 
-        # Sort: available first, then by price
+        # Available first, then cheapest
         output.sort(key=lambda x: (not x.available, x.price_cents))
         return output
 
     async def register_domain(self, domain: str, registrant: dict, years: int = 1) -> RegistrationResult:
-        """Register a domain with Porkbun."""
+        """Register a domain. Registrant keys must match Porkbun's API."""
         try:
-            data = await self._post("domain/create", {
-                "domain": domain,
+            data = await self._post(f"domain/create/{domain}", {
                 "years": str(years),
                 "whoisPrivacy": "1",
+                "autorenew": "1",
                 **registrant,
             })
             return RegistrationResult(
@@ -154,11 +138,10 @@ class PorkbunService:
             return RegistrationResult(success=False, domain=domain, error=str(e))
 
     async def setup_autopilot_dns(self, domain: str) -> bool:
-        """Configure DNS records to point to AutopilotAI proxy."""
+        """Point domain DNS to AutopilotAI proxy."""
         try:
             await self._clear_conflicting_records(domain)
 
-            # Root CNAME
             await self._post(f"dns/create/{domain}", {
                 "name": "",
                 "type": "CNAME",
@@ -166,7 +149,6 @@ class PorkbunService:
                 "ttl": "300",
             })
 
-            # www CNAME
             await self._post(f"dns/create/{domain}", {
                 "name": "www",
                 "type": "CNAME",
@@ -180,7 +162,6 @@ class PorkbunService:
             return False
 
     async def _clear_conflicting_records(self, domain: str) -> None:
-        """Remove any existing A/CNAME records that would conflict."""
         try:
             data = await self._post(f"dns/retrieve/{domain}")
             records = data.get("records", [])
@@ -191,10 +172,9 @@ class PorkbunService:
             if deletions:
                 await asyncio.gather(*deletions, return_exceptions=True)
         except PorkbunError:
-            pass  # If retrieval fails, just continue
+            pass
 
     async def renew_domain(self, domain: str, years: int = 1) -> bool:
-        """Renew a domain registration."""
         try:
             await self._post(f"domain/renew/{domain}", {"years": str(years)})
             return True
