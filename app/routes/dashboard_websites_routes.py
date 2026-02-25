@@ -389,28 +389,35 @@ async def regenerate_website(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Regenerate website with new or updated prompt"""
     try:
         username = normalize_username(username)
         prompt = payload.get("prompt", "").strip()
-
         if not prompt:
             raise HTTPException(status_code=400, detail="prompt is required")
 
         site = get_website_or_404(db, username)
         authorize_website_access(site, user)
 
+        # ── Regen limits per plan ──
+        plan = (user.subscription_plan or "free").lower()
+        REGEN_LIMITS = {"free": 1, "starter": 3, "pro": 5}
+        limit = REGEN_LIMITS.get(plan, 1)
+        "regen_count": site.regen_count or 0,
+
+        if count >= limit:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Regeneration limit reached ({limit} for {plan} plan). Upgrade to get more."
+            )
+
         log_action("REGENERATE_WEBSITE_START", username, user.id)
 
         current_content = json.loads(site.content_json) if site.content_json else {}
-        business_name = current_content.get("business_name", username.replace("-", " ").title())
+        business_name = payload.get("business_name", current_content.get("business_name", username.replace("-", " ").title()))
 
         try:
             ai_result = generate_ai_plan(
-                ai_input={
-                    "business_name": business_name,
-                    "prompt": prompt,
-                },
+                ai_input={"business_name": business_name, "prompt": prompt},
                 version=1,
             )
         except Exception as e:
@@ -422,7 +429,6 @@ async def regenerate_website(
 
         html_content = ai_result.get("html", "")
         metadata = ai_result.get("metadata", {})
-
         if not html_content:
             raise HTTPException(status_code=500, detail="No HTML generated")
 
@@ -432,8 +438,8 @@ async def regenerate_website(
             "prompt": prompt,
             "business_name": business_name,
         })
+        site.regen_count = count + 1
         site.updated_at = datetime.utcnow()
-
         db.commit()
 
         log_action("REGENERATE_WEBSITE_SUCCESS", username, user.id)
@@ -446,15 +452,16 @@ async def regenerate_website(
                 "theme": metadata.get("theme"),
                 "industry": metadata.get("industry"),
                 "updated_at": site.updated_at.isoformat(),
+                "regen_count": site.regen_count,
+                "regen_limit": limit,
+                "regen_remaining": limit - site.regen_count,
             },
         }
-
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error regenerating website {username}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
-
 
 # ============================================================================
 # REWRITE CONTENT
