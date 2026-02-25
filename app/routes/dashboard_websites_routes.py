@@ -1,8 +1,3 @@
-"""
-Dashboard Websites Routes - FastAPI endpoints for AI website management
-Integrates with Master Architect website_ai.py system
-"""
-
 import json
 import logging
 import os
@@ -315,6 +310,7 @@ async def get_website(
                 "domain_verified": site.domain_verified,
                 "created_at": site.created_at.isoformat() if site.created_at else None,
                 "updated_at": site.updated_at.isoformat() if site.updated_at else None,
+                "regen_count": site.regen_count or 0,
             },
         }
     except HTTPException:
@@ -402,7 +398,7 @@ async def regenerate_website(
         plan = (user.subscription_plan or "free").lower()
         REGEN_LIMITS = {"free": 1, "starter": 3, "pro": 5}
         limit = REGEN_LIMITS.get(plan, 1)
-        "regen_count": site.regen_count or 0,
+        count = site.regen_count or 0
 
         if count >= limit:
             raise HTTPException(
