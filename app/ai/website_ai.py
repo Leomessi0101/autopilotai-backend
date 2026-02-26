@@ -1,5 +1,5 @@
 """
-website_ai.py  —  AutopilotAI Master Generator v4
+website_ai.py  —  AutopilotAI Master Generator v5
 ==========================================================
 DESIGN PHILOSOPHY:
   - One continuous canvas. No hard section breaks, no alternating bg colors.
@@ -15,6 +15,13 @@ CSS RULES (non-negotiable):
   - All colors via CSS custom properties on :root.
   - Google Fonts via <link> only.
   - Scripts are vanilla JS only, executed after injection.
+
+CHANGELOG v5:
+  - Contact forms now POST JSON to /api/public/websites/{slug}/contact
+  - Inline JS fetch handles success/error toast — no page reload
+  - Booking-aware fields (date + service type) for hospitality/beauty/health/fitness
+  - 5 new themes: vintage, bloom, obsidian, nordic, editorial
+  - Industry→theme mapping expanded for new themes
 """
 
 import json
@@ -422,6 +429,167 @@ THEMES: Dict[str, Dict] = {
         },
     },
 
+    # ══════════════════════════════════════════════════════════════════════════
+    # NEW THEMES (v5)
+    # ══════════════════════════════════════════════════════════════════════════
+
+    # ── VINTAGE — Retro trade, aged warmth, craftsmanship ─────────────────
+    # Perfect for: plumbers, electricians, carpenters, barbershops, diners
+    # Personality: trustworthy old-school craftsman, newspaper textures, brass
+    "vintage": {
+        "id": "vintage", "mode": "light",
+        "font_heading": "'Alfa Slab One', Georgia, serif",
+        "font_body": "'Zilla Slab', Georgia, serif",
+        "font_url": "https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Zilla+Slab:ital,wght@0,400;0,500;0,600;1,400&display=swap",
+        "vars": {
+            "--bg":        "#f2ead8",
+            "--bg2":       "#e8ddc8",
+            "--surface":   "#faf5e8",
+            "--border":    "#c4a96e",
+            "--text":      "#1a1208",
+            "--text2":     "#4a3818",
+            "--text3":     "#8a6a38",
+            "--accent":    "#8b2800",
+            "--accent2":   "#6b1a00",
+            "--accent-r":  "139,40,0",
+            "--cta":       "#8b2800",
+            "--cta-text":  "#faf5e8",
+            "--tag-bg":    "#e8d5b0",
+            "--tag-text":  "#6b1a00",
+            "--tag-border":"#c4a450",
+            "--glow":      "rgba(139,40,0,0.08)",
+            "--nav-bg":    "rgba(242,234,216,0.97)",
+            "--grain":     "1",
+        },
+        # Extra: stamp/badge accent style
+        "_card_radius": "4px",
+        "_btn_radius":  "3px",
+    },
+
+    # ── BLOOM — Soft pastel wellness, spa, holistic health ────────────────
+    # Perfect for: day spas, yoga studios, nutritionists, holistic therapists
+    # Personality: airy softness, botanical calm, feminine warmth
+    "bloom": {
+        "id": "bloom", "mode": "light",
+        "font_heading": "'Gloock', Georgia, serif",
+        "font_body": "'Nunito', -apple-system, sans-serif",
+        "font_url": "https://fonts.googleapis.com/css2?family=Gloock&family=Nunito:wght@300;400;500;600;700&display=swap",
+        "vars": {
+            "--bg":        "#fdf7f5",
+            "--bg2":       "#f5ece8",
+            "--surface":   "#ffffff",
+            "--border":    "#e8d5cc",
+            "--text":      "#2a1a18",
+            "--text2":     "#7a5a54",
+            "--text3":     "#b89890",
+            "--accent":    "#c8786a",
+            "--accent2":   "#a85a4c",
+            "--accent-r":  "200,120,106",
+            "--cta":       "#c8786a",
+            "--cta-text":  "#ffffff",
+            "--tag-bg":    "#fce8e4",
+            "--tag-text":  "#a85a4c",
+            "--tag-border":"#e8c0b8",
+            "--glow":      "rgba(200,120,106,0.08)",
+            "--nav-bg":    "rgba(253,247,245,0.97)",
+        },
+        "_card_radius": "24px",
+        "_btn_radius":  "999px",
+    },
+
+    # ── OBSIDIAN — Ultra dark luxury, platinum accents, razor precision ────
+    # Perfect for: high-end law firms, private wealth, exclusive concierge
+    # Personality: restraint as power, silence as confidence
+    "obsidian": {
+        "id": "obsidian", "mode": "dark",
+        "font_heading": "'Didact Gothic', 'Cormorant Garamond', Georgia, serif",
+        "font_body": "'Raleway', -apple-system, sans-serif",
+        "font_url": "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Raleway:wght@300;400;500;600&display=swap",
+        "vars": {
+            "--bg":        "#080808",
+            "--bg2":       "#0e0e0e",
+            "--surface":   "#141414",
+            "--border":    "rgba(255,255,255,0.06)",
+            "--text":      "#f0ece8",
+            "--text2":     "#888480",
+            "--text3":     "#484440",
+            "--accent":    "#d4c9b8",
+            "--accent2":   "#b8aa98",
+            "--accent-r":  "212,201,184",
+            "--cta":       "#d4c9b8",
+            "--cta-text":  "#080808",
+            "--tag-bg":    "rgba(212,201,184,0.07)",
+            "--tag-text":  "#d4c9b8",
+            "--tag-border":"rgba(212,201,184,0.14)",
+            "--glow":      "rgba(212,201,184,0.04)",
+            "--nav-bg":    "rgba(8,8,8,0.96)",
+        },
+        "_card_radius": "2px",
+        "_btn_radius":  "2px",
+    },
+
+    # ── NORDIC — Scandinavian minimal, ice precision, functional beauty ────
+    # Perfect for: architecture firms, interior design, minimalist products
+    # Personality: considered silence, grid discipline, text as decoration
+    "nordic": {
+        "id": "nordic", "mode": "light",
+        "font_heading": "'Big Shoulders Display', -apple-system, sans-serif",
+        "font_body": "'IBM Plex Sans', -apple-system, sans-serif",
+        "font_url": "https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800;900&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap",
+        "vars": {
+            "--bg":        "#f7f7f5",
+            "--bg2":       "#eeeeea",
+            "--surface":   "#ffffff",
+            "--border":    "#d8d8d4",
+            "--text":      "#0e0e0c",
+            "--text2":     "#505050",
+            "--text3":     "#a0a09c",
+            "--accent":    "#1a1a18",
+            "--accent2":   "#3a3a38",
+            "--accent-r":  "26,26,24",
+            "--cta":       "#0e0e0c",
+            "--cta-text":  "#f7f7f5",
+            "--tag-bg":    "#e8e8e4",
+            "--tag-text":  "#1a1a18",
+            "--tag-border":"#c8c8c4",
+            "--glow":      "rgba(14,14,12,0.04)",
+            "--nav-bg":    "rgba(247,247,245,0.97)",
+        },
+        "_card_radius": "0px",
+        "_btn_radius":  "0px",
+    },
+
+    # ── EDITORIAL — Bold typographic magazine, black + single hot accent ──
+    # Perfect for: agencies, photographers, publishers, architecture, fashion
+    # Personality: typeface is the art — words fill the canvas
+    "editorial": {
+        "id": "editorial", "mode": "light",
+        "font_heading": "'Anton', -apple-system, sans-serif",
+        "font_body": "'Mulish', -apple-system, sans-serif",
+        "font_url": "https://fonts.googleapis.com/css2?family=Anton&family=Mulish:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400&display=swap",
+        "vars": {
+            "--bg":        "#f8f8f6",
+            "--bg2":       "#f0f0ee",
+            "--surface":   "#ffffff",
+            "--border":    "#d0d0ce",
+            "--text":      "#0a0a08",
+            "--text2":     "#404040",
+            "--text3":     "#909090",
+            "--accent":    "#e8002a",
+            "--accent2":   "#c20022",
+            "--accent-r":  "232,0,42",
+            "--cta":       "#0a0a08",
+            "--cta-text":  "#f8f8f6",
+            "--tag-bg":    "#0a0a08",
+            "--tag-text":  "#f8f8f6",
+            "--tag-border":"#0a0a08",
+            "--glow":      "rgba(232,0,42,0.06)",
+            "--nav-bg":    "rgba(248,248,246,0.97)",
+        },
+        "_card_radius": "0px",
+        "_btn_radius":  "0px",
+    },
+
 }
 
 # =============================================================================
@@ -429,30 +597,41 @@ THEMES: Dict[str, Dict] = {
 # =============================================================================
 
 INDUSTRY_THEME: Dict[str, str] = {
-    "saas":         "arctic",   # crisp, precise blue
-    "ai":           "neon",     # electric dark green
-    "developer":    "void",     # dark indigo
-    "startup":      "dusk",     # moody creative purple
-    "finance":      "ocean",    # trustworthy blue
-    "legal":        "slate",    # refined neutrals
-    "real_estate":  "sand",     # warm aspirational
-    "logistics":    "steel",    # industrial bold
-    "construction": "steel",    # industrial bold
-    "automotive":   "chalk",    # editorial bold
-    "restaurant":   "ember",    # warm terracotta
-    "food":         "terra",    # earthy clay
-    "events":       "ember",    # warm festive
-    "travel":       "sand",     # warm wanderlust
-    "health":       "arctic",   # clean clinical
-    "fitness":      "steel",    # bold energetic
-    "nature":       "forest",   # organic green
-    "nonprofit":    "forest",   # warm community
-    "education":    "ocean",    # trustworthy blue
-    "agency":       "dusk",     # moody creative
-    "luxury":       "noir",     # dark gold
-    "beauty":       "rose",     # blush elegant
-    "ecommerce":    "arctic",   # clean product
-    "cleaning":     "forest",   # fresh green
+    "saas":         "arctic",
+    "ai":           "neon",
+    "developer":    "void",
+    "startup":      "dusk",
+    "finance":      "ocean",
+    "legal":        "obsidian",    # upgraded: ultra dark luxury for law firms
+    "real_estate":  "sand",
+    "logistics":    "steel",
+    "construction": "vintage",     # upgraded: retro trades perfectly here
+    "automotive":   "chalk",
+    "restaurant":   "ember",
+    "food":         "terra",
+    "events":       "ember",
+    "travel":       "sand",
+    "health":       "arctic",
+    "fitness":      "steel",
+    "nature":       "forest",
+    "nonprofit":    "forest",
+    "education":    "ocean",
+    "agency":       "editorial",   # upgraded: bold editorial for agencies
+    "luxury":       "obsidian",    # upgraded: obsidian over noir — even more premium
+    "beauty":       "bloom",       # upgraded: soft pastel wellness over rose
+    "ecommerce":    "arctic",
+    "cleaning":     "nordic",      # upgraded: scandinavian clean = cleanliness
+    "spa":          "bloom",       # new
+    "wellness":     "bloom",       # new
+    "architecture": "nordic",      # new
+    "interior":     "nordic",      # new
+    "photography":  "editorial",   # new
+    "fashion":      "editorial",   # new
+    "trades":       "vintage",     # new
+    "plumbing":     "vintage",     # new
+    "electrical":   "vintage",     # new
+    "barbershop":   "vintage",     # new
+    "diner":        "vintage",     # new
 }
 
 # =============================================================================
@@ -460,7 +639,6 @@ INDUSTRY_THEME: Dict[str, str] = {
 # =============================================================================
 
 INDUSTRY_KEYWORDS: Dict[str, List[str]] = {
-    # Cleaning gets top priority — very specific keywords so it never misdetects
     "cleaning":     ["cleaning", "cleaner", "clean", "maid", "housekeeping", "janitor", "janitorial",
                      "spotless", "scrub", "vacuum", "dust", "mop", "sanitize", "disinfect",
                      "tidy", "sweep", "laundry", "windows cleaning", "deep clean", "spring clean",
@@ -523,222 +701,225 @@ def detect_industry(text: str) -> str:
         score = 0
         for kw in kws:
             if kw in tl:
-                # Multi-word keywords score higher — "deep clean" beats "clean"
                 score += len(kw.split()) * 2
         scores[ind] = score
     best = max(scores, key=lambda k: scores[k])
-    # Only use detected industry if score is meaningful
-    return best if scores[best] > 0 else "construction"  # Default to something generic, not AI
+    return best if scores[best] > 0 else "construction"
 
 # =============================================================================
-# PHOTO SYSTEM — verified Unsplash photo IDs per industry
-# Uses direct images.unsplash.com URLs which are stable and always work.
-# IDs are manually curated and verified to match each industry.
-# Each industry has 6+ photos so different slots get different images.
+# BOOKING INDUSTRIES — these get extra form fields (date + service type)
+# =============================================================================
+
+BOOKING_INDUSTRIES = {
+    "restaurant", "beauty", "health", "fitness", "events",
+    "travel", "spa", "wellness",
+}
+
+# =============================================================================
+# PHOTO SYSTEM
 # =============================================================================
 
 INDUSTRY_PHOTOS: Dict[str, List[str]] = {
     "cleaning":     [
-        "photo-1581578731548-c64695cc6952",  # person cleaning surface
-        "photo-1558618666-fcd25c85cd64",     # cleaning spray bottle
-        "photo-1527515545081-5db817172677",  # clean bright kitchen
-        "photo-1584820927498-cfe5211fd8bf",  # cleaning gloves
-        "photo-1628177142898-93e36e4e3a50",  # mopping floor
-        "photo-1563453392212-326f5e854473",  # vacuuming carpet
+        "photo-1581578731548-c64695cc6952",
+        "photo-1558618666-fcd25c85cd64",
+        "photo-1527515545081-5db817172677",
+        "photo-1584820927498-cfe5211fd8bf",
+        "photo-1628177142898-93e36e4e3a50",
+        "photo-1563453392212-326f5e854473",
     ],
     "construction": [
-        "photo-1504307651254-35680f356dfd",  # construction site workers
-        "photo-1541888946425-d81bb19240f5",  # building frame structure
-        "photo-1503387762-592deb58ef4e",     # architect plans blueprint
-        "photo-1565117623394-5f93fd4c7a06",  # construction tools
-        "photo-1487958449943-2429e8be8625",  # modern building exterior
-        "photo-1530836176759-510f6ca9f76f",  # renovation interior
+        "photo-1504307651254-35680f356dfd",
+        "photo-1541888946425-d81bb19240f5",
+        "photo-1503387762-592deb58ef4e",
+        "photo-1565117623394-5f93fd4c7a06",
+        "photo-1487958449943-2429e8be8625",
+        "photo-1530836176759-510f6ca9f76f",
     ],
     "restaurant":   [
-        "photo-1414235077428-338989a2e8c0",  # restaurant interior warm
-        "photo-1555396273-367ea4eb4db5",     # plated food fine dining
-        "photo-1517248135467-4c7edcad34c4",  # restaurant atmosphere
-        "photo-1504674900247-0877df9cc836",  # food overhead shot
-        "photo-1467003909585-2f8a72700288",  # coffee shop
-        "photo-1424847651672-bf20a4b0982b",  # chef cooking
+        "photo-1414235077428-338989a2e8c0",
+        "photo-1555396273-367ea4eb4db5",
+        "photo-1517248135467-4c7edcad34c4",
+        "photo-1504674900247-0877df9cc836",
+        "photo-1467003909585-2f8a72700288",
+        "photo-1424847651672-bf20a4b0982b",
     ],
     "health":       [
-        "photo-1576091160550-2173dba999ef",  # doctor consultation
-        "photo-1519494026892-80bbd2d6fd0d",  # hospital corridor bright
-        "photo-1571772996211-2f02c9727629",  # medical professional
-        "photo-1631217868264-e5b90bb7e133",  # clinic interior modern
-        "photo-1559757148-5c350d0d3c56",     # health wellness
-        "photo-1582750433449-648ed127bb54",  # doctor smiling
+        "photo-1576091160550-2173dba999ef",
+        "photo-1519494026892-80bbd2d6fd0d",
+        "photo-1571772996211-2f02c9727629",
+        "photo-1631217868264-e5b90bb7e133",
+        "photo-1559757148-5c350d0d3c56",
+        "photo-1582750433449-648ed127bb54",
     ],
     "fitness":      [
-        "photo-1534438327276-14e5300c3a48",  # gym equipment
-        "photo-1571019613454-1cb2f99b2d8b",  # personal trainer
-        "photo-1549060279-7e168fcee0c2",     # workout session
-        "photo-1517836357463-d25dfeac3438",  # weights gym
-        "photo-1574680096145-d05b474e2155",  # fitness class
-        "photo-1526506118085-60ce8714f8c5",  # running shoes
+        "photo-1534438327276-14e5300c3a48",
+        "photo-1571019613454-1cb2f99b2d8b",
+        "photo-1549060279-7e168fcee0c2",
+        "photo-1517836357463-d25dfeac3438",
+        "photo-1574680096145-d05b474e2155",
+        "photo-1526506118085-60ce8714f8c5",
     ],
     "beauty":       [
-        "photo-1560066984-138dadb4c035",     # salon interior
-        "photo-1487412947147-5cebf100ffc2",  # makeup beauty
-        "photo-1522337360788-8b13dee7a37e",  # spa treatment
-        "photo-1571019613576-2b22c76fd955",  # skincare products
-        "photo-1470259078422-826894b933aa",  # beauty portrait
-        "photo-1453614512568-c4024d13c247",  # nail salon
+        "photo-1560066984-138dadb4c035",
+        "photo-1487412947147-5cebf100ffc2",
+        "photo-1522337360788-8b13dee7a37e",
+        "photo-1571019613576-2b22c76fd955",
+        "photo-1470259078422-826894b933aa",
+        "photo-1453614512568-c4024d13c247",
     ],
     "legal":        [
-        "photo-1589578527966-fdac0f44566c",  # law books desk
-        "photo-1505664194779-8beaceb5c7c7",  # lawyer office
-        "photo-1450101499163-c8848c66ca85",  # legal documents
-        "photo-1521791055366-0d553872952f",  # handshake agreement
-        "photo-1423592707957-3b212afa6733",  # justice scales
-        "photo-1507679799987-c73779587ccf",  # professional suit
+        "photo-1589578527966-fdac0f44566c",
+        "photo-1505664194779-8beaceb5c7c7",
+        "photo-1450101499163-c8848c66ca85",
+        "photo-1521791055366-0d553872952f",
+        "photo-1423592707957-3b212afa6733",
+        "photo-1507679799987-c73779587ccf",
     ],
     "finance":      [
-        "photo-1460925895917-afdab827c52f",  # finance charts
-        "photo-1611974789855-9c2a0a7236a3",  # stock market
-        "photo-1454165804606-c3d57bc86b40",  # business meeting
-        "photo-1468254095679-bbcba94a7066",  # city financial district
-        "photo-1579621970563-ebec7560ff3e",  # financial planning
-        "photo-1559526324-593bc073d938",     # money investment
+        "photo-1460925895917-afdab827c52f",
+        "photo-1611974789855-9c2a0a7236a3",
+        "photo-1454165804606-c3d57bc86b40",
+        "photo-1468254095679-bbcba94a7066",
+        "photo-1579621970563-ebec7560ff3e",
+        "photo-1559526324-593bc073d938",
     ],
     "real_estate":  [
-        "photo-1560518883-ce09059eeffa",     # modern house exterior
-        "photo-1570129477492-45c003edd2be",  # beautiful home
-        "photo-1501183638710-841dd1904471",  # interior living room
-        "photo-1486325212027-8081e485255e",  # house for sale
-        "photo-1512917774080-9991f1c4c750",  # luxury home
-        "photo-1583608205776-bfd35f0d9f83",  # kitchen renovation
+        "photo-1560518883-ce09059eeffa",
+        "photo-1570129477492-45c003edd2be",
+        "photo-1501183638710-841dd1904471",
+        "photo-1486325212027-8081e485255e",
+        "photo-1512917774080-9991f1c4c750",
+        "photo-1583608205776-bfd35f0d9f83",
     ],
     "automotive":   [
-        "photo-1492144534655-ae79c964c9d7",  # car detail shot
-        "photo-1503376780353-7e6692767b70",  # car in garage
-        "photo-1558618666-fcd25c85cd64",     # mechanic working
-        "photo-1486262715619-67b85e0b08d3",  # car engine
-        "photo-1568605117036-5fe5e7bab0b7",  # modern car
-        "photo-1552519507-da3b142c6e3d",     # sports car
+        "photo-1492144534655-ae79c964c9d7",
+        "photo-1503376780353-7e6692767b70",
+        "photo-1558618666-fcd25c85cd64",
+        "photo-1486262715619-67b85e0b08d3",
+        "photo-1568605117036-5fe5e7bab0b7",
+        "photo-1552519507-da3b142c6e3d",
     ],
     "logistics":    [
-        "photo-1586528116311-ad8dd3c8310d",  # warehouse
-        "photo-1601584115197-04ecc0da31d7",  # delivery truck
-        "photo-1494412574643-ff11b0a5c1c3",  # shipping containers
-        "photo-1504493188-45c49f65c6ba",     # supply chain
-        "photo-1530521954074-e64f6810b32d",  # logistics aerial
-        "photo-1577705998148-6da4f3963bc8",  # packages sorting
+        "photo-1586528116311-ad8dd3c8310d",
+        "photo-1601584115197-04ecc0da31d7",
+        "photo-1494412574643-ff11b0a5c1c3",
+        "photo-1504493188-45c49f65c6ba",
+        "photo-1530521954074-e64f6810b32d",
+        "photo-1577705998148-6da4f3963bc8",
     ],
     "events":       [
-        "photo-1540575467063-178a50c2df87",  # event venue
-        "photo-1511795409834-ef04bbd61622",  # conference room
-        "photo-1464366400600-7168b8af9bc3",  # wedding reception
-        "photo-1519167758481-83f550bb49b3",  # party celebration
-        "photo-1505236858219-8359eb29e329",  # stage lights concert
-        "photo-1472653431158-6364773b2a56",  # gala dinner
+        "photo-1540575467063-178a50c2df87",
+        "photo-1511795409834-ef04bbd61622",
+        "photo-1464366400600-7168b8af9bc3",
+        "photo-1519167758481-83f550bb49b3",
+        "photo-1505236858219-8359eb29e329",
+        "photo-1472653431158-6364773b2a56",
     ],
     "travel":       [
-        "photo-1476514525535-07fb3b4ae5f1",  # travel destination
-        "photo-1501854140801-50d01698950b",  # scenic landscape
-        "photo-1488085061387-422e29b40080",  # hotel resort
-        "photo-1530521954074-e64f6810b32d",  # aerial view travel
-        "photo-1469474968028-56623f02e42e",  # nature travel
-        "photo-1433838552652-f9a46b332c40",  # beach resort
+        "photo-1476514525535-07fb3b4ae5f1",
+        "photo-1501854140801-50d01698950b",
+        "photo-1488085061387-422e29b40080",
+        "photo-1530521954074-e64f6810b32d",
+        "photo-1469474968028-56623f02e42e",
+        "photo-1433838552652-f9a46b332c40",
     ],
     "education":    [
-        "photo-1503676260728-1c00da094a0b",  # classroom
-        "photo-1456513080510-7bf3a84b82f8",  # library books
-        "photo-1522202176988-66273c2fd55f",  # students learning
-        "photo-1434030216411-0b793f4b4173",  # studying laptop
-        "photo-1524178232363-1fb2b075b655",  # lecture hall
-        "photo-1509062522246-3755977927d7",  # chalkboard
+        "photo-1503676260728-1c00da094a0b",
+        "photo-1456513080510-7bf3a84b82f8",
+        "photo-1522202176988-66273c2fd55f",
+        "photo-1434030216411-0b793f4b4173",
+        "photo-1524178232363-1fb2b075b655",
+        "photo-1509062522246-3755977927d7",
     ],
     "saas":         [
-        "photo-1551434678-e076c223a692",     # team working tech
-        "photo-1497366216548-37526070297c",  # modern office
-        "photo-1518770660439-4636190af475",  # circuit board tech
-        "photo-1461749280684-dccba630e2f6",  # coding laptop
-        "photo-1519389950473-47ba0277781c",  # tech workspace
-        "photo-1531482615713-2afd69097998",  # team collaboration
+        "photo-1551434678-e076c223a692",
+        "photo-1497366216548-37526070297c",
+        "photo-1518770660439-4636190af475",
+        "photo-1461749280684-dccba630e2f6",
+        "photo-1519389950473-47ba0277781c",
+        "photo-1531482615713-2afd69097998",
     ],
     "ai":           [
-        "photo-1620712943543-bcc4688e7485",  # AI concept
-        "photo-1677442135703-1787eea5ce01",  # AI neural network
-        "photo-1593508512255-86ab42a8e620",  # futuristic tech
-        "photo-1518770660439-4636190af475",  # circuit board
-        "photo-1485827404703-89b55fcc595e",  # robot technology
-        "photo-1507146153580-69a1fe6d8aa1",  # data visualization
+        "photo-1620712943543-bcc4688e7485",
+        "photo-1677442135703-1787eea5ce01",
+        "photo-1593508512255-86ab42a8e620",
+        "photo-1518770660439-4636190af475",
+        "photo-1485827404703-89b55fcc595e",
+        "photo-1507146153580-69a1fe6d8aa1",
     ],
     "developer":    [
-        "photo-1461749280684-dccba630e2f6",  # coding screen
-        "photo-1498050108023-c5249f4df085",  # laptop code
-        "photo-1555066931-4365d14bab8c",     # code dark screen
-        "photo-1607799279861-4dd421887fb3",  # developer workspace
-        "photo-1516116216624-53e697fedbea",  # multiple monitors
-        "photo-1571171637578-41bc2dd41cd2",  # coding close up
+        "photo-1461749280684-dccba630e2f6",
+        "photo-1498050108023-c5249f4df085",
+        "photo-1555066931-4365d14bab8c",
+        "photo-1607799279861-4dd421887fb3",
+        "photo-1516116216624-53e697fedbea",
+        "photo-1571171637578-41bc2dd41cd2",
     ],
     "agency":       [
-        "photo-1497366754035-f200968a6e72",  # creative office
-        "photo-1524758631624-e2822e304c36",  # design studio
-        "photo-1542744173-8e7e53415bb0",     # whiteboard meeting
-        "photo-1558655146-9f40138edfeb",     # creative team
-        "photo-1522071820081-009f0129c71c",  # team brainstorm
-        "photo-1600880292089-90a7e086ee0c",  # agency workspace
+        "photo-1497366754035-f200968a6e72",
+        "photo-1524758631624-e2822e304c36",
+        "photo-1542744173-8e7e53415bb0",
+        "photo-1558655146-9f40138edfeb",
+        "photo-1522071820081-009f0129c71c",
+        "photo-1600880292089-90a7e086ee0c",
     ],
     "nature":       [
-        "photo-1441974231531-c6227db76b6e",  # forest nature
-        "photo-1469474968028-56623f02e42e",  # green landscape
-        "photo-1518173946687-a4c8892bbd9f",  # organic farm
-        "photo-1540979388789-6cee28a1cdc9",  # eco products
-        "photo-1504309092620-4d0ec726efa4",  # sustainable garden
-        "photo-1416879595882-3373a0480b5b",  # flowers nature
+        "photo-1441974231531-c6227db76b6e",
+        "photo-1469474968028-56623f02e42e",
+        "photo-1518173946687-a4c8892bbd9f",
+        "photo-1540979388789-6cee28a1cdc9",
+        "photo-1504309092620-4d0ec726efa4",
+        "photo-1416879595882-3373a0480b5b",
     ],
     "nonprofit":    [
-        "photo-1488521787991-ed7bbaae773c",  # volunteers hands
-        "photo-1593113630400-ea4288922559",  # community helping
-        "photo-1532629345422-7515f3d16bb6",  # charity event
-        "photo-1491438590914-bc09fcaaf77a",  # people community
-        "photo-1469571486292-0ba58a3f068b",  # volunteer work
-        "photo-1559027615-cd4628902d4a",     # donation charity
+        "photo-1488521787991-ed7bbaae773c",
+        "photo-1593113630400-ea4288922559",
+        "photo-1532629345422-7515f3d16bb6",
+        "photo-1491438590914-bc09fcaaf77a",
+        "photo-1469571486292-0ba58a3f068b",
+        "photo-1559027615-cd4628902d4a",
     ],
     "luxury":       [
-        "photo-1519501025264-65ba15a82390",  # luxury interior
-        "photo-1549298916-b41d501d3772",     # premium product
-        "photo-1441984904996-e0b6ba687e04",  # luxury fashion
-        "photo-1582719508461-905c673771fd",  # luxury hotel
-        "photo-1567016432779-094069958ea5",  # penthouse view
-        "photo-1617103996702-96ff29b1c467",  # fine dining luxury
+        "photo-1519501025264-65ba15a82390",
+        "photo-1549298916-b41d501d3772",
+        "photo-1441984904996-e0b6ba687e04",
+        "photo-1582719508461-905c673771fd",
+        "photo-1567016432779-094069958ea5",
+        "photo-1617103996702-96ff29b1c467",
     ],
     "startup":      [
-        "photo-1553877522-43269d4ea984",     # startup team
-        "photo-1497366811353-6870744d04b2",  # modern coworking
-        "photo-1556761175-4b46a572b786",     # startup office
-        "photo-1504384308090-c894fdcc538d",  # open office
-        "photo-1600880292203-757bb62b4baf",  # team meeting
-        "photo-1559136555-9303baea8ebd",     # entrepreneur laptop
+        "photo-1553877522-43269d4ea984",
+        "photo-1497366811353-6870744d04b2",
+        "photo-1556761175-4b46a572b786",
+        "photo-1504384308090-c894fdcc538d",
+        "photo-1600880292203-757bb62b4baf",
+        "photo-1559136555-9303baea8ebd",
     ],
     "ecommerce":    [
-        "photo-1556742049-0cfed4f6a45d",     # online shopping
-        "photo-1472851294608-062f824d29cc",  # retail store
-        "photo-1523275335684-37898b6baf30",  # product watch
-        "photo-1526170375885-4d8ecf77b99f",  # flatlay products
-        "photo-1585386959984-a4155224a1ad",  # packaging delivery
-        "photo-1491553895911-0055eca6402d",  # product display
+        "photo-1556742049-0cfed4f6a45d",
+        "photo-1472851294608-062f824d29cc",
+        "photo-1523275335684-37898b6baf30",
+        "photo-1526170375885-4d8ecf77b99f",
+        "photo-1585386959984-a4155224a1ad",
+        "photo-1491553895911-0055eca6402d",
     ],
 }
 
 _DEFAULT_PHOTOS = [
-    "photo-1497366216548-37526070297c",  # office professional
-    "photo-1454165804606-c3d57bc86b40",  # business meeting
-    "photo-1522202176988-66273c2fd55f",  # people working
-    "photo-1542744173-8e7e53415bb0",     # whiteboard collaboration
+    "photo-1497366216548-37526070297c",
+    "photo-1454165804606-c3d57bc86b40",
+    "photo-1522202176988-66273c2fd55f",
+    "photo-1542744173-8e7e53415bb0",
 ]
 
 def _photo(industry: str, idx: int, w: int = 1200) -> str:
-    """Return a verified Unsplash photo URL for the given industry and slot index."""
     pool = INDUSTRY_PHOTOS.get(industry, _DEFAULT_PHOTOS)
     pid  = pool[idx % len(pool)]
     return f"https://images.unsplash.com/{pid}?w={w}&auto=format&fit=crop&q=80"
 
 # =============================================================================
-# CSS ENGINE — generates the complete stylesheet from theme tokens
+# CSS ENGINE
 # =============================================================================
 
 def _build_css(t: Dict) -> str:
@@ -751,32 +932,45 @@ def _build_css(t: Dict) -> str:
     shadow_md  = "0 4px 16px rgba(0,0,0,0.08), 0 1px 4px rgba(0,0,0,0.04)" if not is_dark else "0 4px 16px rgba(0,0,0,0.5)"
     shadow_lg  = "0 20px 60px rgba(0,0,0,0.10), 0 4px 16px rgba(0,0,0,0.06)" if not is_dark else "0 20px 60px rgba(0,0,0,0.6)"
 
-    # Theme-specific card border radius personality
-    card_radius = {
-        "chalk": "0px",       # brutalist — sharp corners
-        "neon":  "4px",       # cyberpunk — very tight
-        "steel": "6px",       # industrial
-        "arctic":"20px",      # soft precise
-        "terra": "12px",      # organic
-        "dusk":  "16px",      # smooth dark
+    # Use per-theme overrides if present, else fall back to smart defaults
+    card_radius = t.get("_card_radius") or {
+        "chalk":    "0px",
+        "neon":     "4px",
+        "steel":    "6px",
+        "arctic":   "20px",
+        "terra":    "12px",
+        "dusk":     "16px",
+        "obsidian": "2px",
+        "nordic":   "0px",
+        "editorial":"0px",
+        "vintage":  "4px",
+        "bloom":    "24px",
     }.get(tid, "16px")
 
-    # Theme-specific button radius
-    btn_radius = {
-        "chalk": "0px",
-        "neon":  "3px",
-        "steel": "4px",
-        "arctic":"999px",     # pill buttons
-        "sand":  "999px",
-        "terra": "8px",
+    btn_radius = t.get("_btn_radius") or {
+        "chalk":    "0px",
+        "neon":     "3px",
+        "steel":    "4px",
+        "arctic":   "999px",
+        "sand":     "999px",
+        "terra":    "8px",
+        "obsidian": "2px",
+        "nordic":   "0px",
+        "editorial":"0px",
+        "vintage":  "3px",
+        "bloom":    "999px",
     }.get(tid, "10px")
 
-    # Theme-specific accent decoration style
     eyebrow_style = {
-        "chalk": "font-family:'Bebas Neue',sans-serif;font-size:1rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent);",
-        "neon":  "font-family:monospace;font-size:0.65rem;color:var(--accent);letter-spacing:0.25em;text-shadow:0 0 8px var(--accent);",
-        "dusk":  "font-size:0.62rem;letter-spacing:0.22em;text-transform:uppercase;color:var(--accent);",
-        "arctic":"font-size:0.62rem;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent);border-left:2px solid var(--accent);padding-left:0.6rem;",
+        "chalk":    "font-family:'Bebas Neue',sans-serif;font-size:1rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent);",
+        "neon":     "font-family:monospace;font-size:0.65rem;color:var(--accent);letter-spacing:0.25em;text-shadow:0 0 8px var(--accent);",
+        "dusk":     "font-size:0.62rem;letter-spacing:0.22em;text-transform:uppercase;color:var(--accent);",
+        "arctic":   "font-size:0.62rem;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent);border-left:2px solid var(--accent);padding-left:0.6rem;",
+        "vintage":  "font-family:'Alfa Slab One',serif;font-size:0.7rem;letter-spacing:0.15em;text-transform:uppercase;color:var(--accent);",
+        "bloom":    "font-size:0.65rem;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:var(--accent);",
+        "obsidian": "font-size:0.55rem;font-weight:400;letter-spacing:0.35em;text-transform:uppercase;color:var(--text3);",
+        "nordic":   "font-size:0.6rem;font-weight:700;letter-spacing:0.3em;text-transform:uppercase;color:var(--text3);border-bottom:1px solid var(--border);padding-bottom:0.5rem;display:inline-block;",
+        "editorial":"font-family:'Anton',sans-serif;font-size:0.75rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--accent);",
     }.get(tid, "font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.2em;color:var(--accent);")
 
     grain_css = """
@@ -822,6 +1016,92 @@ body::before{
     radial-gradient(ellipse 40% 40% at 60% 30%,rgba(255,100,200,0.03) 0%,transparent 50%);
 }""" if tid == "dusk" else ""
 
+    # ── New theme extra CSS ────────────────────────────────────────────────
+
+    vintage_css = """
+/* ── Vintage aged paper effects ── */
+.card{border:2px solid var(--border);border-radius:4px;box-shadow:3px 3px 0 rgba(139,40,0,0.12);}
+.card:hover{transform:translateY(-3px) translateX(-1px);box-shadow:5px 5px 0 rgba(139,40,0,0.16);}
+.h-display{text-transform:uppercase;line-height:0.9;letter-spacing:-0.01em;}
+.h-section{text-transform:uppercase;letter-spacing:0.02em;}
+.btn{border-radius:3px !important;border:2px solid currentColor !important;}
+.btn-primary{background:var(--accent) !important;border-color:var(--accent) !important;}
+.btn-outline{background:transparent !important;color:var(--text) !important;border-color:var(--border) !important;}
+.feat-icon{border-radius:4px;border:2px solid var(--border);}
+/* Stamp-style tags */
+.tag{border-radius:2px;font-family:'Alfa Slab One',serif;font-size:0.6rem;letter-spacing:0.12em;}
+/* Thick accent rule above h-section */
+.h-section::before{content:'';display:block;width:40px;height:4px;background:var(--accent);margin-bottom:0.75rem;}
+/* Decorative hr */
+hr.vintage-rule{border:none;height:2px;background:repeating-linear-gradient(90deg,var(--border) 0,var(--border) 6px,transparent 6px,transparent 12px);margin:2rem 0;}""" if tid == "vintage" else ""
+
+    bloom_css = """
+/* ── Bloom soft wellness effects ── */
+.card{border:none;box-shadow:0 4px 24px rgba(200,120,106,0.08),0 1px 4px rgba(200,120,106,0.04);border-radius:24px;}
+.card:hover{box-shadow:0 12px 48px rgba(200,120,106,0.14),0 2px 8px rgba(200,120,106,0.06);transform:translateY(-4px);}
+.btn{border-radius:999px !important;}
+.feat-icon{border-radius:50%;}
+.h-display{font-weight:400;letter-spacing:-0.02em;}
+.tag{border-radius:999px;}
+/* Soft botanical blobs */
+body::before{
+  content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(ellipse 55% 45% at 15% 25%,rgba(200,120,106,0.05) 0%,transparent 60%),
+    radial-gradient(ellipse 45% 55% at 85% 75%,rgba(180,140,160,0.04) 0%,transparent 60%);
+}""" if tid == "bloom" else ""
+
+    obsidian_css = """
+/* ── Obsidian ultra-luxury restraint ── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:2px;box-shadow:none;transition:border-color 0.4s,background 0.3s;}
+.card:hover{background:#1c1c1c;border-color:rgba(212,201,184,0.2);transform:none;box-shadow:none;}
+.btn-primary{border-radius:2px !important;letter-spacing:0.12em;text-transform:uppercase;font-size:0.75rem;font-weight:400;padding:1rem 2.5rem;}
+.btn-outline{border-radius:2px !important;letter-spacing:0.12em;text-transform:uppercase;font-size:0.75rem;font-weight:400;}
+.h-display{font-weight:300;letter-spacing:0.04em;line-height:1.1;}
+.h-section{font-weight:300;letter-spacing:0.06em;}
+.h-card{font-weight:400;letter-spacing:0.08em;font-size:0.85rem;text-transform:uppercase;}
+/* Hair-line dividers */
+.tag{border-radius:0;letter-spacing:0.2em;font-size:0.55rem;font-weight:300;text-transform:uppercase;padding:0.25rem 0.75rem;}
+.feat-icon{border-radius:0;border:1px solid var(--border);background:transparent;}
+.eyebrow{letter-spacing:0.4em;font-size:0.5rem;}""" if tid == "obsidian" else ""
+
+    nordic_css = """
+/* ── Nordic grid precision ── */
+.card{border-radius:0 !important;border:1px solid var(--border);box-shadow:none;transition:border-color 0.25s,background 0.2s;}
+.card:hover{background:var(--bg2);border-color:var(--text3);transform:none;box-shadow:none;}
+.btn{border-radius:0 !important;}
+.btn-primary{background:var(--text) !important;color:var(--nav-bg) !important;letter-spacing:0.06em;text-transform:uppercase;font-size:0.78rem;font-weight:600;padding:0.9rem 2rem;}
+.btn-outline{border:2px solid var(--border) !important;letter-spacing:0.06em;text-transform:uppercase;font-size:0.78rem;}
+.h-display{font-weight:900;letter-spacing:-0.04em;text-transform:uppercase;line-height:0.92;}
+.h-section{font-weight:800;text-transform:uppercase;letter-spacing:-0.02em;}
+.img-wrap{border-radius:0 !important;}
+.feat-icon{border-radius:0;border:1px solid var(--border);background:transparent;color:var(--text);}
+.tag{border-radius:0;text-transform:uppercase;letter-spacing:0.15em;border:1px solid var(--text);background:transparent;color:var(--text);}
+/* Grid lines overlay */
+.sec-hero::before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(90deg,rgba(0,0,0,0.015) 0,rgba(0,0,0,0.015) 1px,transparent 1px,transparent calc(100% / 12));pointer-events:none;z-index:0;}""" if tid == "nordic" else ""
+
+    editorial_css = """
+/* ── Editorial bold typographic style ── */
+.card{border-radius:0 !important;border:none;border-top:3px solid var(--text);padding-top:1.5rem;box-shadow:none;background:transparent;transition:border-color 0.2s;}
+.card:hover{border-color:var(--accent);transform:none;box-shadow:none;}
+.btn{border-radius:0 !important;}
+.btn-primary{background:var(--text) !important;color:var(--cta-text) !important;text-transform:uppercase;letter-spacing:0.1em;font-size:0.78rem;font-weight:700;padding:0.9rem 2.5rem;}
+.btn-outline{border:2px solid var(--text) !important;text-transform:uppercase;letter-spacing:0.1em;font-size:0.78rem;}
+.btn-outline:hover{border-color:var(--accent) !important;color:var(--accent) !important;}
+.h-display{font-weight:400;text-transform:uppercase;letter-spacing:-0.01em;line-height:0.88;}
+.h-section{font-weight:400;text-transform:uppercase;letter-spacing:0.01em;line-height:0.95;}
+.h-card{font-family:'Anton',sans-serif;letter-spacing:0.02em;text-transform:uppercase;font-size:0.95rem;}
+.feat-icon{border-radius:0;background:var(--text);color:var(--cta-text);border:none;}
+.feat-icon:hover{background:var(--accent);}
+.img-wrap{border-radius:0 !important;}
+.tag{border-radius:0;text-transform:uppercase;letter-spacing:0.12em;font-size:0.6rem;}
+/* Red accent rule */
+.eyebrow::before{content:'';display:inline-block;width:20px;height:2px;background:var(--accent);margin-right:0.5rem;vertical-align:middle;}
+/* Oversized issue numbers */
+.issue-num{font-family:'Anton',sans-serif;font-size:clamp(8rem,20vw,18rem);font-weight:400;line-height:0.85;color:rgba(0,0,0,0.04);position:absolute;right:-1rem;top:-2rem;pointer-events:none;user-select:none;text-transform:uppercase;}""" if tid == "editorial" else ""
+
+    all_theme_extra = vintage_css + bloom_css + obsidian_css + nordic_css + editorial_css
+
     return f"""<style>
 /* ── Reset & base ── */
 *,*::before,*::after{{box-sizing:border-box;margin:0;padding:0}}
@@ -847,6 +1127,7 @@ button{{cursor:pointer;border:none;background:none}}
 {chalk_css}
 {arctic_css}
 {dusk_css}
+{all_theme_extra}
 
 /* ── Typography ── */
 .h-display{{
@@ -997,7 +1278,7 @@ button{{cursor:pointer;border:none;background:none}}
 .tag{{
   display:inline-flex;align-items:center;gap:0.4rem;
   font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;
-  padding:0.28rem 0.8rem;border-radius:{"0" if tid=="chalk" else "999px"};
+  padding:0.28rem 0.8rem;border-radius:{"0" if tid in ["chalk","nordic","editorial","obsidian","vintage"] else "999px"};
   background:var(--tag-bg);color:var(--tag-text);border:1px solid var(--tag-border);
   transition:transform 0.2s;
 }}
@@ -1007,7 +1288,7 @@ button{{cursor:pointer;border:none;background:none}}
 
 /* ── Feature icon ── */
 .feat-icon{{
-  width:52px;height:52px;border-radius:{"4px" if tid in ["chalk","neon"] else "14px"};
+  width:52px;height:52px;border-radius:{"4px" if tid in ["chalk","neon","vintage"] else "14px"};
   display:flex;align-items:center;justify-content:center;
   font-size:1.5rem;flex-shrink:0;margin-bottom:1rem;
   background:linear-gradient(135deg,rgba(var(--accent-r),.12),rgba(var(--accent-r),.03));
@@ -1048,14 +1329,14 @@ button{{cursor:pointer;border:none;background:none}}
 .chk-mark{{flex-shrink:0;width:18px;height:18px;margin-top:1px;color:var(--accent);font-weight:900;font-size:0.75rem;display:flex;align-items:center;justify-content:center;}}
 
 /* ── Images ── */
-.img-wrap{{border-radius:{"0" if tid=="chalk" else "18px"};overflow:hidden;box-shadow:{shadow_lg}}}
+.img-wrap{{border-radius:{"0" if tid in ["chalk","nordic","editorial","obsidian"] else "18px"};overflow:hidden;box-shadow:{shadow_lg}}}
 .img-fill{{width:100%;height:100%;object-fit:cover;display:block;transition:transform 0.6s cubic-bezier(.16,1,.3,1);}}
 .img-wrap:hover .img-fill{{transform:scale(1.03)}}
 .img-tall{{height:480px}}.img-mid{{aspect-ratio:4/3}}
 @media(max-width:767px){{.img-tall{{height:260px}}}}
 
 /* ── FAQ ── */
-details.faq-item{{border:1px solid var(--border);border-radius:{"0" if tid=="chalk" else "12px"};overflow:hidden;margin-bottom:0.5rem;background:var(--surface);transition:border-color 0.2s;}}
+details.faq-item{{border:1px solid var(--border);border-radius:{"0" if tid in ["chalk","nordic","editorial","obsidian","vintage"] else "12px"};overflow:hidden;margin-bottom:0.5rem;background:var(--surface);transition:border-color 0.2s;}}
 details.faq-item:hover{{border-color:rgba(var(--accent-r),0.2)}}
 details.faq-item>summary{{list-style:none;display:flex;justify-content:space-between;align-items:center;padding:1.1rem 1.4rem;cursor:pointer;font-weight:600;font-size:0.9rem;color:var(--text);user-select:none;gap:1rem;}}
 details.faq-item>summary::-webkit-details-marker{{display:none}}
@@ -1068,13 +1349,30 @@ details.faq-item[open]>summary .faq-toggle{{transform:rotate(45deg);color:var(--
 .form-input{{
   width:100%;padding:0.85rem 1rem;font-size:0.9rem;
   background:var(--bg);border:1.5px solid var(--border);
-  border-radius:{"0" if tid=="chalk" else "10px"};color:var(--text);outline:none;
+  border-radius:{"0" if tid in ["chalk","nordic","editorial","obsidian","vintage"] else "10px"};color:var(--text);outline:none;
   transition:border-color 0.2s,box-shadow 0.2s;
 }}
 .form-input:focus{{border-color:var(--accent);box-shadow:0 0 0 3px rgba(var(--accent-r),.10)}}
 .form-input::placeholder{{color:var(--text3)}}
 textarea.form-input{{resize:none;min-height:120px}}
 .form-row{{margin-bottom:1.1rem}}
+
+/* ── Form submission states ── */
+.form-toast{{
+  display:none;padding:0.85rem 1.25rem;border-radius:{"0" if tid in ["chalk","nordic","editorial","obsidian","vintage"] else "10px"};
+  font-size:0.875rem;font-weight:600;margin-top:0.85rem;text-align:center;
+}}
+.form-toast.success{{display:block;background:rgba(34,197,94,0.12);color:#166534;border:1px solid rgba(34,197,94,0.25);}}
+.form-toast.error{{display:block;background:rgba(239,68,68,0.1);color:#991b1b;border:1px solid rgba(239,68,68,0.2);}}
+.form-submit-btn{{position:relative;overflow:hidden;}}
+.form-submit-btn.loading{{opacity:0.7;pointer-events:none;}}
+.form-submit-btn.loading::after{{
+  content:'';position:absolute;bottom:0;left:0;height:2px;background:rgba(255,255,255,0.5);
+  animation:form-progress 1.4s ease-in-out infinite;
+}}
+@keyframes form-progress{{
+  0%{{width:0;left:0}}60%{{width:80%;left:0}}100%{{width:0;left:100%}}
+}}
 
 /* ── Footer ── */
 .site-footer{{border-top:1px solid var(--border);padding:4rem 0 2.5rem;background:var(--bg)}}
@@ -1089,200 +1387,17 @@ textarea.form-input{{resize:none;min-height:120px}}
 .rv.in{{opacity:1;transform:none}}
 .d1{{transition-delay:.06s}}.d2{{transition-delay:.12s}}.d3{{transition-delay:.18s}}.d4{{transition-delay:.26s}}
 
-/* ── Marquee (used by trust band on some themes) ── */
+/* ── Marquee ── */
 @keyframes marquee{{from{{transform:translateX(0)}}to{{transform:translateX(-50%)}}}}
 .marquee-track{{display:flex;gap:2.5rem;animation:marquee 28s linear infinite;width:max-content;}}
 .marquee-track:hover{{animation-play-state:paused;}}
 
-/* ── Floating animation for decorative elements ── */
+/* ── Floating animation ── */
 @keyframes float{{0%,100%{{transform:translateY(0)}}50%{{transform:translateY(-12px)}}}}
 .float{{animation:float 6s ease-in-out infinite;}}
 
 /* ── Counter animation ── */
 .stat-num{{transition:color 0.3s;}}
-</style>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="{t['font_url']}">"""
-
-    return f"""<style>
-/* ── Reset & base ── */
-*,*::before,*::after{{box-sizing:border-box;margin:0;padding:0}}
-:root{{
-{vars_block}
-}}
-html{{
-  font-family:{t['font_body']};
-  background:var(--bg);
-  color:var(--text);
-  scroll-behavior:smooth;
-  -webkit-font-smoothing:antialiased;
-  -moz-osx-font-smoothing:grayscale;
-}}
-body{{background:var(--bg);color:var(--text);overflow-x:hidden;line-height:1.6}}
-img{{display:block;max-width:100%;height:auto}}
-a{{color:inherit;text-decoration:none}}
-button,input,textarea,select{{font-family:inherit}}
-button{{cursor:pointer;border:none;background:none}}
-
-/* ── Typography ── */
-.h-display{{
-  font-family:{t['font_heading']};
-  font-size:clamp(2.8rem,6vw,5.5rem);
-  font-weight:700;
-  letter-spacing:-0.03em;
-  line-height:1.06;
-  color:var(--text);
-}}
-.h-section{{
-  font-family:{t['font_heading']};
-  font-size:clamp(2rem,3.5vw,3rem);
-  font-weight:700;
-  letter-spacing:-0.025em;
-  line-height:1.15;
-  color:var(--text);
-}}
-.h-card{{
-  font-family:{t['font_heading']};
-  font-size:1.1rem;
-  font-weight:600;
-  letter-spacing:-0.01em;
-  color:var(--text);
-  line-height:1.3;
-}}
-.eyebrow{{
-  display:inline-block;
-  font-size:0.65rem;
-  font-weight:700;
-  text-transform:uppercase;
-  letter-spacing:0.2em;
-  color:var(--accent);
-  margin-bottom:1rem;
-}}
-.body-lg{{font-size:1.125rem;line-height:1.72;color:var(--text2)}}
-.body-md{{font-size:0.9875rem;line-height:1.68;color:var(--text2)}}
-.body-sm{{font-size:0.85rem;line-height:1.65;color:var(--text2)}}
-
-/* ── Layout ── */
-.wrap{{width:100%;max-width:1140px;margin:0 auto;padding:0 1.5rem}}
-@media(min-width:768px){{.wrap{{padding:0 2.5rem}}}}
-
-/* All sections share ONE background — flow is achieved via spacing only */
-.sec{{position:relative;padding:6rem 0}}
-.sec-hero{{position:relative;padding:5rem 0 4rem}}
-.sec-sm{{position:relative;padding:3.5rem 0}}
-@media(min-width:768px){{
-  .sec{{padding:8rem 0}}
-  .sec-hero{{padding:7rem 0 5rem;min-height:88vh;display:flex;align-items:center}}
-}}
-@media(max-width:767px){{
-  .sec{{padding:4.5rem 0}}
-  .sec-hero{{padding:4rem 0 3rem;min-height:auto}}
-}}
-
-/* Subtle band — pure overlay tint, never a hard bg change */
-.band::before{{
-  content:'';
-  position:absolute;
-  inset:0;
-  background:linear-gradient(180deg,
-    transparent 0%,
-    rgba(var(--accent-r),0.028) 30%,
-    rgba(var(--accent-r),0.028) 70%,
-    transparent 100%
-  );
-  pointer-events:none;
-}}
-
-/* ── Grid ── */
-.g2{{display:grid;grid-template-columns:1fr;gap:2rem}}
-.g3{{display:grid;grid-template-columns:1fr;gap:1.5rem}}
-.g4{{display:grid;grid-template-columns:repeat(2,1fr);gap:1.25rem}}
-@media(min-width:600px){{.g3{{grid-template-columns:repeat(2,1fr)}}}}
-@media(min-width:900px){{
-  .g2{{grid-template-columns:1fr 1fr;gap:3rem}}
-  .g3{{grid-template-columns:repeat(3,1fr)}}
-  .g4{{grid-template-columns:repeat(4,1fr)}}
-}}
-.ai{{align-items:center}}
-.gap-xl{{gap:5rem}}
-
-/* ── Utilities ── */
-.tc{{text-align:center}}
-.rel{{position:relative}}
-.z1{{position:relative;z-index:1}}
-.mx-auto{{margin-left:auto;margin-right:auto}}
-.mw-xs{{max-width:28rem}}
-.mw-sm{{max-width:36rem}}
-.mw-md{{max-width:50rem}}
-.mw-lg{{max-width:68rem}}
-.flex{{display:flex}}.flex-col{{flex-direction:column}}.flex-wrap{{flex-wrap:wrap}}
-.gap1{{gap:0.5rem}}.gap2{{gap:0.75rem}}.gap3{{gap:1rem}}.gap4{{gap:1.5rem}}.gap5{{gap:2rem}}
-.ai-c{{align-items:center}}
-.mt1{{margin-top:0.5rem}}.mt2{{margin-top:1rem}}.mt3{{margin-top:1.5rem}}
-.mt4{{margin-top:2rem}}.mt5{{margin-top:2.5rem}}.mt6{{margin-top:3rem}}
-.mb1{{margin-bottom:0.5rem}}.mb2{{margin-bottom:1rem}}.mb3{{margin-bottom:1.5rem}}
-.mb4{{margin-bottom:2rem}}.mb5{{margin-bottom:2.5rem}}
-
-/* ── Ambient glow blobs — decorative only ── */
-.blob{{position:absolute;border-radius:50%;filter:blur(90px);pointer-events:none;z-index:0;background:var(--glow)}}
-
-/* ── Navigation ── */
-.site-nav{{
-  position:fixed;top:0;left:0;right:0;z-index:200;
-  background:var(--nav-bg);
-  border-bottom:1px solid var(--border);
-  backdrop-filter:blur(20px);
-  -webkit-backdrop-filter:blur(20px);
-}}
-.nav-inner{{
-  display:flex;align-items:center;justify-content:space-between;
-  height:64px;padding:0 1.5rem;max-width:1140px;margin:0 auto;
-}}
-@media(min-width:768px){{.nav-inner{{padding:0 2.5rem}}}}
-.nav-logo{{
-  font-family:{t['font_heading']};
-  font-size:1.15rem;font-weight:700;
-  letter-spacing:-0.02em;color:var(--text);
-}}
-.nav-links{{display:none;list-style:none;gap:2rem;align-items:center}}
-@media(min-width:768px){{.nav-links{{display:flex}}}}
-.nav-links a{{font-size:0.85rem;font-weight:500;color:var(--text2);transition:color 0.2s}}
-.nav-links a:hover{{color:var(--text)}}
-.nav-cta{{
-  display:none;
-  background:var(--cta);color:var(--cta-text) !important;
-  font-size:0.82rem;font-weight:600;
-  padding:0.5rem 1.2rem;border-radius:8px;
-  transition:opacity 0.2s,transform 0.15s;
-}}
-.nav-cta:hover{{opacity:0.88;transform:translateY(-1px)}}
-@media(min-width:768px){{.nav-cta{{display:inline-block}}}}
-.hamburger{{display:flex;flex-direction:column;gap:5px;padding:6px;cursor:pointer}}
-@media(min-width:768px){{.hamburger{{display:none}}}}
-.hamburger span{{display:block;width:20px;height:2px;background:var(--text);border-radius:2px;transition:all 0.25s}}
-.mob-menu{{
-  display:none;flex-direction:column;
-  position:absolute;top:64px;left:0;right:0;
-  background:var(--nav-bg);border-bottom:1px solid var(--border);
-  padding:0.75rem 1.5rem 1.25rem;
-  backdrop-filter:blur(20px);
-}}
-.mob-menu.open{{display:flex}}
-.mob-menu a{{
-  padding:0.75rem 0;border-bottom:1px solid var(--border);
-  font-size:0.9rem;font-weight:500;color:var(--text2);
-}}
-.mob-menu a:last-child{{border-bottom:none;color:var(--cta) !important;font-weight:700;padding-top:1rem}}
-
-/* ── Floating animation ── */
-@keyframes float{{0%,100%{{transform:translateY(0)}}50%{{transform:translateY(-10px)}}}}
-.float{{animation:float 6s ease-in-out infinite;}}
-
-/* ── Marquee ── */
-@keyframes marquee{{from{{transform:translateX(0)}}to{{transform:translateX(-50%)}}}}
-.marquee-track{{display:flex;gap:2.5rem;animation:marquee 28s linear infinite;width:max-content;}}
-.marquee-track:hover{{animation-play-state:paused;}}
 </style>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1390,6 +1505,67 @@ REVEAL_JS = """<script>
     });
   });
 
+  // ── Contact form AJAX submission ──
+  document.querySelectorAll('.contact-form[data-endpoint]').forEach(function(form) {
+    form.addEventListener('submit', function(e) {
+      e.preventDefault();
+      var endpoint = form.getAttribute('data-endpoint');
+      var submitBtn = form.querySelector('.form-submit-btn');
+      var toast = form.querySelector('.form-toast');
+      var originalLabel = submitBtn ? submitBtn.textContent : '';
+
+      // Clear previous toast
+      if (toast) { toast.className = 'form-toast'; toast.textContent = ''; }
+
+      // Loading state
+      if (submitBtn) {
+        submitBtn.classList.add('loading');
+        submitBtn.textContent = 'Sending\u2026';
+      }
+
+      // Collect form data
+      var data = {};
+      new FormData(form).forEach(function(v, k) { data[k] = v; });
+
+      fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      })
+      .then(function(res) {
+        return res.json().then(function(body) {
+          return { ok: res.ok, body: body };
+        });
+      })
+      .then(function(result) {
+        if (submitBtn) {
+          submitBtn.classList.remove('loading');
+          submitBtn.textContent = originalLabel;
+        }
+        if (toast) {
+          if (result.ok) {
+            toast.className = 'form-toast success';
+            toast.textContent = result.body.message || 'Message sent! We\u2019ll be in touch soon.';
+            form.reset();
+          } else {
+            toast.className = 'form-toast error';
+            toast.textContent = result.body.error || 'Something went wrong. Please try again.';
+          }
+        }
+      })
+      .catch(function() {
+        if (submitBtn) {
+          submitBtn.classList.remove('loading');
+          submitBtn.textContent = originalLabel;
+        }
+        if (toast) {
+          toast.className = 'form-toast error';
+          toast.textContent = 'Network error. Please check your connection and try again.';
+        }
+      });
+    });
+  });
+
 })();
 </script>"""
 
@@ -1443,11 +1619,10 @@ def _nav(name: str, links: List[str], cta: str) -> str:
 </nav>"""
 
 # =============================================================================
-# HERO SECTION — 4 variants chosen by industry
+# HERO VARIANTS
 # =============================================================================
 
 def _hero_split(name: str, d: Dict, ind: str) -> str:
-    """Standard split — text left, image right. Most industries."""
     h     = d.get("hero", {})
     proof = d.get("social_proof") or {}
     img   = _photo(ind, 0, 1100)
@@ -1489,7 +1664,6 @@ def _hero_split(name: str, d: Dict, ind: str) -> str:
 
 
 def _hero_centered(name: str, d: Dict, ind: str) -> str:
-    """Centered editorial hero — luxury, beauty, agency."""
     h   = d.get("hero", {})
     img = _photo(ind, 0, 1400)
     ws  = h.get("h1", f"Welcome to {name}").split()
@@ -1499,7 +1673,7 @@ def _hero_centered(name: str, d: Dict, ind: str) -> str:
 
     return f"""<section class="sec-hero" style="min-height:92vh;overflow:hidden;padding-top:0;">
   <div style="position:absolute;inset:0;">
-    <img src="{img}" alt="" style="width:100%;height:100%;object-fit:cover;opacity:{'0.15' if 'dark' in d.get('_theme_mode','') else '0.12'};" loading="eager">
+    <img src="{img}" alt="" style="width:100%;height:100%;object-fit:cover;opacity:0.12;" loading="eager">
     <div style="position:absolute;inset:0;background:linear-gradient(180deg,var(--bg) 0%,transparent 40%,transparent 60%,var(--bg) 100%);"></div>
     <div style="position:absolute;inset:0;background:radial-gradient(ellipse 80% 60% at 50% 50%,var(--glow),transparent);"></div>
   </div>
@@ -1521,7 +1695,6 @@ def _hero_centered(name: str, d: Dict, ind: str) -> str:
 
 
 def _hero_stats(name: str, d: Dict, ind: str) -> str:
-    """Stats-heavy hero — construction, legal, finance, logistics."""
     h     = d.get("hero", {})
     stats = d.get("stats") or []
     img   = _photo(ind, 0, 1200)
@@ -1558,7 +1731,6 @@ def _hero_stats(name: str, d: Dict, ind: str) -> str:
 
 
 def _hero_restaurant(name: str, d: Dict, ind: str) -> str:
-    """Full-bleed cinematic hero — restaurants, travel, events."""
     h   = d.get("hero", {})
     img = _photo(ind, 0, 1400)
 
@@ -1580,25 +1752,8 @@ def _hero_restaurant(name: str, d: Dict, ind: str) -> str:
   </div>
 </section>"""
 
-# =============================================================================
-# TRUST BAND
-# =============================================================================
-
-def _trust_band(badges: List[str]) -> str:
-    if not badges:
-        return ""
-    pills = "".join(f'<span class="tag">{b}</span>' for b in badges[:6])
-    return f"""<div class="sec-sm" style="border-top:1px solid var(--border);border-bottom:1px solid var(--border);">
-  <div class="wrap">
-    <div class="rv flex flex-wrap ai-c" style="justify-content:center;gap:0.7rem;">
-      <span style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.18em;color:var(--text3);margin-right:0.35rem;">Trusted</span>
-      {pills}
-    </div>
-  </div>
-</div>"""
 
 def _hero_minimal(name: str, d: Dict, ind: str) -> str:
-    """Typography-first minimal hero — no image, pure text with accent line. Clean services, consulting."""
     h     = d.get("hero", {})
     stats = d.get("stats") or []
     stat_html = ""
@@ -1632,7 +1787,6 @@ def _hero_minimal(name: str, d: Dict, ind: str) -> str:
 
 
 def _hero_image_left(name: str, d: Dict, ind: str) -> str:
-    """Image on left, text on right — reversal of split for variety."""
     h     = d.get("hero", {})
     img   = _photo(ind, 0, 1100)
     proof = d.get("social_proof") or {}
@@ -1650,7 +1804,7 @@ def _hero_image_left(name: str, d: Dict, ind: str) -> str:
           <img src="{img}" alt="{name}" class="img-fill" loading="eager">
           <div style="position:absolute;bottom:1.5rem;left:1.5rem;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:0.9rem 1.2rem;backdrop-filter:blur(10px);">
             <div style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.15em;color:var(--text3);margin-bottom:0.25rem;">Est. reputation</div>
-            <div style="display:flex;gap:2px;">{("⭐" * 5)}</div>
+            <div style="display:flex;gap:2px;">{'⭐' * 5}</div>
           </div>
         </div>
       </div>
@@ -1670,7 +1824,6 @@ def _hero_image_left(name: str, d: Dict, ind: str) -> str:
 
 
 def _hero_bold_bg(name: str, d: Dict, ind: str) -> str:
-    """Bold accent-colored left panel with text, photo fills right half — striking for trades/services."""
     h   = d.get("hero", {})
     img = _photo(ind, 0, 900)
 
@@ -1696,9 +1849,8 @@ def _hero_bold_bg(name: str, d: Dict, ind: str) -> str:
 
 
 def _hero_video_style(name: str, d: Dict, ind: str) -> str:
-    """Full-bleed image with a floating card overlay — modern editorial feel."""
-    h   = d.get("hero", {})
-    img = _photo(ind, 0, 1500)
+    h    = d.get("hero", {})
+    img  = _photo(ind, 0, 1500)
     img2 = _photo(ind, 1, 600)
 
     return f"""<section style="position:relative;min-height:88vh;overflow:hidden;padding-top:64px;">
@@ -1724,6 +1876,10 @@ def _hero_video_style(name: str, d: Dict, ind: str) -> str:
   </div>
   <style>@media(min-width:900px){{section[style*="min-height:88vh"] .rv.d2{{display:block!important}}}}</style>
 </section>"""
+
+# =============================================================================
+# FEATURE VARIANTS
+# =============================================================================
 
 def _feat_cards(feats: List[Dict]) -> str:
     cards = "".join(
@@ -1795,7 +1951,6 @@ def _feat_icon_list(feats: List[Dict], ind: str) -> str:
 
 
 def _feat_big_numbers(feats: List[Dict]) -> str:
-    """Feature section with large numbered steps — great for process-oriented businesses."""
     cards = "".join(
         f"""<div class="rv d{min(i+1,4)}" style="display:flex;gap:1.5rem;align-items:flex-start;padding:2rem 0;border-bottom:1px solid var(--border);">
       <span style="font-size:3.5rem;font-weight:900;line-height:1;color:rgba(var(--accent-r),0.12);min-width:70px;letter-spacing:-0.05em;">{str(i+1).zfill(2)}</span>
@@ -1823,7 +1978,6 @@ def _feat_big_numbers(feats: List[Dict]) -> str:
 
 
 def _feat_checklist_split(feats: List[Dict], ind: str) -> str:
-    """Simple checklist on left, image right — clean and scannable for service businesses."""
     img   = _photo(ind, 1, 900)
     items = "".join(
         f"""<div class="rv d{min(i+1,4)}" style="display:flex;gap:1rem;align-items:flex-start;margin-bottom:1.25rem;">
@@ -1842,7 +1996,7 @@ def _feat_checklist_split(feats: List[Dict], ind: str) -> str:
         {_eyebrow("What We Offer")}
         <h2 class="h-section mt2 mb5">Why clients choose us</h2>
         {items}
-        <a href="#contact" class="btn btn-primary mt4">{_btn("Book Now", "#contact")}</a>
+        <a href="#contact" class="btn btn-primary mt4">Book Now</a>
       </div>
       <div class="rv d2">
         <div class="img-wrap img-tall">
@@ -1855,7 +2009,6 @@ def _feat_checklist_split(feats: List[Dict], ind: str) -> str:
 
 
 def _feat_three_columns_icons(feats: List[Dict]) -> str:
-    """Three equal columns with large emoji icons — bold and modern, great for SaaS/agency."""
     cards = "".join(
         f"""<div class="rv d{min(i+1,4)}" style="text-align:center;padding:2.5rem 1.5rem;">
       <div style="font-size:2.5rem;margin-bottom:1.25rem;">{f.get("icon","◆")}</div>
@@ -1868,18 +2021,16 @@ def _feat_three_columns_icons(feats: List[Dict]) -> str:
   <div class="wrap">
     {_section_header("Features", "Built for results", "No fluff. No bloat. Just what works.")}
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:0;border:1px solid var(--border);border-radius:16px;overflow:hidden;">
-      {cards.replace('<div class="rv', '<div class="rv" style="border-right:1px solid var(--border);').rstrip()}
+      {cards}
     </div>
   </div>
 </section>"""
 
-
 # =============================================================================
-# PROCESS / HOW IT WORKS — new section type
+# PROCESS / HOW IT WORKS
 # =============================================================================
 
 def _process_steps(d: Dict) -> str:
-    """Horizontal step-by-step process — how the service works."""
     feats = d.get("features") or []
     if not feats:
         return ""
@@ -1888,10 +2039,10 @@ def _process_steps(d: Dict) -> str:
         f"""<div class="rv d{min(i+1,4)}" style="flex:1;min-width:180px;text-align:center;padding:0 1rem;position:relative;">
       {"" if i == 0 else '<div style="position:absolute;top:20px;left:-50%;width:100%;height:2px;background:linear-gradient(to right,var(--accent),rgba(var(--accent-r),0.2));z-index:0;"></div>'}
       <div style="width:44px;height:44px;border-radius:50%;background:var(--accent);color:var(--cta-text);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:0.9rem;margin:0 auto 1rem;position:relative;z-index:1;">{i+1}</div>
-      <h4 style="font-weight:700;font-size:0.9rem;color:var(--text);margin-bottom:0.5rem;">{s.get("title","")}</h4>
-      <p style="font-size:0.78rem;color:var(--text2);line-height:1.55;">{(s.get("description","") or "")[:90]}...</p>
+      <h4 style="font-weight:700;font-size:0.9rem;color:var(--text);margin-bottom:0.5rem;">{steps[i].get("title","")}</h4>
+      <p style="font-size:0.78rem;color:var(--text2);line-height:1.55;">{(steps[i].get("description","") or "")[:90]}...</p>
     </div>"""
-        for i, s in enumerate(steps)
+        for i in range(len(steps))
     )
     return f"""<section class="sec-sm band" id="process" style="padding:5rem 0;">
   <div class="wrap">
@@ -1902,13 +2053,11 @@ def _process_steps(d: Dict) -> str:
   </div>
 </section>"""
 
-
 # =============================================================================
-# PHOTO GALLERY — new section type
+# PHOTO GALLERY
 # =============================================================================
 
 def _gallery(ind: str, name: str) -> str:
-    """Asymmetric masonry-style photo grid — great for service businesses, restaurants, beauty."""
     imgs = [_photo(ind, i, 800) for i in range(5)]
     return f"""<section class="sec-sm" id="gallery" style="padding:4rem 0;overflow:hidden;">
   <div class="wrap">
@@ -1933,6 +2082,10 @@ def _gallery(ind: str, name: str) -> str:
     <p style="text-align:center;margin-top:1.5rem;font-size:0.8rem;color:var(--text3);">See our latest projects and results</p>
   </div>
 </section>"""
+
+# =============================================================================
+# PRICING
+# =============================================================================
 
 def _price_tiers(tiers: List[Dict]) -> str:
     def _tier(t: Dict, idx: int) -> str:
@@ -1995,7 +2148,6 @@ def _price_project(tiers: List[Dict]) -> str:
 
 
 def _price_contact_cta() -> str:
-    """Shown when pricing is null — never shows empty/placeholder pricing."""
     return f"""<section class="sec" id="pricing">
   <div class="wrap">
     <div class="card card-plg tc mw-sm mx-auto rv" style="background:linear-gradient(135deg,rgba(var(--accent-r),0.04),rgba(var(--accent-r),0.01));">
@@ -2035,8 +2187,8 @@ def _testimonials(tevs: List[Dict]) -> str:
   </div>
 </section>"""
 
+
 def _testimonials_featured(tevs: List[Dict]) -> str:
-    """Large featured quote up top with smaller cards below — more editorial."""
     if not tevs:
         return ""
     featured = tevs[0]
@@ -2076,33 +2228,6 @@ def _testimonials_featured(tevs: List[Dict]) -> str:
   </div>
 </section>"""
 
-
-def _faq_two_col(faqs: List[Dict]) -> str:
-    """Two-column FAQ layout — more scannable for longer FAQ lists."""
-    if not faqs or len(faqs) < 3:
-        return _faq(faqs)
-    mid   = (len(faqs) + 1) // 2
-    col1  = faqs[:mid]
-    col2  = faqs[mid:]
-    def _item(faq: Dict, i: int) -> str:
-        return f"""<details class="faq-item rv d{min(i+1,3)}">
-      <summary>{faq.get("q","")}<span class="faq-toggle">+</span></summary>
-      <div class="faq-answer">{faq.get("a","")}</div>
-    </details>"""
-    c1 = "".join(_item(f, i) for i, f in enumerate(col1))
-    c2 = "".join(_item(f, i) for i, f in enumerate(col2))
-    return f"""<section class="sec-sm" id="faq" style="padding:5rem 0;">
-  <div class="wrap">
-    {_section_header("FAQ", "Common Questions")}
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem 2rem;">
-      <div>{c1}</div>
-      <div>{c2}</div>
-    </div>
-  </div>
-  <style>@media(max-width:767px){{section[id="faq"] .wrap>div:last-child{{grid-template-columns:1fr!important}}}}</style>
-</section>"""
-
-
 # =============================================================================
 # FAQ
 # =============================================================================
@@ -2124,18 +2249,73 @@ def _faq(faqs: List[Dict]) -> str:
   </div>
 </section>"""
 
+
+def _faq_two_col(faqs: List[Dict]) -> str:
+    if not faqs or len(faqs) < 3:
+        return _faq(faqs)
+    mid  = (len(faqs) + 1) // 2
+    col1 = faqs[:mid]
+    col2 = faqs[mid:]
+    def _item(faq: Dict, i: int) -> str:
+        return f"""<details class="faq-item rv d{min(i+1,3)}">
+      <summary>{faq.get("q","")}<span class="faq-toggle">+</span></summary>
+      <div class="faq-answer">{faq.get("a","")}</div>
+    </details>"""
+    c1 = "".join(_item(f, i) for i, f in enumerate(col1))
+    c2 = "".join(_item(f, i) for i, f in enumerate(col2))
+    return f"""<section class="sec-sm" id="faq" style="padding:5rem 0;">
+  <div class="wrap">
+    {_section_header("FAQ", "Common Questions")}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem 2rem;">
+      <div>{c1}</div>
+      <div>{c2}</div>
+    </div>
+  </div>
+  <style>@media(max-width:767px){{section[id="faq"] .wrap>div:last-child{{grid-template-columns:1fr!important}}}}</style>
+</section>"""
+
 # =============================================================================
-# CONTACT
+# TRUST BAND
 # =============================================================================
 
-def _contact(name: str, d: Dict, email: str, phone: str, ind: str) -> str:
+def _trust_band(badges: List[str]) -> str:
+    if not badges:
+        return ""
+    pills = "".join(f'<span class="tag">{b}</span>' for b in badges[:6])
+    return f"""<div class="sec-sm" style="border-top:1px solid var(--border);border-bottom:1px solid var(--border);">
+  <div class="wrap">
+    <div class="rv flex flex-wrap ai-c" style="justify-content:center;gap:0.7rem;">
+      <span style="font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.18em;color:var(--text3);margin-right:0.35rem;">Trusted</span>
+      {pills}
+    </div>
+  </div>
+</div>"""
+
+# =============================================================================
+# CONTACT FORM — v5: posts to API endpoint, shows toast, booking-aware
+# =============================================================================
+
+def _contact(name: str, d: Dict, email: str, phone: str, ind: str,
+             website_slug: str = "", is_booking: bool = False) -> str:
+    """
+    Generates a working contact/booking form.
+
+    - Posts JSON to /api/public/websites/{website_slug}/contact
+    - Inline JS (in REVEAL_JS) handles fetch + success/error toast
+    - Booking industries get extra fields: preferred_date + service_type
+    - Falls back gracefully when website_slug is empty (dev/preview mode)
+    """
     headline = d.get("cta_headline") or f"Work with {name}"
     sub      = d.get("hero", {}).get("sub") or "We'd love to hear about your project."
     cta      = d.get("hero", {}).get("cta") or "Send Message"
     img      = _photo(ind, 2, 1000)
 
-    form_attr   = f'action="mailto:{email}" enctype="text/plain"' if email else ""
-    form_note   = "" if email else '<p style="font-size:0.68rem;color:var(--text3);margin-top:0.75rem;text-align:center;">We\'ll set up form delivery — for now, use the phone or email above.</p>'
+    # Determine API endpoint
+    if website_slug:
+        endpoint = f"/api/public/websites/{website_slug}/contact"
+    else:
+        # Preview / dev mode — form is visible but submission is disabled with a notice
+        endpoint = ""
 
     contact_items = ""
     if email:
@@ -2144,6 +2324,26 @@ def _contact(name: str, d: Dict, email: str, phone: str, ind: str) -> str:
         safe = re.sub(r'[^\d+]', '', phone)
         contact_items += f'<a href="tel:{safe}" style="display:flex;align-items:center;gap:0.5rem;font-size:0.875rem;color:var(--text2);">☎ {phone}</a>'
     contact_block = f'<div style="display:flex;flex-direction:column;gap:0.75rem;border-top:1px solid var(--border);padding-top:1.25rem;margin-top:1.5rem;">{contact_items}</div>' if contact_items else ""
+
+    # Extra booking fields
+    booking_fields = ""
+    if is_booking:
+        booking_fields = f"""
+          <div class="form-row">
+            <label class="form-label" for="cf-date">Preferred Date</label>
+            <input class="form-input" type="date" id="cf-date" name="preferred_date">
+          </div>
+          <div class="form-row">
+            <label class="form-label" for="cf-service">Service Type</label>
+            <input class="form-input" type="text" id="cf-service" name="service_type" placeholder="e.g. Deep Tissue Massage, Haircut & Style…">
+          </div>"""
+
+    if endpoint:
+        form_attrs = f'class="contact-form" data-endpoint="{endpoint}"'
+        preview_note = ""
+    else:
+        form_attrs = 'class="contact-form"'
+        preview_note = '<p style="font-size:0.68rem;color:var(--text3);margin-top:0.75rem;text-align:center;">Preview mode — form will be active when published.</p>'
 
     return f"""<section class="sec" id="contact" style="overflow:hidden;">
   <div class="blob" style="width:500px;height:500px;top:50%;right:-8%;transform:translateY(-50%);opacity:0.5;"></div>
@@ -2159,7 +2359,7 @@ def _contact(name: str, d: Dict, email: str, phone: str, ind: str) -> str:
         {contact_block}
       </div>
       <div class="card card-plg rv d1">
-        <form {form_attr} method="post" novalidate>
+        <form {form_attrs} novalidate>
           <div class="form-row">
             <label class="form-label" for="cf-name">Your Name</label>
             <input class="form-input" type="text" id="cf-name" name="name" placeholder="Jane Smith" required autocomplete="name">
@@ -2169,11 +2369,17 @@ def _contact(name: str, d: Dict, email: str, phone: str, ind: str) -> str:
             <input class="form-input" type="email" id="cf-email" name="email" placeholder="jane@example.com" required autocomplete="email">
           </div>
           <div class="form-row">
-            <label class="form-label" for="cf-msg">Message</label>
-            <textarea class="form-input" id="cf-msg" name="message" placeholder="Tell us about your project..." required></textarea>
+            <label class="form-label" for="cf-phone">Phone (optional)</label>
+            <input class="form-input" type="tel" id="cf-phone" name="phone" placeholder="+1 (555) 000-0000" autocomplete="tel">
           </div>
-          <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;">{cta} →</button>
-          {form_note}
+          {booking_fields}
+          <div class="form-row">
+            <label class="form-label" for="cf-msg">Message</label>
+            <textarea class="form-input" id="cf-msg" name="message" placeholder="Tell us about your project…" required></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary form-submit-btn" style="width:100%;justify-content:center;">{cta} →</button>
+          <div class="form-toast" role="alert" aria-live="polite"></div>
+          {preview_note}
         </form>
       </div>
     </div>
@@ -2227,17 +2433,10 @@ def _footer(name: str, d: Dict, nav_links: List[str], email: str, phone: str) ->
 <style>@media(max-width:639px){{.site-footer .wrap>div:first-child{{grid-template-columns:1fr!important}}}}</style>"""
 
 # =============================================================================
-# AI PROMPT — hyper-specific, structured to prevent generic output
+# AI PROMPT
 # =============================================================================
 
 def _build_ai_prompt(name: str, prompt: str, industry: str) -> str:
-    """
-    Constructs a prompt that forces specific, relevant, non-generic output.
-    The key insight: give the AI concrete constraints so it can't fall back on
-    boilerplate like 'We empower businesses' or irrelevant pricing tiers.
-    """
-
-    # Check if user explicitly says pricing is quote/visit-based — force null
     prompt_lower = prompt.lower()
     user_wants_no_price = any(phrase in prompt_lower for phrase in [
         "price after", "prices after", "pricing after", "quote after",
@@ -2247,7 +2446,6 @@ def _build_ai_prompt(name: str, prompt: str, industry: str) -> str:
         "per job", "by quote", "get a quote",
     ])
 
-    # Industry-specific pricing guidance
     no_price_industries   = {"restaurant", "beauty", "fitness", "travel", "nature", "events", "luxury", "agency"}
     project_industries    = {"construction", "logistics", "automotive", "events", "cleaning"}
     service_industries    = {"legal", "nonprofit", "health", "real_estate"}
@@ -2345,7 +2543,7 @@ def _extract_contact(text: str) -> Dict[str, str]:
     return result
 
 # =============================================================================
-# FALLBACK DATA — only used when AI is unavailable
+# FALLBACK DATA
 # =============================================================================
 
 def _generic_fallback_data() -> Dict:
@@ -2378,41 +2576,40 @@ def _generic_fallback_data() -> Dict:
     }
 
 # =============================================================================
-# MASTER ARCHITECT — orchestrates everything
+# MASTER ARCHITECT
 # =============================================================================
 
 VALID_SECTIONS = {"hero","trust","features","pricing","testimonials","faq","contact"}
 
 class MasterArchitect:
 
-    def __init__(self, business_name: str, prompt: str, version: int = 1):
-        self.name     = (business_name or "").strip() or "My Business"
-        self.prompt   = (prompt or "").strip()
-        self.version  = version
-        self.industry = detect_industry(self.prompt)
-        self.theme    = THEMES.get(INDUSTRY_THEME.get(self.industry, "ocean"), THEMES["ocean"])
-        self.contacts = _extract_contact(self.prompt)
-        # Deterministic variety seed — same business always gets same layout,
-        # but different business names get different layout picks
-        self._seed    = sum(ord(c) for c in self.name) % 10
-        logger.info(f"MasterArchitect | name='{self.name}' | industry={self.industry} | theme={self.theme['id']} | seed={self._seed}")
+    def __init__(self, business_name: str, prompt: str, version: int = 1,
+                 website_slug: str = ""):
+        self.name         = (business_name or "").strip() or "My Business"
+        self.prompt       = (prompt or "").strip()
+        self.version      = version
+        self.website_slug = (website_slug or "").strip()
+        self.industry     = detect_industry(self.prompt)
+        self.theme        = THEMES.get(INDUSTRY_THEME.get(self.industry, "ocean"), THEMES["ocean"])
+        self.contacts     = _extract_contact(self.prompt)
+        self.is_booking   = self.industry in BOOKING_INDUSTRIES
+        self._seed        = sum(ord(c) for c in self.name) % 10
+        logger.info(
+            f"MasterArchitect | name='{self.name}' | industry={self.industry} | "
+            f"theme={self.theme['id']} | seed={self._seed} | slug='{self.website_slug}'"
+        )
 
     # ── Variant selectors ─────────────────────────────────────────────────────
 
     def _hero_variant(self) -> str:
-        # Full-bleed cinematic — restaurants, travel, events
         if self.industry in {"restaurant", "travel", "events"}:
             return ["restaurant", "video_style"][self._seed % 2]
-        # Editorial centered — luxury, beauty, agency
         if self.industry in {"luxury", "beauty", "agency"}:
             return ["centered", "video_style"][self._seed % 2]
-        # Stats-heavy — trust-first industries
         if self.industry in {"construction", "legal", "finance", "logistics", "real_estate", "cleaning"}:
             return ["stats", "bold_bg", "minimal"][self._seed % 3]
-        # Tech/SaaS — modern, minimal
         if self.industry in {"saas", "ai", "developer", "startup", "ecommerce", "education"}:
             return ["split", "minimal", "image_left"][self._seed % 3]
-        # Default — rotate through all non-cinematic variants
         return ["split", "image_left", "minimal", "stats"][self._seed % 4]
 
     def _feat_variant(self) -> str:
@@ -2431,6 +2628,8 @@ class MasterArchitect:
 
     def _faq_variant(self) -> str:
         return ["single", "two_col"][self._seed % 2]
+
+    def _price_variant(self, tiers: List[Dict]) -> str:
         if not tiers:
             return "none"
         if self.industry in {"construction", "logistics", "automotive", "events", "cleaning"}:
@@ -2438,17 +2637,14 @@ class MasterArchitect:
         return "tiers"
 
     def _extra_sections(self, d: Dict) -> Dict[str, str]:
-        """Generate optional extra sections based on industry + seed."""
         extras = {}
-        # Process steps — great for service businesses
         if self.industry in {"cleaning", "construction", "health", "legal", "logistics",
                               "automotive", "saas", "education", "finance", "real_estate"}:
             if self._seed % 2 == 0:
                 extras["process"] = _process_steps(d)
-        # Gallery — visual industries benefit a lot
         if self.industry in {"restaurant", "beauty", "construction", "cleaning",
                               "events", "travel", "fitness", "real_estate", "agency"}:
-            if self._seed % 3 != 0:  # show 2 out of 3 times
+            if self._seed % 3 != 0:
                 extras["gallery"] = _gallery(self.industry, self.name)
         return extras
 
@@ -2471,7 +2667,6 @@ class MasterArchitect:
             cleaned = re.sub(r'^```(?:json)?\s*|```\s*$', '', raw.strip(), flags=re.MULTILINE).strip()
             data    = json.loads(cleaned)
 
-            # Merge contact info from prompt if AI didn't find it
             if not data.get("contact_email") and self.contacts.get("email"):
                 data["contact_email"] = self.contacts["email"]
             if not data.get("contact_phone") and self.contacts.get("phone"):
@@ -2531,7 +2726,6 @@ class MasterArchitect:
                     elif hero_v == "video_style": html = _hero_video_style(name, d, self.industry)
                     else:                         html = _hero_split(name, d, self.industry)
 
-                    # Inject process steps right after hero for eligible industries
                     if "process" in extras:
                         html += extras.pop("process")
 
@@ -2548,7 +2742,6 @@ class MasterArchitect:
                         elif feat_v == "three_columns":   html = _feat_three_columns_icons(feats)
                         else:                             html = _feat_cards(feats)
 
-                    # Inject gallery after features for visual industries
                     if "gallery" in extras:
                         html += extras.pop("gallery")
 
@@ -2576,7 +2769,11 @@ class MasterArchitect:
                         html = _faq(faqs)
 
                 elif sid == "contact":
-                    html = _contact(name, d, email, phone, self.industry)
+                    html = _contact(
+                        name, d, email, phone, self.industry,
+                        website_slug=self.website_slug,
+                        is_booking=self.is_booking,
+                    )
 
                 if html:
                     parts.append(html)
@@ -2603,10 +2800,15 @@ class MasterArchitect:
                 "seed":          self._seed,
                 "has_email":     bool(email),
                 "has_phone":     bool(phone),
+                "is_booking":    self.is_booking,
+                "website_slug":  self.website_slug,
                 "status":        "success",
             }
 
-            logger.info(f"Built | '{name}' | {self.industry} | {t['id']} | hero={hero_v} | feat={feat_v} | seed={self._seed}")
+            logger.info(
+                f"Built | '{name}' | {self.industry} | {t['id']} | "
+                f"hero={hero_v} | feat={feat_v} | seed={self._seed}"
+            )
             return {"html": page, "metadata": metadata}
 
         except Exception as e:
@@ -2623,15 +2825,25 @@ class MasterArchitect:
 def generate_ai_plan(ai_input: Dict[str, Any], version: int = 1) -> Dict[str, Any]:
     """
     Entry point called by dashboard_websites_routes.py:
-        generate_ai_plan(ai_input={"business_name": "Apex Fitness", "prompt": "..."}, version=1)
+        generate_ai_plan(
+            ai_input={
+                "business_name": "Apex Fitness",
+                "prompt": "...",
+                "website_slug": "apex-fitness",   # optional, enables live form submissions
+            },
+            version=1,
+        )
 
-    business_name → MasterArchitect.name → shown in nav, footer, headings
-    prompt        → AI copy generation only — NEVER shown as a display name
+    business_name → shown in nav, footer, headings
+    prompt        → AI copy generation only
+    website_slug  → used to build the contact form API endpoint.
+                    If omitted, forms render in preview/disabled mode.
     """
     arch = MasterArchitect(
         business_name=ai_input.get("business_name", ""),
         prompt=ai_input.get("prompt", ""),
         version=version,
+        website_slug=ai_input.get("website_slug", ""),
     )
     return arch.build()
 
