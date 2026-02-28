@@ -1486,7 +1486,7 @@ body::before{
 /* Oversized issue numbers */
 .issue-num{font-family:'Anton',sans-serif;font-size:clamp(8rem,20vw,18rem);font-weight:400;line-height:0.85;color:rgba(0,0,0,0.04);position:absolute;right:-1rem;top:-2rem;pointer-events:none;user-select:none;text-transform:uppercase;}""" if tid == "editorial" else ""
 
-copper_css = """
+    copper_css = """
 /* ── Copper artisan craft effects ── */
 .card{border:2px solid var(--border);border-radius:6px;box-shadow:2px 3px 0 rgba(181,98,30,0.10);}
 .card:hover{transform:translateY(-3px);box-shadow:4px 6px 0 rgba(181,98,30,0.15);}
