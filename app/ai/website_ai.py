@@ -590,6 +590,318 @@ THEMES: Dict[str, Dict] = {
         "_btn_radius":  "0px",
     },
 
+# ── COPPER — Warm industrial luxury, craft brewery, artisan goods ─────
+    # Perfect for: breweries, distilleries, coffee roasters, artisan food brands
+    # Personality: handcrafted heritage, amber warmth, maker pride
+    "copper": {
+        "id": "copper", "mode": "light",
+        "font_heading": "'Spectral', Georgia, serif",
+        "font_body": "'Source Sans 3', -apple-system, sans-serif",
+        "font_url": "https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,500;0,600;0,700;0,800;1,500&family=Source+Sans+3:wght@400;500;600&display=swap",
+        "vars": {
+            "--bg":        "#faf4ec",
+            "--bg2":       "#f2e8d8",
+            "--surface":   "#fffdf9",
+            "--border":    "#d4a96a",
+            "--text":      "#1c1208",
+            "--text2":     "#5c3d18",
+            "--text3":     "#a07040",
+            "--accent":    "#b5621e",
+            "--accent2":   "#8f4a10",
+            "--accent-r":  "181,98,30",
+            "--cta":       "#b5621e",
+            "--cta-text":  "#fffdf9",
+            "--tag-bg":    "#f5e4cc",
+            "--tag-text":  "#8f4a10",
+            "--tag-border":"#d4a96a",
+            "--glow":      "rgba(181,98,30,0.08)",
+            "--nav-bg":    "rgba(250,244,236,0.96)",
+            "--grain":     "1",
+        },
+        "_card_radius": "6px",
+        "_btn_radius":  "4px",
+    },
+
+    # ── MIDNIGHT — Deep navy luxury, sophisticated dark blue ───────────────
+    # Perfect for: financial advisors, private clubs, executive coaching, watches
+    # Personality: quiet authority, old-money restraint, gold on navy
+    "midnight": {
+        "id": "midnight", "mode": "dark",
+        "font_heading": "'Libre Baskerville', Georgia, serif",
+        "font_body": "'Nunito Sans', -apple-system, sans-serif",
+        "font_url": "https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Nunito+Sans:opsz,wght@6..12,300;6..12,400;6..12,600&display=swap",
+        "vars": {
+            "--bg":        "#06091a",
+            "--bg2":       "#0b1028",
+            "--surface":   "#111830",
+            "--border":    "rgba(180,155,100,0.14)",
+            "--text":      "#f0ead8",
+            "--text2":     "#9a8e72",
+            "--text3":     "#504838",
+            "--accent":    "#c8a45a",
+            "--accent2":   "#a88038",
+            "--accent-r":  "200,164,90",
+            "--cta":       "#c8a45a",
+            "--cta-text":  "#06091a",
+            "--tag-bg":    "rgba(200,164,90,0.09)",
+            "--tag-text":  "#c8a45a",
+            "--tag-border":"rgba(200,164,90,0.20)",
+            "--glow":      "rgba(200,164,90,0.07)",
+            "--nav-bg":    "rgba(6,9,26,0.95)",
+        },
+        "_card_radius": "8px",
+        "_btn_radius":  "6px",
+    },
+
+    # ── CORAL — Bright energetic warmth, lifestyle brands, Gen-Z friendly ─
+    # Perfect for: food delivery, lifestyle apps, wellness startups, clothing
+    # Personality: bold joy, high contrast, punchy and fun
+    "coral": {
+        "id": "coral", "mode": "light",
+        "font_heading": "'Plus Jakarta Sans', -apple-system, sans-serif",
+        "font_body": "'Plus Jakarta Sans', -apple-system, sans-serif",
+        "font_url": "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap",
+        "vars": {
+            "--bg":        "#fff8f5",
+            "--bg2":       "#fff0e8",
+            "--surface":   "#ffffff",
+            "--border":    "#ffd4c0",
+            "--text":      "#1a0a04",
+            "--text2":     "#6b3020",
+            "--text3":     "#c07060",
+            "--accent":    "#f04e23",
+            "--accent2":   "#d03808",
+            "--accent-r":  "240,78,35",
+            "--cta":       "#f04e23",
+            "--cta-text":  "#ffffff",
+            "--tag-bg":    "#ffe8dc",
+            "--tag-text":  "#d03808",
+            "--tag-border":"#ffb89a",
+            "--glow":      "rgba(240,78,35,0.08)",
+            "--nav-bg":    "rgba(255,248,245,0.96)",
+        },
+        "_card_radius": "20px",
+        "_btn_radius":  "999px",
+    },
+
+    # ── SLATE_DARK — Dark corporate precision, B2B SaaS, enterprise ────────
+    # Perfect for: enterprise software, B2B platforms, security companies
+    # Personality: serious trust, structured clarity, dark without drama
+    "slate_dark": {
+        "id": "slate_dark", "mode": "dark",
+        "font_heading": "'Manrope', -apple-system, sans-serif",
+        "font_body": "'Manrope', -apple-system, sans-serif",
+        "font_url": "https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap",
+        "vars": {
+            "--bg":        "#0d0f12",
+            "--bg2":       "#13161c",
+            "--surface":   "#1a1e26",
+            "--border":    "rgba(255,255,255,0.08)",
+            "--text":      "#e8ecf4",
+            "--text2":     "#7a8499",
+            "--text3":     "#404860",
+            "--accent":    "#4a9eff",
+            "--accent2":   "#2b7de0",
+            "--accent-r":  "74,158,255",
+            "--cta":       "#4a9eff",
+            "--cta-text":  "#0d0f12",
+            "--tag-bg":    "rgba(74,158,255,0.10)",
+            "--tag-text":  "#7ab8ff",
+            "--tag-border":"rgba(74,158,255,0.22)",
+            "--glow":      "rgba(74,158,255,0.07)",
+            "--nav-bg":    "rgba(13,15,18,0.96)",
+        },
+        "_card_radius": "12px",
+        "_btn_radius":  "8px",
+    },
+
+    # ── MEADOW — Fresh spring greens, organic/farm, produce, eco brands ───
+    # Perfect for: farm stands, organic delivery, eco products, plant shops
+    # Personality: alive and fresh, dewy morning, farmers market energy
+    "meadow": {
+        "id": "meadow", "mode": "light",
+        "font_heading": "'Young Serif', Georgia, serif",
+        "font_body": "'Karla', -apple-system, sans-serif",
+        "font_url": "https://fonts.googleapis.com/css2?family=Karla:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap",
+        "vars": {
+            "--bg":        "#f4f9f0",
+            "--bg2":       "#e8f4e0",
+            "--surface":   "#ffffff",
+            "--border":    "#b8d9a0",
+            "--text":      "#0e1e08",
+            "--text2":     "#2e5220",
+            "--text3":     "#6a9458",
+            "--accent":    "#3d8b28",
+            "--accent2":   "#2c6e1c",
+            "--accent-r":  "61,139,40",
+            "--cta":       "#3d8b28",
+            "--cta-text":  "#ffffff",
+            "--tag-bg":    "#d8f0c8",
+            "--tag-text":  "#2c6e1c",
+            "--tag-border":"#a8d490",
+            "--glow":      "rgba(61,139,40,0.07)",
+            "--nav-bg":    "rgba(244,249,240,0.96)",
+        },
+        "_card_radius": "16px",
+        "_btn_radius":  "999px",
+    },
+
+    # ── GRAPHITE — Clean dark grey, photography studios, portfolio ─────────
+    # Perfect for: photographers, filmmakers, architects, product designers
+    # Personality: work speaks loudest, neutral stage, monochrome confidence
+    "graphite": {
+        "id": "graphite", "mode": "dark",
+        "font_heading": "'Unbounded', -apple-system, sans-serif",
+        "font_body": "'DM Sans', -apple-system, sans-serif",
+        "font_url": "https://fonts.googleapis.com/css2?family=Unbounded:wght@400;500;700;900&family=DM+Sans:opsz,wght@9..40,400;9..40,500&display=swap",
+        "vars": {
+            "--bg":        "#111111",
+            "--bg2":       "#181818",
+            "--surface":   "#202020",
+            "--border":    "rgba(255,255,255,0.09)",
+            "--text":      "#f4f4f4",
+            "--text2":     "#888888",
+            "--text3":     "#484848",
+            "--accent":    "#ffffff",
+            "--accent2":   "#cccccc",
+            "--accent-r":  "255,255,255",
+            "--cta":       "#ffffff",
+            "--cta-text":  "#111111",
+            "--tag-bg":    "rgba(255,255,255,0.07)",
+            "--tag-text":  "#cccccc",
+            "--tag-border":"rgba(255,255,255,0.14)",
+            "--glow":      "rgba(255,255,255,0.04)",
+            "--nav-bg":    "rgba(17,17,17,0.96)",
+        },
+        "_card_radius": "4px",
+        "_btn_radius":  "4px",
+    },
+
+    # ── AURORA — Northern lights gradient, crypto/web3/futuristic ─────────
+    # Perfect for: crypto projects, web3 platforms, gaming, metaverse
+    # Personality: electric dream, iridescent edge, digital frontier
+    "aurora": {
+        "id": "aurora", "mode": "dark",
+        "font_heading": "'Cabinet Grotesk', 'Syne', -apple-system, sans-serif",
+        "font_body": "'Inter', -apple-system, sans-serif",
+        "font_url": "https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Inter:wght@400;500;600&display=swap",
+        "vars": {
+            "--bg":        "#050812",
+            "--bg2":       "#080d1e",
+            "--surface":   "#0e1528",
+            "--border":    "rgba(100,200,255,0.10)",
+            "--text":      "#eef4ff",
+            "--text2":     "#7898cc",
+            "--text3":     "#384868",
+            "--accent":    "#38d9a9",
+            "--accent2":   "#20b894",
+            "--accent-r":  "56,217,169",
+            "--cta":       "#38d9a9",
+            "--cta-text":  "#050812",
+            "--tag-bg":    "rgba(56,217,169,0.09)",
+            "--tag-text":  "#38d9a9",
+            "--tag-border":"rgba(56,217,169,0.20)",
+            "--glow":      "rgba(56,217,169,0.08)",
+            "--nav-bg":    "rgba(5,8,18,0.96)",
+        },
+        "_card_radius": "16px",
+        "_btn_radius":  "12px",
+    },
+
+    # ── PARCHMENT — Academic, vintage editorial, books, publishing ─────────
+    # Perfect for: publishers, bookstores, academic institutions, historians
+    # Personality: ink on aged paper, intellectual gravitas, timeless
+    "parchment": {
+        "id": "parchment", "mode": "light",
+        "font_heading": "'IM Fell English', Georgia, serif",
+        "font_body": "'Crimson Pro', Georgia, serif",
+        "font_url": "https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=Crimson+Pro:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap",
+        "vars": {
+            "--bg":        "#f5eed8",
+            "--bg2":       "#ece4c8",
+            "--surface":   "#fdf8ec",
+            "--border":    "#c8b888",
+            "--text":      "#1a1408",
+            "--text2":     "#4a3c20",
+            "--text3":     "#907850",
+            "--accent":    "#1a3a6a",
+            "--accent2":   "#0e2850",
+            "--accent-r":  "26,58,106",
+            "--cta":       "#1a3a6a",
+            "--cta-text":  "#fdf8ec",
+            "--tag-bg":    "#e8ddb8",
+            "--tag-text":  "#1a3a6a",
+            "--tag-border":"#c0a868",
+            "--glow":      "rgba(26,58,106,0.06)",
+            "--nav-bg":    "rgba(245,238,216,0.97)",
+            "--grain":     "1",
+        },
+        "_card_radius": "2px",
+        "_btn_radius":  "2px",
+    },
+
+    # ── CITRUS — Bright yellow/lime, energy drinks, youth brands, sports ──
+    # Perfect for: sports brands, energy products, youth apparel, streetwear
+    # Personality: maximum energy, bold contrast, no apologies
+    "citrus": {
+        "id": "citrus", "mode": "dark",
+        "font_heading": "'Bebas Neue', 'Barlow Condensed', sans-serif",
+        "font_body": "'Barlow', -apple-system, sans-serif",
+        "font_url": "https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow:wght@400;500;600;700&display=swap",
+        "vars": {
+            "--bg":        "#0a0a00",
+            "--bg2":       "#111100",
+            "--surface":   "#161600",
+            "--border":    "rgba(200,255,0,0.12)",
+            "--text":      "#f8ff90",
+            "--text2":     "#a0b020",
+            "--text3":     "#484800",
+            "--accent":    "#c8ff00",
+            "--accent2":   "#a0d000",
+            "--accent-r":  "200,255,0",
+            "--cta":       "#c8ff00",
+            "--cta-text":  "#0a0a00",
+            "--tag-bg":    "rgba(200,255,0,0.10)",
+            "--tag-text":  "#c8ff00",
+            "--tag-border":"rgba(200,255,0,0.22)",
+            "--glow":      "rgba(200,255,0,0.10)",
+            "--nav-bg":    "rgba(10,10,0,0.96)",
+        },
+        "_card_radius": "0px",
+        "_btn_radius":  "0px",
+    },
+
+    # ── LINEN — Soft neutral luxury, wedding, stationery, lifestyle ────────
+    # Perfect for: wedding planners, stationery brands, luxury lifestyle blogs
+    # Personality: understated elegance, whisper-soft, curated calm
+    "linen": {
+        "id": "linen", "mode": "light",
+        "font_heading": "'Cormorant', Georgia, serif",
+        "font_body": "'Lato', -apple-system, sans-serif",
+        "font_url": "https://fonts.googleapis.com/css2?family=Cormorant:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Lato:ital,wght@0,300;0,400;0,700;1,300&display=swap",
+        "vars": {
+            "--bg":        "#faf8f4",
+            "--bg2":       "#f2ede4",
+            "--surface":   "#ffffff",
+            "--border":    "#e0d8cc",
+            "--text":      "#1c1814",
+            "--text2":     "#6a5e50",
+            "--text3":     "#a89880",
+            "--accent":    "#8a7060",
+            "--accent2":   "#6e5848",
+            "--accent-r":  "138,112,96",
+            "--cta":       "#8a7060",
+            "--cta-text":  "#ffffff",
+            "--tag-bg":    "#f0e8dc",
+            "--tag-text":  "#6e5848",
+            "--tag-border":"#d8ccbc",
+            "--glow":      "rgba(138,112,96,0.06)",
+            "--nav-bg":    "rgba(250,248,244,0.97)",
+        },
+        "_card_radius": "20px",
+        "_btn_radius":  "999px",
+    },
+
 }
 
 # =============================================================================
@@ -632,6 +944,52 @@ INDUSTRY_THEME: Dict[str, str] = {
     "electrical":   "vintage",     # new
     "barbershop":   "vintage",     # new
     "diner":        "vintage",     # new
+# New mappings for new themes + new industries
+    "brewery":      "copper",
+    "distillery":   "copper",
+    "coffee":       "copper",
+    "artisan":      "copper",
+    "craft":        "copper",
+    "enterprise":   "slate_dark",
+    "security":     "slate_dark",
+    "cybersecurity":"slate_dark",
+    "b2b":          "slate_dark",
+    "web3":         "aurora",
+    "crypto":       "aurora",
+    "gaming":       "aurora",
+    "nft":          "aurora",
+    "blockchain":   "aurora",
+    "streetwear":   "citrus",
+    "sports":       "citrus",
+    "energy":       "citrus",
+    "apparel":      "editorial",
+    "farm":         "meadow",
+    "organic":      "meadow",
+    "produce":      "meadow",
+    "plant":        "meadow",
+    "eco_product":  "meadow",
+    "film":         "graphite",
+    "filmmaker":    "graphite",
+    "studio":       "graphite",
+    "portfolio":    "graphite",
+    "product_design":"graphite",
+    "wedding":      "linen",
+    "stationery":   "linen",
+    "lifestyle":    "linen",
+    "florist":      "bloom",
+    "books":        "parchment",
+    "publishing":   "parchment",
+    "academic":     "parchment",
+    "library":      "parchment",
+    "private_club": "midnight",
+    "wealth":       "midnight",
+    "watches":      "midnight",
+    "jewelry":      "midnight",
+    "coaching":     "sand",
+    "food_brand":   "coral",
+    "delivery":     "coral",
+    "app":          "coral",
+    "mobile_app":   "coral",
 }
 
 # =============================================================================
@@ -692,6 +1050,34 @@ INDUSTRY_KEYWORDS: Dict[str, List[str]] = {
                      "elite", "premium", "concierge", "vip"],
     "ecommerce":    ["shop", "store", "ecommerce", "e-commerce", "sell", "product", "cart",
                      "marketplace", "retail", "dropshipping", "merch"],
+    "brewery":      ["brewery", "brew", "beer", "craft beer", "ale", "lager", "taproom",
+                     "distillery", "whiskey", "spirits", "craft spirits", "artisan drinks",
+                     "coffee roaster", "roastery", "specialty coffee", "cold brew"],
+    "enterprise":   ["enterprise", "b2b", "saas platform", "business software",
+                     "cybersecurity", "security software", "compliance platform",
+                     "corporate software", "workforce", "hr software", "erp", "crm enterprise"],
+    "web3":         ["web3", "crypto", "cryptocurrency", "blockchain", "nft", "defi",
+                     "dao", "token", "wallet", "smart contract", "metaverse", "gaming"],
+    "streetwear":   ["streetwear", "apparel", "clothing brand", "fashion brand",
+                     "sportswear", "athleisure", "sneakers", "skate", "urban wear",
+                     "energy drink", "sports nutrition", "supplement brand"],
+    "farm":         ["farm", "farmstand", "organic farm", "csa", "produce", "harvest",
+                     "plant shop", "nursery", "garden center", "florist", "flowers",
+                     "botanical", "herbalist", "flower delivery"],
+    "film":         ["filmmaker", "film studio", "video production", "photography studio",
+                     "portrait photographer", "wedding photographer", "commercial photography",
+                     "product photography", "videographer", "cinematographer"],
+    "wedding":      ["wedding planner", "wedding venue", "bridal", "wedding photography",
+                     "wedding catering", "stationery", "invitation", "lifestyle brand",
+                     "home decor", "interior styling", "gift shop"],
+    "books":        ["bookstore", "publisher", "publishing house", "author", "writer",
+                     "academic press", "literary", "library", "book club", "historian"],
+    "private_club": ["private club", "members only", "wealth management", "private banking",
+                     "family office", "concierge service", "luxury watches", "jewelry boutique",
+                     "fine jewelry", "haute couture", "private equity"],
+    "food_brand":   ["food brand", "food delivery", "meal kit", "snack brand",
+                     "beverage brand", "lifestyle app", "consumer app", "marketplace app",
+                     "subscription box", "direct to consumer", "dtc brand"],
 }
 
 def detect_industry(text: str) -> str:
@@ -1100,7 +1486,152 @@ body::before{
 /* Oversized issue numbers */
 .issue-num{font-family:'Anton',sans-serif;font-size:clamp(8rem,20vw,18rem);font-weight:400;line-height:0.85;color:rgba(0,0,0,0.04);position:absolute;right:-1rem;top:-2rem;pointer-events:none;user-select:none;text-transform:uppercase;}""" if tid == "editorial" else ""
 
-    all_theme_extra = vintage_css + bloom_css + obsidian_css + nordic_css + editorial_css
+copper_css = """
+/* ── Copper artisan craft effects ── */
+.card{border:2px solid var(--border);border-radius:6px;box-shadow:2px 3px 0 rgba(181,98,30,0.10);}
+.card:hover{transform:translateY(-3px);box-shadow:4px 6px 0 rgba(181,98,30,0.15);}
+.h-display{font-style:italic;letter-spacing:-0.02em;}
+.btn{border-radius:4px !important;border:2px solid var(--accent) !important;}
+.feat-icon{border-radius:6px;border:2px solid var(--border);}
+.img-wrap{border-radius:8px !important;}
+/* Copper divider line */
+.h-section::before{content:'';display:block;width:32px;height:3px;background:linear-gradient(90deg,var(--accent),var(--accent2));margin-bottom:0.75rem;border-radius:2px;}""" if tid == "copper" else ""
+
+    midnight_css = """
+/* ── Midnight navy luxury effects ── */
+.card{border:1px solid var(--border);background:var(--surface);transition:border-color 0.4s,box-shadow 0.4s;}
+.card:hover{border-color:rgba(200,164,90,0.35);box-shadow:0 8px 40px rgba(0,0,0,0.5),0 0 0 1px rgba(200,164,90,0.15);}
+.h-display{font-style:italic;font-weight:400;letter-spacing:0.02em;}
+.btn-primary{letter-spacing:0.08em;font-size:0.8rem;font-weight:700;text-transform:uppercase;}
+.feat-icon{border:1px solid rgba(200,164,90,0.2);background:rgba(200,164,90,0.05);}
+/* Gold accent underline on h-section */
+.h-section::after{content:'';display:block;width:48px;height:1px;background:var(--accent);margin-top:0.75rem;opacity:0.6;}""" if tid == "midnight" else ""
+
+    coral_css = """
+/* ── Coral energetic lifestyle effects ── */
+.card{border:none;box-shadow:0 4px 24px rgba(240,78,35,0.08);border-radius:20px;}
+.card:hover{box-shadow:0 12px 48px rgba(240,78,35,0.14);transform:translateY(-5px) scale(1.01);}
+.btn{border-radius:999px !important;}
+.feat-icon{border-radius:50%;background:linear-gradient(135deg,rgba(240,78,35,0.15),rgba(240,78,35,0.05));}
+.h-display{font-weight:800;letter-spacing:-0.04em;}
+.tag{border-radius:999px;}
+/* Energetic blob */
+body::before{
+  content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(ellipse 50% 40% at 90% 10%,rgba(240,78,35,0.06) 0%,transparent 60%),
+    radial-gradient(ellipse 40% 50% at 10% 90%,rgba(255,140,80,0.05) 0%,transparent 60%);
+}""" if tid == "coral" else ""
+
+    slate_dark_css = """
+/* ── Slate dark enterprise precision ── */
+.card{border:1px solid var(--border);background:var(--surface);transition:border-color 0.3s,box-shadow 0.3s;}
+.card:hover{border-color:rgba(74,158,255,0.25);box-shadow:0 4px 32px rgba(74,158,255,0.08);}
+.h-display{font-weight:800;letter-spacing:-0.04em;}
+.btn-primary{font-weight:700;letter-spacing:0.02em;}
+.feat-icon{background:rgba(74,158,255,0.08);border:1px solid rgba(74,158,255,0.15);}
+/* Subtle grid background */
+body::before{
+  content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:linear-gradient(rgba(74,158,255,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(74,158,255,0.025) 1px,transparent 1px);
+  background-size:48px 48px;
+}""" if tid == "slate_dark" else ""
+
+    meadow_css = """
+/* ── Meadow fresh organic effects ── */
+.card{border:1px solid var(--border);border-radius:16px;box-shadow:0 4px 20px rgba(61,139,40,0.06);}
+.card:hover{box-shadow:0 12px 40px rgba(61,139,40,0.12);transform:translateY(-4px);border-color:var(--accent);}
+.btn{border-radius:999px !important;}
+.feat-icon{border-radius:50%;background:linear-gradient(135deg,rgba(61,139,40,0.14),rgba(61,139,40,0.04));}
+.h-display{font-weight:700;letter-spacing:-0.03em;}
+.tag{border-radius:999px;}
+/* Fresh morning gradient */
+body::before{
+  content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:radial-gradient(ellipse 60% 40% at 70% 20%,rgba(61,139,40,0.05) 0%,transparent 60%);
+}""" if tid == "meadow" else ""
+
+    graphite_css = """
+/* ── Graphite portfolio effects ── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:4px;transition:background 0.3s,border-color 0.3s;}
+.card:hover{background:#2a2a2a;border-color:rgba(255,255,255,0.2);transform:none;box-shadow:none;}
+.btn{border-radius:4px !important;}
+.btn-primary{background:var(--text) !important;color:var(--bg) !important;letter-spacing:0.06em;text-transform:uppercase;font-size:0.78rem;font-weight:700;}
+.h-display{font-weight:900;letter-spacing:-0.05em;text-transform:uppercase;line-height:0.88;}
+.h-section{font-weight:700;text-transform:uppercase;letter-spacing:-0.02em;}
+.feat-icon{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.10);border-radius:4px;}
+.img-wrap{border-radius:0 !important;filter:grayscale(15%);}
+.img-wrap:hover .img-fill{filter:none;}""" if tid == "graphite" else ""
+
+    aurora_css = """
+/* ── Aurora web3 iridescent effects ── */
+.card{border:1px solid var(--border);background:linear-gradient(135deg,rgba(56,217,169,0.04),rgba(56,100,255,0.02));border-radius:16px;}
+.card:hover{border-color:rgba(56,217,169,0.30);box-shadow:0 0 40px rgba(56,217,169,0.10),0 0 80px rgba(56,100,255,0.06);}
+.btn-primary{box-shadow:0 0 20px rgba(56,217,169,0.30);letter-spacing:0.04em;}
+.btn-primary:hover{box-shadow:0 0 40px rgba(56,217,169,0.45),0 0 80px rgba(56,217,169,0.20);}
+.h-display{font-weight:800;letter-spacing:-0.04em;}
+.feat-icon{background:rgba(56,217,169,0.08);border:1px solid rgba(56,217,169,0.15);border-radius:12px;}
+.tag{border-radius:8px;}
+/* Aurora gradient mesh */
+body::before{
+  content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(ellipse 55% 40% at 20% 30%,rgba(56,217,169,0.07) 0%,transparent 55%),
+    radial-gradient(ellipse 45% 55% at 80% 70%,rgba(80,100,255,0.06) 0%,transparent 55%),
+    radial-gradient(ellipse 35% 35% at 60% 10%,rgba(200,100,255,0.04) 0%,transparent 50%);
+}""" if tid == "aurora" else ""
+
+    parchment_css = """
+/* ── Parchment academic effects ── */
+.card{border:1px solid var(--border);border-radius:2px;box-shadow:2px 2px 8px rgba(26,20,8,0.08);}
+.card:hover{box-shadow:4px 4px 16px rgba(26,20,8,0.12);transform:translateY(-2px);}
+.h-display{font-style:italic;font-weight:400;letter-spacing:0.01em;line-height:1.12;}
+.h-section{font-style:italic;font-weight:400;letter-spacing:0.01em;}
+.btn{border-radius:2px !important;}
+.btn-primary{background:var(--accent) !important;border:1px solid var(--accent) !important;}
+.feat-icon{border-radius:2px;border:1px solid var(--border);background:rgba(26,58,106,0.05);}
+.img-wrap{border-radius:2px !important;border:1px solid var(--border);}
+/* Drop cap style eyebrow */
+.eyebrow{font-family:'IM Fell English',serif;font-size:0.75rem;font-style:italic;}""" if tid == "parchment" else ""
+
+    citrus_css = """
+/* ── Citrus max energy effects ── */
+.card{border:1px solid var(--border);border-radius:0;background:var(--surface);transition:border-color 0.2s,background 0.2s;}
+.card:hover{border-color:var(--accent);background:#1e1e00;transform:none;box-shadow:0 0 20px rgba(200,255,0,0.08);}
+.btn{border-radius:0 !important;}
+.btn-primary{text-transform:uppercase;letter-spacing:0.12em;font-size:0.8rem;font-weight:700;border:2px solid var(--accent) !important;}
+.h-display{font-weight:400;text-transform:uppercase;letter-spacing:-0.01em;line-height:0.88;font-size:clamp(4rem,10vw,9rem);}
+.h-section{font-weight:400;text-transform:uppercase;letter-spacing:0.01em;line-height:0.9;}
+.feat-icon{border-radius:0;border:1px solid rgba(200,255,0,0.2);background:rgba(200,255,0,0.06);}
+.img-wrap{border-radius:0 !important;}
+.tag{border-radius:0;text-transform:uppercase;letter-spacing:0.18em;border:1px solid var(--accent);}
+/* Electric scanline */
+body::after{content:'';position:fixed;inset:0;z-index:9998;pointer-events:none;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(200,255,0,0.008) 2px,rgba(200,255,0,0.008) 4px);opacity:1;}""" if tid == "citrus" else ""
+
+    linen_css = """
+/* ── Linen soft luxury effects ── */
+.card{border:none;box-shadow:0 4px 24px rgba(138,112,96,0.07),0 1px 4px rgba(138,112,96,0.04);border-radius:20px;background:var(--surface);}
+.card:hover{box-shadow:0 16px 56px rgba(138,112,96,0.12);transform:translateY(-4px);}
+.btn{border-radius:999px !important;}
+.feat-icon{border-radius:50%;background:linear-gradient(135deg,rgba(138,112,96,0.12),rgba(138,112,96,0.03));}
+.h-display{font-style:italic;font-weight:400;letter-spacing:0.01em;line-height:1.1;}
+.h-section{font-style:italic;font-weight:500;letter-spacing:0.01em;}
+.h-card{font-style:italic;font-weight:600;}
+.tag{border-radius:999px;}
+.img-wrap{border-radius:16px !important;box-shadow:0 20px 60px rgba(138,112,96,0.15);}
+/* Soft petal blobs */
+body::before{
+  content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(ellipse 50% 40% at 25% 20%,rgba(138,112,96,0.04) 0%,transparent 55%),
+    radial-gradient(ellipse 40% 50% at 75% 80%,rgba(200,160,140,0.04) 0%,transparent 55%);
+}""" if tid == "linen" else ""
+
+    all_theme_extra = (
+        vintage_css + bloom_css + obsidian_css + nordic_css + editorial_css +
+        copper_css + midnight_css + coral_css + slate_dark_css + meadow_css +
+        graphite_css + aurora_css + parchment_css + citrus_css + linen_css
+    )
 
     return f"""<style>
 /* ── Reset & base ── */
@@ -1877,6 +2408,188 @@ def _hero_video_style(name: str, d: Dict, ind: str) -> str:
   <style>@media(min-width:900px){{section[style*="min-height:88vh"] .rv.d2{{display:block!important}}}}</style>
 </section>"""
 
+def _hero_magazine(name: str, d: Dict, ind: str) -> str:
+    """Bold typographic magazine hero — giant headline + image mosaic beside it."""
+    h     = d.get("hero", {})
+    stats = d.get("stats") or []
+    img1  = _photo(ind, 0, 900)
+    img2  = _photo(ind, 1, 600)
+
+    stat_html = ""
+    if stats:
+        items = "".join(
+            f'<div class="rv d{min(i+1,4)}" style="border-left:2px solid var(--accent);padding-left:1rem;">'
+            f'<div class="stat-num" style="font-size:1.8rem;">{s.get("value","")}</div>'
+            f'<div class="stat-label">{s.get("label","")}</div></div>'
+            for i, s in enumerate(stats[:3])
+        )
+        stat_html = f'<div style="display:flex;flex-wrap:wrap;gap:2rem;margin-top:2.5rem;padding-top:2rem;border-top:1px solid var(--border);">{items}</div>'
+
+    return f"""<section class="sec-hero" style="padding-top:5rem;overflow:hidden;min-height:90vh;display:flex;align-items:center;">
+  <div class="blob" style="width:600px;height:600px;top:-20%;left:-15%;opacity:0.5;"></div>
+  <div class="wrap z1" style="width:100%;">
+    <div style="display:grid;grid-template-columns:1.1fr 0.9fr;gap:3rem;align-items:center;">
+      <div class="rv">
+        <div style="display:inline-flex;align-items:center;gap:0.6rem;margin-bottom:1.5rem;">
+          <div style="width:28px;height:2px;background:var(--accent);"></div>
+          <span style="font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:0.25em;color:var(--accent);">{d.get("tagline","")}</span>
+        </div>
+        <h1 style="font-family:inherit;font-size:clamp(3.2rem,6.5vw,6rem);font-weight:900;letter-spacing:-0.04em;line-height:0.92;color:var(--text);margin-bottom:1.75rem;">
+          {h.get("h1", f"Welcome to {name}")}
+        </h1>
+        <p class="body-lg" style="max-width:440px;border-left:2px solid var(--border);padding-left:1rem;">{h.get("sub","")}</p>
+        <div class="btn-row mt5">
+          {_btn(h.get("cta","Get Started"), "#contact")}
+          {_btn("Learn more ↓", "#features", "outline")}
+        </div>
+        {stat_html}
+      </div>
+      <div class="rv d1" style="display:grid;grid-template-columns:1fr 1fr;grid-template-rows:240px 160px;gap:0.75rem;">
+        <div style="grid-column:1/3;border-radius:12px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.12);">
+          <img src="{img1}" alt="{name}" style="width:100%;height:100%;object-fit:cover;display:block;transition:transform 0.6s;" onmouseover="this.style.transform='scale(1.03)'" onmouseout="this.style.transform='scale(1)'">
+        </div>
+        <div style="border-radius:12px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,0.08);">
+          <img src="{img2}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;">
+        </div>
+        <div style="border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;padding:1.25rem;">
+          <div style="text-align:center;">
+            <div style="font-size:2rem;font-weight:900;color:var(--cta-text);letter-spacing:-0.04em;">{(d.get("stats") or [{}])[0].get("value","★★★★★")}</div>
+            <div style="font-size:0.62rem;color:rgba(255,255,255,0.75);text-transform:uppercase;letter-spacing:0.15em;margin-top:0.25rem;">{(d.get("stats") or [{},{}])[0].get("label","Top Rated")}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <style>@media(max-width:767px){{section.sec-hero>div.wrap>div[style*="grid-template-columns:1.1fr"]{{grid-template-columns:1fr!important}}section.sec-hero>div.wrap>div>div[style*="grid-template-columns:1fr 1fr"]{{display:none!important}}}}</style>
+</section>"""
+
+
+def _hero_asymmetric(name: str, d: Dict, ind: str) -> str:
+    """Off-balance layout — image bleeds to edge on right, text left with big accent number."""
+    h     = d.get("hero", {})
+    img   = _photo(ind, 0, 1200)
+    proof = d.get("social_proof") or {}
+
+    proof_html = ""
+    if proof.get("count") and proof.get("label"):
+        proof_html = f'''<div style="display:inline-flex;align-items:center;gap:0.85rem;background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:0.5rem 1rem 0.5rem 0.5rem;margin-top:2rem;">
+      <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;color:var(--cta-text);font-weight:900;font-size:0.7rem;">★</div>
+      <span style="font-size:0.8rem;font-weight:600;color:var(--text);">{proof["count"]} {proof["label"]}</span>
+    </div>'''
+
+    return f"""<section style="position:relative;min-height:88vh;display:grid;grid-template-columns:55% 45%;overflow:hidden;padding-top:64px;">
+  <div style="display:flex;align-items:center;padding:4rem 2.5rem 4rem 4rem;position:relative;z-index:1;">
+    <div class="blob" style="width:400px;height:400px;top:-10%;left:-10%;opacity:0.6;"></div>
+    <div class="rv" style="position:relative;z-index:1;max-width:540px;">
+      <span style="display:inline-block;font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:0.25em;color:var(--accent);margin-bottom:1.5rem;">{d.get("tagline","")}</span>
+      <h1 style="font-family:inherit;font-size:clamp(2.8rem,5vw,4.8rem);font-weight:900;letter-spacing:-0.04em;line-height:0.96;color:var(--text);margin-bottom:1.75rem;">
+        {h.get("h1", f"Welcome to {name}")}
+      </h1>
+      <p class="body-lg" style="max-width:420px;">{h.get("sub","")}</p>
+      <div class="btn-row mt5">
+        {_btn(h.get("cta","Get Started"), "#contact")}
+        {_btn("See our work →", "#features", "outline")}
+      </div>
+      {proof_html}
+    </div>
+  </div>
+  <div style="position:relative;overflow:hidden;">
+    <img src="{img}" alt="{name}" style="width:100%;height:100%;object-fit:cover;display:block;" loading="eager">
+    <div style="position:absolute;inset:0;background:linear-gradient(to right,var(--bg) 0%,transparent 30%);"></div>
+  </div>
+  <style>@media(max-width:767px){{section[style*="grid-template-columns:55% 45%"]{{grid-template-columns:1fr!important}}section[style*="grid-template-columns:55% 45%"]>div:last-child{{height:260px;min-height:unset}}}}</style>
+</section>"""
+
+
+def _hero_text_only(name: str, d: Dict, ind: str) -> str:
+    """Pure typography hero — no images, just oversized text with animated word highlight."""
+    h     = d.get("hero", {})
+    stats = d.get("stats") or []
+    words = h.get("h1", f"Welcome to {name}").split()
+    # Bold-highlight the last 2 words
+    if len(words) > 2:
+        main_words = " ".join(words[:-2])
+        accent_words = " ".join(words[-2:])
+    else:
+        main_words = ""
+        accent_words = " ".join(words)
+
+    badges = d.get("trust_badges") or []
+    badge_html = ""
+    if badges:
+        badge_html = "".join(f'<span class="tag rv d{min(i+1,4)}">{b}</span>' for i, b in enumerate(badges[:4]))
+
+    stat_html = ""
+    if stats:
+        items = "".join(
+            f'<div class="rv d{min(i+1,4)}" style="text-align:center;padding:1.5rem;border:1px solid var(--border);border-radius:12px;background:var(--surface);">'
+            f'<div class="stat-num">{s.get("value","")}</div>'
+            f'<div class="stat-label">{s.get("label","")}</div></div>'
+            for i, s in enumerate(stats[:4])
+        )
+        stat_html = f'<div class="g4 mt6">{items}</div>'
+
+    return f"""<section class="sec-hero" style="padding-top:6rem;min-height:82vh;display:flex;align-items:center;overflow:hidden;">
+  <div class="blob" style="width:700px;height:500px;top:0%;left:50%;transform:translateX(-50%);opacity:0.35;"></div>
+  <div class="wrap z1" style="width:100%;">
+    <div class="rv tc" style="max-width:900px;margin:0 auto;">
+      <span style="display:inline-block;font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:0.25em;color:var(--text3);margin-bottom:2rem;">{d.get("tagline","")}</span>
+      <h1 style="font-family:inherit;font-size:clamp(3rem,7.5vw,7rem);font-weight:900;letter-spacing:-0.045em;line-height:0.93;margin-bottom:1.5rem;">
+        {f'<span style="color:var(--text);">{main_words} </span>' if main_words else ""}
+        <span style="color:var(--accent);position:relative;display:inline-block;">
+          {accent_words}
+          <span style="position:absolute;bottom:-4px;left:0;right:0;height:4px;background:linear-gradient(90deg,var(--accent),transparent);border-radius:2px;opacity:0.4;"></span>
+        </span>
+      </h1>
+      <p class="body-lg mx-auto mt4" style="max-width:520px;">{h.get("sub","")}</p>
+      <div class="btn-row mt5" style="justify-content:center;">
+        {_btn(h.get("cta","Get Started"), "#contact")}
+        {_btn("How it works →", "#features", "outline")}
+      </div>
+      {f'<div class="flex flex-wrap gap2 mt5" style="justify-content:center;">{badge_html}</div>' if badge_html else ""}
+    </div>
+    {stat_html}
+  </div>
+</section>"""
+
+
+def _hero_mosaic(name: str, d: Dict, ind: str) -> str:
+    """Full-bleed image mosaic background with frosted glass card overlay."""
+    h    = d.get("hero", {})
+    imgs = [_photo(ind, i, 800) for i in range(4)]
+    proof = d.get("social_proof") or {}
+
+    proof_html = ""
+    if proof.get("count") and proof.get("label"):
+        proof_html = f'<div style="font-size:0.78rem;color:rgba(255,255,255,0.7);margin-top:1.25rem;padding-top:1.25rem;border-top:1px solid rgba(255,255,255,0.15);">✦ <strong style="color:#fff;">{proof["count"]}</strong> {proof["label"]}</div>'
+
+    return f"""<section style="position:relative;min-height:92vh;overflow:hidden;padding-top:64px;display:flex;align-items:center;">
+  <!-- Mosaic grid background -->
+  <div style="position:absolute;inset:0;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;grid-template-rows:1fr 1fr;gap:3px;z-index:0;">
+    <div style="overflow:hidden;"><img src="{imgs[0]}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;"></div>
+    <div style="overflow:hidden;"><img src="{imgs[1]}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;"></div>
+    <div style="overflow:hidden;"><img src="{imgs[2]}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;"></div>
+    <div style="overflow:hidden;"><img src="{imgs[3]}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;"></div>
+    <div style="grid-column:1/3;overflow:hidden;"><img src="{imgs[1]}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;"></div>
+    <div style="grid-column:3/5;overflow:hidden;"><img src="{imgs[2]}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;"></div>
+  </div>
+  <!-- Overlay -->
+  <div style="position:absolute;inset:0;background:linear-gradient(135deg,rgba(0,0,0,0.78) 0%,rgba(0,0,0,0.45) 50%,rgba(0,0,0,0.25) 100%);z-index:1;"></div>
+  <!-- Frosted glass card -->
+  <div class="wrap" style="position:relative;z-index:2;padding-top:2rem;padding-bottom:2rem;">
+    <div class="rv" style="max-width:560px;background:rgba(255,255,255,0.07);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border:1px solid rgba(255,255,255,0.15);border-radius:24px;padding:2.75rem 3rem;">
+      <span style="display:inline-block;font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:0.25em;color:rgba(255,255,255,0.6);margin-bottom:1.25rem;">{d.get("tagline","")}</span>
+      <h1 style="font-size:clamp(2.4rem,5vw,4rem);font-weight:900;letter-spacing:-0.04em;line-height:1.04;color:#ffffff;margin-bottom:1.25rem;">{h.get("h1",f"Welcome to {name}")}</h1>
+      <p style="font-size:1rem;color:rgba(255,255,255,0.78);line-height:1.7;margin-bottom:2rem;max-width:420px;">{h.get("sub","")}</p>
+      <div class="btn-row">
+        <a href="#contact" style="display:inline-flex;align-items:center;background:var(--cta);color:var(--cta-text) !important;font-weight:700;font-size:0.9rem;padding:0.85rem 2rem;border-radius:12px;transition:all 0.2s;">{h.get("cta","Get Started")}</a>
+        <a href="#features" style="display:inline-flex;align-items:center;background:rgba(255,255,255,0.10);backdrop-filter:blur(8px);color:#fff !important;border:1px solid rgba(255,255,255,0.25);font-weight:600;font-size:0.875rem;padding:0.82rem 1.6rem;border-radius:12px;transition:all 0.2s;">Learn more ↓</a>
+      </div>
+      {proof_html}
+    </div>
+  </div>
+</section>"""
+
 # =============================================================================
 # FEATURE VARIANTS
 # =============================================================================
@@ -2026,6 +2739,128 @@ def _feat_three_columns_icons(feats: List[Dict]) -> str:
   </div>
 </section>"""
 
+def _feat_magazine_grid(feats: List[Dict], ind: str) -> str:
+    """Editorial magazine-style feature grid — one large card + smaller cards."""
+    if not feats:
+        return ""
+    hero_feat = feats[0]
+    rest      = feats[1:]
+    img       = _photo(ind, 1, 900)
+    rest_cards = "".join(
+        f"""<div class="card card-p rv d{min(i+2,4)}" style="display:flex;gap:1rem;align-items:flex-start;">
+      <div style="font-size:1.75rem;line-height:1;flex-shrink:0;">{f.get("icon","◆")}</div>
+      <div>
+        <h3 class="h-card mb2">{f.get("title","")}</h3>
+        <p class="body-sm">{f.get("description","")}</p>
+      </div>
+    </div>"""
+        for i, f in enumerate(rest[:4])
+    )
+    return f"""<section class="sec" id="features">
+  <div class="wrap">
+    {_section_header("What We Do", "Services at a Glance", "", center=False)}
+    <div style="display:grid;grid-template-columns:1fr 1fr;grid-template-rows:auto;gap:1.25rem;">
+      <!-- Hero feature card -->
+      <div class="card rv" style="grid-row:1/3;overflow:hidden;display:flex;flex-direction:column;">
+        <div style="height:240px;overflow:hidden;flex-shrink:0;">
+          <img src="{img}" alt="" style="width:100%;height:100%;object-fit:cover;display:block;transition:transform 0.5s;" onmouseover="this.style.transform='scale(1.04)'" onmouseout="this.style.transform='scale(1)'">
+        </div>
+        <div class="card-p" style="flex:1;display:flex;flex-direction:column;">
+          <div style="font-size:2rem;margin-bottom:0.75rem;">{hero_feat.get("icon","◆")}</div>
+          <h3 class="h-section" style="font-size:clamp(1.4rem,2.2vw,1.8rem);margin-bottom:0.75rem;">{hero_feat.get("title","")}</h3>
+          <p class="body-md" style="flex:1;">{hero_feat.get("description","")}</p>
+          <a href="#contact" class="btn btn-primary mt4" style="align-self:flex-start;font-size:0.85rem;padding:0.7rem 1.4rem;">Get started →</a>
+        </div>
+      </div>
+      {rest_cards}
+    </div>
+  </div>
+  <style>@media(max-width:767px){{section[id="features"]>div.wrap>div[style*="grid-template-columns:1fr 1fr"]{{grid-template-columns:1fr!important}}}}</style>
+</section>"""
+
+
+def _feat_timeline(feats: List[Dict]) -> str:
+    """Vertical timeline layout — ideal for process, history, or step-by-step services."""
+    if not feats:
+        return ""
+    items = "".join(
+        f"""<div class="rv d{min(i+1,4)}" style="display:grid;grid-template-columns:80px 1fr;gap:0;align-items:start;margin-bottom:0;">
+      <!-- Left: number + line -->
+      <div style="display:flex;flex-direction:column;align-items:center;padding-top:0.25rem;">
+        <div style="width:44px;height:44px;border-radius:50%;background:{'linear-gradient(135deg,var(--accent),var(--accent2))' if i % 2 == 0 else 'var(--surface)'};border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;color:{'var(--cta-text)' if i % 2 == 0 else 'var(--accent)'};font-weight:800;font-size:0.9rem;flex-shrink:0;z-index:1;position:relative;">
+          {str(i+1)}
+        </div>
+        {f'<div style="width:2px;flex:1;min-height:60px;background:linear-gradient(to bottom,var(--accent),rgba(var(--accent-r),0.1));margin-top:0;"></div>' if i < len(feats) - 1 else ''}
+      </div>
+      <!-- Right: content -->
+      <div style="padding:0 0 3rem 1.5rem;">
+        <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.6rem;">
+          <span style="font-size:1.4rem;">{f.get("icon","◆")}</span>
+          <h3 class="h-card">{f.get("title","")}</h3>
+        </div>
+        <p class="body-md">{f.get("description","")}</p>
+      </div>
+    </div>"""
+        for i, f in enumerate(feats)
+    )
+    return f"""<section class="sec band" id="features">
+  <div class="wrap">
+    <div class="g2 gap-xl" style="align-items:start;">
+      <div class="rv">
+        {_eyebrow("Our Process")}
+        <h2 class="h-section mt2 mb3">How We Get It Done</h2>
+        <p class="body-lg mb5 mw-sm">A clear, repeatable process that delivers consistent results every single time.</p>
+        {_btn("Start Today", "#contact")}
+      </div>
+      <div style="padding-top:0.5rem;">
+        {items}
+      </div>
+    </div>
+  </div>
+</section>"""
+
+
+def _feat_comparison(feats: List[Dict]) -> str:
+    """Us vs competitors comparison table — great for SaaS, services, cleaning, legal."""
+    if not feats:
+        return ""
+    rows = "".join(
+        f"""<tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:1rem 1.25rem;font-size:0.875rem;color:var(--text2);font-weight:500;">{f.get("title","")}</td>
+      <td style="padding:1rem 1.25rem;text-align:center;">
+        <span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));color:var(--cta-text);font-size:0.75rem;font-weight:900;">✓</span>
+      </td>
+      <td style="padding:1rem 1.25rem;text-align:center;">
+        <span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:var(--bg2);color:var(--text3);font-size:0.75rem;font-weight:700;">✕</span>
+      </td>
+    </tr>"""
+        for f in feats
+    )
+    return f"""<section class="sec" id="features">
+  <div class="wrap">
+    {_section_header("Why Choose Us", "The Clear Difference", "See exactly why clients choose us over the competition.")}
+    <div class="mw-md mx-auto">
+      <div class="card rv" style="overflow:hidden;">
+        <table style="width:100%;border-collapse:collapse;">
+          <thead>
+            <tr style="background:var(--bg2);border-bottom:2px solid var(--border);">
+              <th style="padding:1.1rem 1.25rem;text-align:left;font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.14em;color:var(--text3);width:50%;">Feature</th>
+              <th style="padding:1.1rem 1.25rem;text-align:center;font-size:0.72rem;font-weight:800;text-transform:uppercase;letter-spacing:0.14em;color:var(--accent);width:25%;">Us</th>
+              <th style="padding:1.1rem 1.25rem;text-align:center;font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.14em;color:var(--text3);width:25%;">Others</th>
+            </tr>
+          </thead>
+          <tbody>{rows}</tbody>
+        </table>
+      </div>
+      <div class="tc mt5 rv">
+        {_btn("Get Started Today", "#contact")}
+        <p class="body-sm mt3" style="color:var(--text3);">No commitment required. See for yourself.</p>
+      </div>
+    </div>
+  </div>
+</section>"""
+
+
 # =============================================================================
 # PROCESS / HOW IT WORKS
 # =============================================================================
@@ -2080,6 +2915,93 @@ def _gallery(ind: str, name: str) -> str:
       </div>
     </div>
     <p style="text-align:center;margin-top:1.5rem;font-size:0.8rem;color:var(--text3);">See our latest projects and results</p>
+  </div>
+</section>"""
+
+def _portfolio_grid(ind: str, name: str, d: Dict) -> str:
+    """Masonry-style portfolio grid — for agencies, photographers, designers, builders."""
+    imgs = [_photo(ind, i, 900) for i in range(6)]
+    feats = d.get("features") or []
+    labels = [f.get("title", f"Project {i+1}") for i, f in enumerate(feats[:6])]
+    while len(labels) < 6:
+        labels.append(f"Project {len(labels)+1}")
+
+    cards = "".join(
+        f"""<div class="rv d{min(i+1,4)}" style="{'grid-row:span 2;' if i == 0 else ''}position:relative;overflow:hidden;border-radius:12px;cursor:pointer;background:var(--bg2);"
+          onmouseover="this.querySelector('.port-overlay').style.opacity='1'"
+          onmouseout="this.querySelector('.port-overlay').style.opacity='0'">
+      <img src="{imgs[i]}" alt="{labels[i]}" style="width:100%;height:100%;object-fit:cover;display:block;min-height:{'380px' if i == 0 else '180px'};transition:transform 0.5s;">
+      <div class="port-overlay" style="position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,0.72) 0%,transparent 50%);opacity:0;transition:opacity 0.3s;display:flex;align-items:flex-end;padding:1.25rem;">
+        <div>
+          <p style="font-size:0.6rem;font-weight:700;text-transform:uppercase;letter-spacing:0.18em;color:rgba(255,255,255,0.65);margin-bottom:0.3rem;">{name}</p>
+          <p style="font-weight:700;font-size:0.9rem;color:#fff;">{labels[i]}</p>
+        </div>
+      </div>
+    </div>"""
+        for i in range(6)
+    )
+
+    return f"""<section class="sec-sm" id="portfolio" style="padding:5rem 0;overflow:hidden;">
+  <div class="wrap">
+    {_section_header("Our Work", "Selected Projects", "A few examples of what we build and what we're proud of.", center=True)}
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);grid-auto-rows:180px;gap:0.75rem;">
+      {cards}
+    </div>
+    <div class="tc mt5 rv">
+      {_btn("See All Projects", "#contact", "outline")}
+    </div>
+  </div>
+  <style>@media(max-width:767px){{section[id="portfolio"] .wrap>div[style*="grid-template-columns:repeat(3"]{{grid-template-columns:repeat(2,1fr)!important}}}}</style>
+</section>"""
+
+
+def _stats_band(d: Dict) -> str:
+    """Full-width stats band — standalone social proof strip between sections."""
+    stats = d.get("stats") or []
+    if not stats:
+        return ""
+    items = "".join(
+        f"""<div class="rv d{min(i+1,4)}" style="text-align:center;padding:2rem 1rem;{'border-right:1px solid var(--border);' if i < len(stats)-1 else ''}">
+      <div class="stat-num">{s.get("value","")}</div>
+      <div class="stat-label">{s.get("label","")}</div>
+    </div>"""
+        for i, s in enumerate(stats[:4])
+    )
+    return f"""<div style="border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:var(--surface);overflow:hidden;" id="stats">
+  <div class="wrap">
+    <div style="display:grid;grid-template-columns:repeat({min(len(stats),4)},1fr);">
+      {items}
+    </div>
+  </div>
+  <style>@media(max-width:639px){{div[id="stats"]>div.wrap>div{{grid-template-columns:repeat(2,1fr)!important}}}}</style>
+</div>"""
+
+
+def _cta_banner(name: str, d: Dict, ind: str) -> str:
+    """Full-width gradient CTA banner — closing section before contact/footer."""
+    h    = d.get("hero", {})
+    cta  = d.get("cta_headline") or f"Ready to work with {name}?"
+    img  = _photo(ind, 3, 1400)
+
+    return f"""<section style="position:relative;overflow:hidden;padding:6rem 0;" id="cta-banner">
+  <img src="{img}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0.08;" loading="lazy">
+  <div style="position:absolute;inset:0;background:linear-gradient(135deg,rgba(var(--accent-r),0.12) 0%,rgba(var(--accent-r),0.03) 100%);"></div>
+  <div style="position:absolute;top:-100px;right:-100px;width:400px;height:400px;border-radius:50%;background:radial-gradient(circle,rgba(var(--accent-r),0.10),transparent 70%);pointer-events:none;"></div>
+  <div style="position:absolute;bottom:-80px;left:-80px;width:300px;height:300px;border-radius:50%;background:radial-gradient(circle,rgba(var(--accent-r),0.07),transparent 70%);pointer-events:none;"></div>
+  <div class="wrap" style="position:relative;z-index:1;text-align:center;">
+    <div class="rv mw-md mx-auto">
+      <span style="display:inline-flex;align-items:center;gap:0.5rem;font-size:0.62rem;font-weight:700;text-transform:uppercase;letter-spacing:0.25em;color:var(--accent);margin-bottom:1.5rem;">
+        <span style="width:20px;height:1px;background:var(--accent);display:inline-block;"></span>
+        Take the Next Step
+        <span style="width:20px;height:1px;background:var(--accent);display:inline-block;"></span>
+      </span>
+      <h2 class="h-section mb4">{cta}</h2>
+      <p class="body-lg mw-sm mx-auto mb5">{h.get("sub", "Let us show you what we can do. No obligation, no pressure — just results.")}</p>
+      <div class="btn-row" style="justify-content:center;">
+        {_btn(h.get("cta","Get Started Today"), "#contact")}
+        {_btn("Learn more ↓", "#features", "outline")}
+      </div>
+    </div>
   </div>
 </section>"""
 
@@ -2601,27 +3523,51 @@ class MasterArchitect:
 
     # ── Variant selectors ─────────────────────────────────────────────────────
 
-    def _hero_variant(self) -> str:
+def _hero_variant(self) -> str:
         if self.industry in {"restaurant", "travel", "events"}:
-            return ["restaurant", "video_style"][self._seed % 2]
-        if self.industry in {"luxury", "beauty", "agency"}:
-            return ["centered", "video_style"][self._seed % 2]
-        if self.industry in {"construction", "legal", "finance", "logistics", "real_estate", "cleaning"}:
-            return ["stats", "bold_bg", "minimal"][self._seed % 3]
-        if self.industry in {"saas", "ai", "developer", "startup", "ecommerce", "education"}:
-            return ["split", "minimal", "image_left"][self._seed % 3]
-        return ["split", "image_left", "minimal", "stats"][self._seed % 4]
+            return ["restaurant", "video_style", "mosaic"][self._seed % 3]
+        if self.industry in {"luxury", "beauty", "linen", "spa", "wellness"}:
+            return ["centered", "video_style", "asymmetric"][self._seed % 3]
+        if self.industry in {"agency", "photography", "film", "portfolio", "fashion"}:
+            return ["magazine", "asymmetric", "text_only"][self._seed % 3]
+        if self.industry in {"construction", "legal", "finance", "logistics",
+                              "real_estate", "cleaning", "trades", "plumbing",
+                              "electrical", "vintage", "brewery"}:
+            return ["stats", "bold_bg", "minimal", "asymmetric"][self._seed % 4]
+        if self.industry in {"saas", "ai", "developer", "startup", "ecommerce",
+                              "education", "enterprise", "cybersecurity", "b2b",
+                              "web3", "crypto", "aurora", "slate_dark"}:
+            return ["split", "minimal", "text_only", "magazine"][self._seed % 4]
+        if self.industry in {"streetwear", "sports", "citrus", "gaming"}:
+            return ["bold_bg", "mosaic", "video_style"][self._seed % 3]
+        if self.industry in {"health", "fitness", "nonprofit", "nature",
+                              "farm", "meadow", "organic"}:
+            return ["split", "image_left", "mosaic"][self._seed % 3]
+        return ["split", "image_left", "minimal", "stats", "magazine",
+                "asymmetric", "text_only", "mosaic"][self._seed % 8]
 
     def _feat_variant(self) -> str:
-        if self.industry in {"construction", "legal", "logistics", "real_estate", "cleaning", "automotive"}:
-            return ["icon_list", "checklist_split", "big_numbers"][self._seed % 3]
-        if self.industry in {"saas", "developer", "ai", "startup"}:
-            return ["cards", "three_columns", "big_numbers"][self._seed % 3]
-        if self.industry in {"restaurant", "beauty", "events", "travel", "luxury"}:
-            return ["alternating", "checklist_split"][self._seed % 2]
-        if self.industry in {"finance", "health", "education", "nonprofit"}:
-            return ["icon_list", "big_numbers", "alternating"][self._seed % 3]
-        return ["cards", "alternating", "icon_list", "checklist_split"][self._seed % 4]
+        if self.industry in {"construction", "legal", "logistics", "real_estate",
+                              "cleaning", "automotive", "trades", "plumbing",
+                              "electrical", "brewery"}:
+            return ["icon_list", "checklist_split", "big_numbers", "comparison"][self._seed % 4]
+        if self.industry in {"saas", "developer", "ai", "startup", "enterprise",
+                              "b2b", "cybersecurity", "web3", "crypto"}:
+            return ["cards", "three_columns", "big_numbers", "comparison"][self._seed % 4]
+        if self.industry in {"restaurant", "beauty", "events", "travel",
+                              "luxury", "farm", "meadow", "linen", "spa", "wellness"}:
+            return ["alternating", "checklist_split", "magazine_grid"][self._seed % 3]
+        if self.industry in {"agency", "photography", "film", "portfolio",
+                              "streetwear", "fashion", "editorial"}:
+            return ["magazine_grid", "alternating", "big_numbers"][self._seed % 3]
+        if self.industry in {"finance", "health", "education", "nonprofit",
+                              "coaching", "academic"}:
+            return ["icon_list", "big_numbers", "alternating", "timeline"][self._seed % 4]
+        if self.industry in {"fitness", "sports", "automotive"}:
+            return ["checklist_split", "icon_list", "comparison"][self._seed % 3]
+        return ["cards", "alternating", "icon_list", "checklist_split",
+                "magazine_grid", "timeline", "comparison"][self._seed % 7]
+
 
     def _testi_variant(self) -> str:
         return ["grid", "featured"][self._seed % 2]
@@ -2636,16 +3582,41 @@ class MasterArchitect:
             return "project"
         return "tiers"
 
-    def _extra_sections(self, d: Dict) -> Dict[str, str]:
+def _extra_sections(self, d: Dict) -> Dict[str, str]:
         extras = {}
+        # Process steps — for procedural industries
         if self.industry in {"cleaning", "construction", "health", "legal", "logistics",
-                              "automotive", "saas", "education", "finance", "real_estate"}:
+                              "automotive", "saas", "education", "finance", "real_estate",
+                              "enterprise", "b2b", "cybersecurity"}:
             if self._seed % 2 == 0:
                 extras["process"] = _process_steps(d)
+
+        # Stats band — inject as a standalone strip for data-driven industries
+        if self.industry in {"saas", "ai", "finance", "health", "fitness", "education",
+                              "nonprofit", "enterprise", "real_estate", "logistics",
+                              "startup", "ecommerce", "cleaning", "construction"}:
+            if self._seed % 3 != 2:
+                extras["stats_band"] = _stats_band(d)
+
+        # Gallery — visual industries
         if self.industry in {"restaurant", "beauty", "construction", "cleaning",
-                              "events", "travel", "fitness", "real_estate", "agency"}:
+                              "events", "travel", "fitness", "real_estate", "agency",
+                              "farm", "meadow", "brewery", "coffee"}:
             if self._seed % 3 != 0:
                 extras["gallery"] = _gallery(self.industry, self.name)
+
+        # Portfolio grid — creative/visual industries
+        if self.industry in {"agency", "photography", "film", "portfolio",
+                              "architecture", "interior", "fashion", "streetwear",
+                              "editorial", "graphite"}:
+            extras["portfolio"] = _portfolio_grid(self.industry, self.name, d)
+
+        # CTA banner — inject before contact for high-conversion industries
+        if self.industry in {"saas", "ai", "startup", "ecommerce", "fitness",
+                              "beauty", "luxury", "events", "travel", "coaching",
+                              "web3", "crypto", "enterprise", "legal", "finance"}:
+            extras["cta_banner"] = _cta_banner(self.name, d, self.industry)
+
         return extras
 
     # ── Data fetching ─────────────────────────────────────────────────────────
@@ -2681,9 +3652,7 @@ class MasterArchitect:
             logger.error(f"AI call failed: {e}", exc_info=True)
             return {**_generic_fallback_data(), "contact_email": self.contacts.get("email",""), "contact_phone": self.contacts.get("phone","")}
 
-    # ── Build ─────────────────────────────────────────────────────────────────
-
-    def build(self) -> Dict[str, Any]:
+def build(self) -> Dict[str, Any]:
         try:
             d     = self._get_data()
             t     = self.theme
@@ -2724,6 +3693,10 @@ class MasterArchitect:
                     elif hero_v == "image_left":  html = _hero_image_left(name, d, self.industry)
                     elif hero_v == "bold_bg":     html = _hero_bold_bg(name, d, self.industry)
                     elif hero_v == "video_style": html = _hero_video_style(name, d, self.industry)
+                    elif hero_v == "magazine":    html = _hero_magazine(name, d, self.industry)
+                    elif hero_v == "asymmetric":  html = _hero_asymmetric(name, d, self.industry)
+                    elif hero_v == "text_only":   html = _hero_text_only(name, d, self.industry)
+                    elif hero_v == "mosaic":      html = _hero_mosaic(name, d, self.industry)
                     else:                         html = _hero_split(name, d, self.industry)
 
                     if "process" in extras:
@@ -2740,10 +3713,18 @@ class MasterArchitect:
                         elif feat_v == "big_numbers":     html = _feat_big_numbers(feats)
                         elif feat_v == "checklist_split": html = _feat_checklist_split(feats, self.industry)
                         elif feat_v == "three_columns":   html = _feat_three_columns_icons(feats)
+                        elif feat_v == "magazine_grid":   html = _feat_magazine_grid(feats, self.industry)
+                        elif feat_v == "timeline":        html = _feat_timeline(feats)
+                        elif feat_v == "comparison":      html = _feat_comparison(feats)
                         else:                             html = _feat_cards(feats)
 
-                    if "gallery" in extras:
+                    if "portfolio" in extras:
+                        html += extras.pop("portfolio")
+                    elif "gallery" in extras:
                         html += extras.pop("gallery")
+
+                    if "stats_band" in extras:
+                        html += extras.pop("stats_band")
 
                 elif sid == "pricing":
                     tiers = d.get("pricing")
@@ -2769,6 +3750,8 @@ class MasterArchitect:
                         html = _faq(faqs)
 
                 elif sid == "contact":
+                    if "cta_banner" in extras:
+                        parts.append(extras.pop("cta_banner"))
                     html = _contact(
                         name, d, email, phone, self.industry,
                         website_slug=self.website_slug,
