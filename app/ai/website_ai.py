@@ -3523,7 +3523,7 @@ class MasterArchitect:
 
     # ── Variant selectors ─────────────────────────────────────────────────────
 
-def _hero_variant(self) -> str:
+    def _hero_variant(self) -> str:
         if self.industry in {"restaurant", "travel", "events"}:
             return ["restaurant", "video_style", "mosaic"][self._seed % 3]
         if self.industry in {"luxury", "beauty", "linen", "spa", "wellness"}:
