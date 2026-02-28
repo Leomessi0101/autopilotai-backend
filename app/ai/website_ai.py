@@ -3646,7 +3646,7 @@ class MasterArchitect:
             logger.error(f"AI call failed: {e}", exc_info=True)
             return {**_generic_fallback_data(), "contact_email": self.contacts.get("email",""), "contact_phone": self.contacts.get("phone","")}
 
-def build(self) -> Dict[str, Any]:
+    def build(self) -> Dict[str, Any]:
         try:
             d     = self._get_data()
             t     = self.theme
