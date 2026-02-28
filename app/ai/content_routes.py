@@ -7,8 +7,8 @@ from app.utils.auth import get_current_user
 from app.utils.usage import get_user_limit, reset_if_new_month
 from openai import OpenAI
 import os
-import requests  # ← NEW: for BFL API calls + polling
-import time     # ← NEW: for sleep in polling
+import requests
+import time
 
 router = APIRouter()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -19,6 +19,7 @@ class ContentRequest(BaseModel):
     text: str | None = None
     platform: str | None = None
     generate_image: bool = False
+    custom_visual: str | None = None  # NEW: e.g. "no people, make product red, clean background"
 
 def get_db():
     db = SessionLocal()
@@ -74,7 +75,6 @@ def generate_content_internal(
     db: Session,
     charge_usage: bool = True
 ):
-    # Use user from THIS session so updates (reset, used_generations) commit correctly.
     user_db = db.query(User).filter(User.id == user.id).first()
     if not user_db:
         raise HTTPException(status_code=404, detail="User not found")
@@ -86,7 +86,6 @@ def generate_content_internal(
                 status_code=403,
                 detail="Monthly generation limit reached. Please upgrade your plan."
             )
-    # ---------------- PROFILE LOAD (SAFE) ----------------
     profile = db.query(Profile).filter(Profile.user_id == user.id).first()
     if not profile:
         class Dummy:
@@ -96,12 +95,10 @@ def generate_content_internal(
             creativity_level = 5
             cta_style = "balanced"
         profile = Dummy()
-    # ---------------- PROMPT LOGIC ----------------
     prompt = (data.topic or data.prompt or data.text or "").strip()
     if not prompt:
         raise HTTPException(status_code=422, detail="Missing topic/prompt/text")
     platform = (data.platform or "instagram").lower()
-    # ---------------- AI BEHAVIOR RULES ----------------
     emoji_rule = "Use emojis naturally" if profile.use_emojis else "Do NOT use emojis"
     hashtag_rule = "Use strong relevant hashtags" if profile.use_hashtags else "Do NOT include hashtags"
     length_rule = {
@@ -127,7 +124,6 @@ def generate_content_internal(
         f"{cta_rule}\n"
         f"{creativity_rule}"
     )
-    # ---------- TEXT GENERATION ----------
     if not os.getenv("OPENAI_API_KEY"):
         raise HTTPException(
             status_code=503,
@@ -161,7 +157,7 @@ def generate_content_internal(
     return output
 
 # ======================================================
-# PUBLIC ROUTE (UNCHANGED BEHAVIOR)
+# PUBLIC ROUTE
 # ======================================================
 @router.post("/generate")
 def generate_content(
@@ -175,14 +171,12 @@ def generate_content(
         db=db,
         charge_usage=True
     )
-    # ---------- IF IMAGE TOGGLE OFF ----------
     if not data.generate_image:
         return {
             "output": output,
             "image": None,
             "error": None
         }
-    # ---------- AI IMAGE: PAID USERS ONLY ----------
     if not _is_paid_user(user.subscription_plan):
         return {
             "output": output,
@@ -196,26 +190,56 @@ def generate_content(
         return {
             "output": output,
             "image": None,
-            "error": "BFL API key not set in environment variables (BFL_API_KEY)."
+            "error": "BFL API key not configured (env: BFL_API_KEY)."
         }
 
-    # Model path from env (your klein model)
     model_path = os.getenv("FLUX_MODEL_ENDPOINT", "flux-2-klein-9b")
-    base_url = "https://api.bfl.ai/v1"  # This is the correct BFL base – do NOT change to your full endpoint
+    base_url = "https://api.bfl.ai/v1"
     generate_url = f"{base_url}/{model_path.lstrip('/')}"
 
-    # Better prompt for klein (fast model – keep it descriptive but not too long)
-    visual_prompt = f"""
-    Eye-catching social media marketing image, no text or words anywhere.
-    Photorealistic or high-detail style, sharp focus, natural vibrant colors, cinematic lighting.
-    Visually represent this post concept in an engaging way:
-    {output[:900]}
-    Professional composition, centered subject, appealing for Instagram/TikTok.
-    """
+    # Refine prompt with GPT for better Flux adherence + user customizations
+    refine_system = """You are an expert at creating optimal prompts for Flux.2 klein-9b image generation.
+Output ONLY the final prompt text. No explanations, no quotes, nothing else.
+Rules for great Flux prompts:
+- Start with the main subject and action.
+- Use natural, descriptive language (prose > keywords).
+- Emphasize positive visuals: clean blank unmarked surfaces, plain objects without labels/writing/letters/symbols/inscriptions.
+- Include sharp details, cinematic/natural lighting, vibrant yet realistic colors, professional composition.
+- Merge social media caption concept with user custom requests.
+- Keep under 200 words for best results.
+- Avoid any negation words like 'no', 'without', 'avoid' — describe what you WANT instead."""
+
+    refine_user = f"""Social media post concept to visualize: {output}
+
+User custom requests (apply these exactly): {data.custom_visual or 'none provided — use the concept as-is'}
+
+Style: eye-catching marketing image for social media, photorealistic or high-detail, suitable for Instagram/TikTok feed.
+Everything must be pristine and completely free of any text, writing, letters, symbols, or readable elements."""
 
     try:
-        # Submit the generation request
-        response = requests.post(
+        refine_response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": refine_system},
+                {"role": "user", "content": refine_user}
+            ],
+            max_tokens=300,
+            temperature=0.7
+        )
+        visual_prompt = refine_response.choices[0].message.content.strip()
+    except Exception as refine_err:
+        # Fallback to basic prompt if GPT fails
+        visual_prompt = f"""
+Eye-catching social media marketing image with completely clean unmarked surfaces everywhere.
+Blank smooth backgrounds, plain objects without labels markings logos inscriptions writing letters symbols or readable elements.
+Photorealistic style, sharp details, natural vibrant colors, cinematic lighting.
+Professional composition representing: {output[:800]}
+{data.custom_visual or ''}
+        """.strip()
+
+    try:
+        # Submit generation
+        post_response = requests.post(
             generate_url,
             headers={
                 "accept": "application/json",
@@ -226,51 +250,44 @@ def generate_content(
                 "prompt": visual_prompt,
                 "width": 1024,
                 "height": 1024,
-                "num_inference_steps": 20,   # klein is optimized for fewer steps → fast
-                "guidance_scale": 3.5,
-                "output_format": "png",
-                # "aspect_ratio": "1:1",  # optional if you want to force square
+                "num_inference_steps": 20,
+                "guidance_scale": 3.0,  # Lower for klein to reduce artifacts
+                "output_format": "png"
             },
-            timeout=20
+            timeout=30
         )
-        response.raise_for_status()
-        task_data = response.json()
-
+        post_response.raise_for_status()
+        task_data = post_response.json()
         polling_url = task_data.get("polling_url")
         if not polling_url:
-            raise ValueError("No polling_url in BFL response – check API key or model availability.")
+            raise ValueError("No polling_url returned from BFL API")
 
-        # Poll for result
+        # Poll
         start_time = time.time()
         image_url = None
-        while time.time() - start_time < 90:  # timeout after ~1.5 min
-            poll_resp = requests.get(
-                polling_url,
-                headers={"accept": "application/json"}
-            )
+        while time.time() - start_time < 90:
+            poll_resp = requests.get(polling_url, headers={"accept": "application/json"})
             poll_resp.raise_for_status()
             poll_data = poll_resp.json()
-
             status = poll_data.get("status", "").lower()
-            if status in ["done", "completed", "success"]:
-                images = poll_data.get("result", {}).get("images", [])
+            if status in ["ready", "done", "completed", "success"]:
+                images = poll_data.get("result", {}).get("images", []) or poll_data.get("images", [])
                 if images and images[0].get("url"):
                     image_url = images[0]["url"]
                     break
             elif status in ["failed", "error", "cancelled"]:
-                error_msg = poll_data.get("error") or "Unknown error"
+                error_msg = poll_data.get("error") or "Unknown"
                 raise ValueError(f"Generation failed: {error_msg}")
-
-            time.sleep(1.5)  # poll every 1.5s – klein is fast
+            time.sleep(1.5)
 
         if not image_url:
-            raise TimeoutError("Timed out waiting for Flux image – try again or check BFL status.")
+            raise TimeoutError("Flux generation timed out")
 
     except Exception as img_err:
         return {
             "output": output,
             "image": None,
-            "error": f"Flux (klein) generation error: {str(img_err)}"
+            "error": f"Flux image error: {str(img_err)}"
         }
 
     return {
