@@ -3568,7 +3568,6 @@ def _hero_variant(self) -> str:
         return ["cards", "alternating", "icon_list", "checklist_split",
                 "magazine_grid", "timeline", "comparison"][self._seed % 7]
 
-
     def _testi_variant(self) -> str:
         return ["grid", "featured"][self._seed % 2]
 
@@ -3582,36 +3581,31 @@ def _hero_variant(self) -> str:
             return "project"
         return "tiers"
 
-def _extra_sections(self, d: Dict) -> Dict[str, str]:
+    def _extra_sections(self, d: Dict) -> Dict[str, str]:
         extras = {}
-        # Process steps — for procedural industries
         if self.industry in {"cleaning", "construction", "health", "legal", "logistics",
                               "automotive", "saas", "education", "finance", "real_estate",
                               "enterprise", "b2b", "cybersecurity"}:
             if self._seed % 2 == 0:
                 extras["process"] = _process_steps(d)
 
-        # Stats band — inject as a standalone strip for data-driven industries
         if self.industry in {"saas", "ai", "finance", "health", "fitness", "education",
                               "nonprofit", "enterprise", "real_estate", "logistics",
                               "startup", "ecommerce", "cleaning", "construction"}:
             if self._seed % 3 != 2:
                 extras["stats_band"] = _stats_band(d)
 
-        # Gallery — visual industries
         if self.industry in {"restaurant", "beauty", "construction", "cleaning",
                               "events", "travel", "fitness", "real_estate", "agency",
                               "farm", "meadow", "brewery", "coffee"}:
             if self._seed % 3 != 0:
                 extras["gallery"] = _gallery(self.industry, self.name)
 
-        # Portfolio grid — creative/visual industries
         if self.industry in {"agency", "photography", "film", "portfolio",
                               "architecture", "interior", "fashion", "streetwear",
                               "editorial", "graphite"}:
             extras["portfolio"] = _portfolio_grid(self.industry, self.name, d)
 
-        # CTA banner — inject before contact for high-conversion industries
         if self.industry in {"saas", "ai", "startup", "ecommerce", "fitness",
                               "beauty", "luxury", "events", "travel", "coaching",
                               "web3", "crypto", "enterprise", "legal", "finance"}:
