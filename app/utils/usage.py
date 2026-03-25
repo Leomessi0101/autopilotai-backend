@@ -2,10 +2,9 @@ from datetime import datetime
 from app.database.session import SessionLocal
 
 PLAN_LIMITS = {
-    "free": 10,
-    "basic": 100,
-    "growth": None,   # unlimited
-    "pro": None       # unlimited
+    "free":    10,
+    "starter": None,  # unlimited
+    "pro":     None,  # unlimited
 }
 
 

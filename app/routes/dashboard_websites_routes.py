@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 WEBSITE_LIMITS = {
     "free": {"max_websites": 1, "can_publish": False, "custom_domain": False},
-    "starter": {"max_websites": 1, "can_publish": True, "custom_domain": False},
+    "starter": {"max_websites": 1, "can_publish": True, "custom_domain": True},
     "pro": {"max_websites": 3, "can_publish": True, "custom_domain": True},
 }
 
