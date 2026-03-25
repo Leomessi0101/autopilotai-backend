@@ -76,7 +76,7 @@ def create_checkout_session(
             line_items=[{"price": PRICE_IDS[plan], "quantity": 1}],
             allow_promotion_codes=True,
             success_url=f"{FRONTEND_URL}/dashboard?checkout=success",
-            cancel_url=f"{FRONTEND_URL}/pricing?checkout=cancelled",
+            cancel_url=f"{FRONTEND_URL}/upgrade?checkout=cancelled",
             customer_email=user.email,
             metadata={
                 "user_id": str(user.id),
